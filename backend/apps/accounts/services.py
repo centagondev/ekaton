@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from secrets import token_urlsafe
 
@@ -11,7 +12,6 @@ from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import PasswordResetToken
-import logging
 
 logger = logging.getLogger("authentication")
 
@@ -36,8 +36,12 @@ def set_password(password_reset_token, password):
     user = password_reset_token.user
 
     if user.is_verified:
-        logger.warning("Failed password setup: Account already verified for user_id=%s", user.id)
-        raise ValidationError({"password": "A password has already been set for this account."})
+        logger.warning(
+            "Failed password setup: Account already verified for user_id=%s", user.id
+        )
+        raise ValidationError(
+            {"password": "A password has already been set for this account."}
+        )
 
     validate_password(password, user)
     user.set_password(password)
@@ -72,19 +76,29 @@ def get_valid_password_reset_token(token):
     """
     Retrieve and validate a password reset token.
     """
-    password_reset_token = PasswordResetToken.objects.select_related("user").filter(token=token).first()
+    password_reset_token = (
+        PasswordResetToken.objects.select_related("user").filter(token=token).first()
+    )
 
     if password_reset_token is None:
         logger.warning("Failed password setup: Invalid token provided.")
         raise ValidationError("The provided password setup link is invalid.")
 
     if password_reset_token.used:
-        logger.warning("Failed password setup: Reused token for user_id=%s", password_reset_token.user.id)
+        logger.warning(
+            "Failed password setup: Reused token for user_id=%s",
+            password_reset_token.user.id,
+        )
         raise ValidationError("This password setup link has already been used.")
 
     if password_reset_token.expires_at < timezone.now():
-        logger.warning("Failed password setup: Expired token for user_id=%s", password_reset_token.user.id)
-        raise ValidationError("This password setup link has expired. Please request a new one.")
+        logger.warning(
+            "Failed password setup: Expired token for user_id=%s",
+            password_reset_token.user.id,
+        )
+        raise ValidationError(
+            "This password setup link has expired. Please request a new one."
+        )
 
     return password_reset_token
 
@@ -116,15 +130,18 @@ def login_user(request, email, password):
     if not user.is_active:
         logger.warning("Failed login attempt: Inactive account for user_id=%s", user.id)
         raise AuthenticationFailed("This account is currently inactive.")
-    
+
     if not user.is_verified:
-        logger.warning("Failed login attempt: Unverified account for user_id=%s", user.id)
+        logger.warning(
+            "Failed login attempt: Unverified account for user_id=%s", user.id
+        )
         raise AuthenticationFailed("Your account has not been activated yet.")
 
     refresh = RefreshToken.for_user(user)
 
     logger.info("Successful login for user_id=%s", user.id)
     return {"user": user, "access": str(refresh.access_token), "refresh": str(refresh)}
+
 
 def logout_user(refresh_token):
     """
@@ -133,4 +150,3 @@ def logout_user(refresh_token):
 
     token = RefreshToken(refresh_token)
     token.blacklist()
-

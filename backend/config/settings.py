@@ -55,7 +55,6 @@ INSTALLED_APPS = [
     "apps.complaints",
     "apps.notifications",
     "apps.administration",
-
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -77,7 +76,6 @@ REST_FRAMEWORK = {
     },
 }
 
-import logging
 
 LOGGING = {
     "version": 1,

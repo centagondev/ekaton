@@ -35,12 +35,11 @@ class LoginSerializer(serializers.Serializer):
         """Validates  password is provided."""
         password = attrs.get("password")
 
-
         if not password:
             raise serializers.ValidationError({"password": "A password is required."})
 
         return attrs
 
+
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
-

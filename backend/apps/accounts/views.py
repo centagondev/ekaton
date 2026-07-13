@@ -1,28 +1,30 @@
 from apps.users.serializers import UserSerializer
+from core.permissions import IsStudent
 from core.responses import error_response, success_response
-from core.throttles import (CheckEmailRateThrottle, LoginRateThrottle,
-                            SetPasswordRateThrottle)
+from core.throttles import (
+    CheckEmailRateThrottle,
+    LoginRateThrottle,
+    SetPasswordRateThrottle,
+)
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.views import APIView
 
 from .serializers import (
     CheckEmailSerializer,
     LoginSerializer,
+    LogoutSerializer,
     SetPasswordSerializer,
-    LogoutSerializer
-    )
-
+)
 from .services import (
     generate_password_reset_token,
     get_email_status,
     get_valid_password_reset_token,
     login_user,
+    logout_user,
     send_password_setup_link,
     set_password,
-    logout_user
-    )
+)
 
-from core.permissions import IsStudent
 
 class CheckEmailAPIView(APIView):
     """API endpoint to check if an email exists and its verification status."""
@@ -42,7 +44,7 @@ class CheckEmailAPIView(APIView):
         if email_status is None:
             return success_response(
                 message="If the email address is registered and unverified, a password setup link has been sent.",
-                data={"is_verified": False}
+                data={"is_verified": False},
             )
 
         if not email_status.get("is_verified"):
@@ -52,12 +54,11 @@ class CheckEmailAPIView(APIView):
             send_password_setup_link(password_reset_token)
             return success_response(
                 message="If the email address is registered and unverified, a password setup link has been sent.",
-                data={"is_verified": False}
+                data={"is_verified": False},
             )
 
         return success_response(
-            message="Account is verified.",
-            data={"is_verified": True}
+            message="Account is verified.", data={"is_verified": True}
         )
 
 
@@ -121,6 +122,7 @@ class LoginAPIView(APIView):
             },
         )
 
+
 class LogoutAPIview(APIView):
     permission_classes = [IsStudent]
 
@@ -130,7 +132,4 @@ class LogoutAPIview(APIView):
 
         logout_user(refresh_token=serializer.validated_data["refresh"])
 
-        return success_response(
-            message="Logged out successfully"
-        )
-
+        return success_response(message="Logged out successfully")
