@@ -53,7 +53,9 @@ class CheckEmailAPIView(APIView):
             password_reset_token = generate_password_reset_token(
                 email_status.get("user")
             )
-            send_password_setup_link(password_reset_token)
+            send_password_setup_link(
+                password_reset_token,
+            )
             return success_response(
                 message="If the email address is registered and unverified, a password setup link has been sent.",
                 data={"is_verified": False},
