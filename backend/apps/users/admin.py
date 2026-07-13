@@ -8,39 +8,44 @@ from .models import User
 class CustomUserAdmin(UserAdmin):
     model = User
 
-    list_display = (
-        "email",
-        "full_name",
-        "is_staff",
-        "is_active",
-    )
+    list_display = ("email", "full_name", "is_staff", "is_active", "is_verified")
 
     ordering = ("email",)
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal Info", {"fields": ("full_name", "batch", "gender", "profile_photo")}),
-        ("Permissions", {
-            "fields": (
-                "is_active",
-                "is_staff",
-                "is_superuser",
-                "groups",
-                "user_permissions",
-            )
-        }),
+        (
+            "Personal Info",
+            {"fields": ("full_name", "batch", "gender", "profile_photo")},
+        ),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_verified",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
     )
 
     add_fieldsets = (
-        (None, {
-            "classes": ("wide",),
-            "fields": (
-                "email",
-                "full_name",
-                "password1",
-                "password2",
-            ),
-        }),
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "email",
+                    "full_name",
+                    "password1",
+                    "password2",
+                ),
+            },
+        ),
     )
 
     search_fields = ("email",)

@@ -1,49 +1,110 @@
-from rest_framework import status
+from apps.users.serializers import UserSerializer
+from core.responses import error_response, success_response
+from core.throttles import (CheckEmailRateThrottle, LoginRateThrottle,
+                            SetPasswordRateThrottle)
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.views import APIView
 
-from core.responses import success_response,error_response
-from rest_framework.exceptions import AuthenticationFailed
-
-from .serializers import(
-    LoginSerializer
-)
-
-from apps.users.serializers import UserSerializer
+from .serializers import (
+    CheckEmailSerializer,
+    LoginSerializer,
+    SetPasswordSerializer
+    )
 
 from .services import (
-    login_user
-)
+    generate_password_reset_token,
+    get_email_status,
+    get_valid_password_reset_token, login_user,
+    send_password_setup_link, set_password
+    )
 
-class LoginAPIView(APIView):
+
+class CheckEmailAPIView(APIView):
+    """API endpoint to check if an email exists and its verification status."""
+
     permission_classes = []
     authentication_classes = []
+    throttle_classes = [CheckEmailRateThrottle]
 
     def post(self, request):
+        """Handles the POST request to check email status."""
+        serializer = CheckEmailSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        email_status = get_email_status(email=serializer.validated_data["email"])
+
+        if email_status is None:
+            return error_response(message="No account was found with the provided email address.", status_code=404)
+
+        if not email_status.get("is_verified"):
+            password_reset_token = generate_password_reset_token(
+                email_status.get("user")
+            )
+            send_password_setup_link(password_reset_token)
+
+        return success_response(
+            message="An account was found with the provided email address.",
+            data=email_status,
+        )
+
+
+class SetPasswordAPIView(APIView):
+    """API endpoint to set a password for an unverified account."""
+
+    permission_classes = []
+    authentication_classes = []
+    throttle_classes = [SetPasswordRateThrottle]
+
+    def post(self, request):
+        """Handles the POST request to set the user's password."""
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        password_reset_token = get_valid_password_reset_token(
+            token=serializer.validated_data["token"]
+        )
+
+        set_password(
+            password_reset_token=password_reset_token,
+            password=serializer.validated_data["password"],
+        )
+
+        return success_response(message="Your password has been set successfully.")
+
+
+class LoginAPIView(APIView):
+    """API endpoint to authenticate a user and return JWT tokens."""
+
+    permission_classes = []
+    authentication_classes = []
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        """Handles the POST request for user login."""
         serializer = LoginSerializer(data=request.data)
 
-        if not serializer.is_valid():
-            return error_response(
-                message=serializer.errors,      
-            )  
+        serializer.is_valid(raise_exception=True)
+
         try:
             result = login_user(
                 request=request,
                 email=serializer.validated_data["email"],
-                password=serializer.validated_data["password"]
+                password=serializer.validated_data["password"],
             )
         except AuthenticationFailed as e:
             return error_response(
-                message= str(e.detail) if hasattr(e, "detail") else str(e),
-                status_code=401
+                message=str(e.detail) if hasattr(e, "detail") else str(e),
+                status_code=401,
             )
-        
+
         user = result["user"]
-        
+
         return success_response(
-            message="Login successful",
+            message="Login successful.",
             data={
-                "access":result["access"],
+                "access": result["access"],
                 "refresh": result["refresh"],
-                "user": UserSerializer(user).data
-            }
+                "user": UserSerializer(user).data,
+            },
         )
