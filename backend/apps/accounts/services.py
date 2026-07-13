@@ -6,16 +6,17 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
+from django.template.loader import render_to_string
 from django.utils import timezone
+from resend.exceptions import ResendError
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import User
+from core.email import EmailService
 
 from .models import PasswordResetToken
-from core.email import EmailService
-from resend.exceptions import ResendError
 
 logger = logging.getLogger("authentication")
 
@@ -116,19 +117,12 @@ def send_password_setup_link(password_reset_token):
 
     link = f"{frontend_url}/set-password" f"?token={password_reset_token.token}"
     try:
+        html_message = render_to_string("emails/password_setup.html", {"link": link})
         EmailService.send_email(
-        to_email=password_reset_token.user.email,
-        subject="Set new password",
-         html=f"""
-    <h2>Password Reset</h2>
-
-    <p>Click the button below to reset your password.</p>
-
-    <a href="{link}">
-        Reset Password
-    </a>
-    """,
-    )
+            to_email=password_reset_token.user.email,
+            subject="Set new password",
+            html=html_message,
+        )
     except ResendError:
         logger.exception("Failed to send password setup email")
         raise ValidationError(
@@ -160,6 +154,7 @@ def login_user(request, email, password):
     logger.info("Successful login for user_id=%s", user.id)
     return {"user": user, "access": str(refresh.access_token), "refresh": str(refresh)}
 
+
 def logout_user(refresh_token):
     """
     Blacklist a refresh token.
@@ -170,4 +165,3 @@ def logout_user(refresh_token):
         token.blacklist()
     except TokenError:
         raise ValidationError("The refresh token is invalid or has already expired.")
-
