@@ -32,8 +32,7 @@ class LoginSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
-        """Validates that both email and password are provided."""
-        email = attrs.get("email")
+        """Validates  password is provided."""
         password = attrs.get("password")
 
 
@@ -41,3 +40,7 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError({"password": "A password is required."})
 
         return attrs
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+

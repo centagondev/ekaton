@@ -125,3 +125,12 @@ def login_user(request, email, password):
 
     logger.info("Successful login for user_id=%s", user.id)
     return {"user": user, "access": str(refresh.access_token), "refresh": str(refresh)}
+
+def logout_user(refresh_token):
+    """
+    Blacklist a refresh token.
+    """
+
+    token = RefreshToken(refresh_token)
+    token.blacklist()
+

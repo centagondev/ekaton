@@ -8,16 +8,21 @@ from rest_framework.views import APIView
 from .serializers import (
     CheckEmailSerializer,
     LoginSerializer,
-    SetPasswordSerializer
+    SetPasswordSerializer,
+    LogoutSerializer
     )
 
 from .services import (
     generate_password_reset_token,
     get_email_status,
-    get_valid_password_reset_token, login_user,
-    send_password_setup_link, set_password
+    get_valid_password_reset_token,
+    login_user,
+    send_password_setup_link,
+    set_password,
+    logout_user
     )
 
+from core.permissions import IsStudent
 
 class CheckEmailAPIView(APIView):
     """API endpoint to check if an email exists and its verification status."""
@@ -115,3 +120,17 @@ class LoginAPIView(APIView):
                 "user": UserSerializer(user).data,
             },
         )
+
+class LogoutAPIview(APIView):
+    permission_classes = [IsStudent]
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        logout_user(refresh_token=serializer.validated_data["refresh"])
+
+        return success_response(
+            message="Logged out successfully"
+        )
+

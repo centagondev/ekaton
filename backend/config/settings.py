@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework_simplejwt.token_blacklist",
     # Local apps
     "apps.accounts",
     "apps.users",
@@ -54,6 +55,7 @@ INSTALLED_APPS = [
     "apps.complaints",
     "apps.notifications",
     "apps.administration",
+
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -103,7 +105,7 @@ LOGGING = {
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
 }
 
 FRONTEND_URL = env("FRONTEND_URL")
