@@ -36,8 +36,6 @@ class LoginSerializer(serializers.Serializer):
         email = attrs.get("email")
         password = attrs.get("password")
 
-        if not email:
-            raise serializers.ValidationError({"email": "An email address is required."})
 
         if not password:
             raise serializers.ValidationError({"password": "A password is required."})

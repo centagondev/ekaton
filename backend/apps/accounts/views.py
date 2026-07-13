@@ -35,17 +35,24 @@ class CheckEmailAPIView(APIView):
         email_status = get_email_status(email=serializer.validated_data["email"])
 
         if email_status is None:
-            return error_response(message="No account was found with the provided email address.", status_code=404)
+            return success_response(
+                message="If the email address is registered and unverified, a password setup link has been sent.",
+                data={"is_verified": False}
+            )
 
         if not email_status.get("is_verified"):
             password_reset_token = generate_password_reset_token(
                 email_status.get("user")
             )
             send_password_setup_link(password_reset_token)
+            return success_response(
+                message="If the email address is registered and unverified, a password setup link has been sent.",
+                data={"is_verified": False}
+            )
 
         return success_response(
-            message="An account was found with the provided email address.",
-            data=email_status,
+            message="Account is verified.",
+            data={"is_verified": True}
         )
 
 
