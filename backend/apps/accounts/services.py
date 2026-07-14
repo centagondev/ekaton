@@ -120,7 +120,7 @@ def send_account_setup_email(account_setup_token):
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
     try:
-        html_message = render_to_string("emails/password_setup.html", {"link": link})
+        html_message = render_to_string("emails/account_setup", {"link": link})
         EmailService.send_email(
             to_email=account_setup_token.user.email,
             subject="Set new password",
@@ -168,3 +168,223 @@ def logout_user(refresh_token):
         token.blacklist()
     except TokenError:
         raise ValidationError("The refresh token is invalid or has already expired.")
+    
+    
+    
+# Password Reset
+# ==========================================================
+
+def generate_password_reset_token(user):
+    """
+    Generate and store a secure one-time password reset token.
+
+    Any previously issued unused password reset tokens
+    for the same user are invalidated before creating
+    a new token.
+
+    Args:
+        user (User):
+            The verified user requesting a password reset.
+
+    Returns:
+        PasswordResetToken:
+            Newly created password reset token instance.
+    """
+    
+    #Invalidates old tokens
+    PasswordResetToken.objects.filter(
+        user=user,
+        used=False,
+    ).update(used=True)
+    
+    password_reset_token=PasswordResetToken.objects.create(user=user,
+                                                           token=token_urlsafe(32),
+                                                           expires_at=timezone.now() + settings.PASSWORD_RESET_TOKEN_LIFETIME,)
+
+    logger.info(
+        "Password reset token generated for user_id=%s",
+        user.id,
+    )
+    
+    return password_reset_token
+
+def get_valid_password_reset_token(token):
+    """
+    Retrieve and validate a password reset token.
+
+    Ensures the token exists, has not expired,
+    has not been used, and belongs to an active,
+    verified user 
+    """
+    password_reset_token=(
+        PasswordResetToken.objects.select_related("user")
+        .filter(token=token)
+        .first()
+        
+    )
+    
+    if password_reset_token is None :
+        
+        logger.warning( "Password reset failed: Invalid token provided.")
+        
+        raise ValidationError( "The password reset link is invalid.")
+    
+    if password_reset_token.used :
+        
+        logger.warning(
+            "Password reset failed: Reused token for user_id=%s",
+            password_reset_token.user.id)
+        
+        raise ValidationError(
+            "This password reset link has already been used."
+        )
+        
+    if password_reset_token.expires_at < timezone.now() :
+        logger.warning(
+            "Password reset failed: Expired token for user_id=%s",
+            password_reset_token.user.id,
+        )
+        raise ValidationError(
+            "This password reset link has expired. Please request a new one."
+        )
+    if not password_reset_token.user.is_active :
+        
+        logger.warning(
+            "Password reset failed: Inactive account for user_id=%s",
+            password_reset_token.user.id,
+        )
+        
+        raise ValidationError(
+            "This account is currently inactive."
+        )
+        
+    if not password_reset_token.user.is_verified :
+        
+        logger.warning(
+            "Password reset failed: Unverified account for user_id=%s",
+            password_reset_token.user.id,
+        )
+        
+        raise ValidationError(
+            "Password reset is available only for verified accounts."
+        )
+        
+    return password_reset_token
+
+
+def request_password_reset(email):
+    """
+    Handle a password reset request.
+
+    For security reasons this function never reveals
+    whether an account exists.
+
+    Only active and verified users receive
+    a password reset email.
+    """
+    
+    user=User.objects.filter(email=email).first()
+    
+    if user is None :
+        logger.info(
+            "Password reset requested for unknown email='%s'",
+            email,
+        )
+        return
+    
+    if not user.is_active :
+        logger.warning(
+            "Password reset requested for inactive user_id=%s",
+            user.id,
+        )
+        return
+        
+    if not user.is_verified :
+        
+        logger.warning(
+            "Password reset requested for unverified user_id=%s",
+            user.id,
+        )
+        return
+        
+    password_reset_token=generate_password_reset_token(user)
+    
+    send_password_reset_email(password_reset_token)
+    logger.info(
+        "Password reset email sent successfully for user_id=%s",
+        user.id,
+    )
+
+def send_password_reset_email(password_reset_token):
+    """
+    Send a password reset email containing
+    a secure one-time reset link.
+    """
+    
+    frontend_url=settings.FRONTEND_URL
+    
+    reset_link =(f"(frontend_url)/reset_password"
+                 f"?token={password_reset_token.token}")
+    
+    try :
+        html_message=render_to_string("emails/password_reset.html",
+                                      {
+                                          "link":reset_link,
+                                      },)
+        EmailService.send_email(
+            to_email=password_reset_token.user.email,
+            subject="Reset your password",
+            html=html_message,)
+        
+    except ResendError :
+        logger.exception(
+            "Failed to send password reset email."
+        )
+        
+        raise ValidationError(
+            "Unable to send the password reset email. Please try again."
+        )
+        
+        
+def reset_paswword(password_reset_token,password):
+    """
+    Reset the password for a verified user.
+
+    This function validates the password using Django's
+    password validators, securely hashes it, marks the
+    current reset token as used, invalidates any remaining
+    unused reset tokens, and updates the user's password
+    within a single database transaction.
+    """
+    
+    user=password_reset_token.user
+    
+    validate_password(password,user)
+    user.set_password(password)
+    
+    user.save(
+        update_fields=[
+            "password",
+        ])
+    password_reset_token.used=True
+    
+    password_reset_token.save(
+        update_fields=[
+            "used"
+        ]
+    )
+    
+    PasswordResetToken.objects.filter(
+        user=user,
+        used=False,
+    ).exclude(
+        id=password_reset_token.id,
+    ).update(
+        used=True,
+    )
+    logger.info(
+        "Password reset completed successfully for user_id=%s",
+        user.id,
+    )
+    return user 
+

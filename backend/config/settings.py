@@ -108,6 +108,12 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
+
+#Authentication timer Settings
+ACCOUNT_SETUP_TOKEN_LIFETIME = timedelta(minutes=30)
+
+PASSWORD_RESET_TOKEN_LIFETIME = timedelta(minutes=30)
+
 FRONTEND_URL = env("FRONTEND_URL")
 
 MIDDLEWARE = [
