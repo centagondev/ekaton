@@ -50,3 +50,12 @@ class ResendPasswordResetRateThrottle(AnonRateThrottle):
     """
 
     scope = "resend_password_reset"
+
+
+class ChangePasswordRateThrottle(UserRateThrottle):
+    """
+    Rate limiter for the change password endpoint.
+    Scoped to authenticated users.
+    """
+
+    scope = "change_password"

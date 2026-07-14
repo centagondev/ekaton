@@ -78,6 +78,7 @@ REST_FRAMEWORK = {
         "forget_password": "5/hour",
         "reset_password": "10/hour",
         "resend_password_reset": "3/hour",
+        "change_password": "5/hour",
     },
 }
 

@@ -44,9 +44,7 @@ class AccountSetupToken(BaseToken):
 
 
 class PasswordResetToken(BaseToken):
-    """
-    One-time token used for password reset.
-    """
+    """One-time token used for password reset."""
 
     user = models.ForeignKey(
         User,

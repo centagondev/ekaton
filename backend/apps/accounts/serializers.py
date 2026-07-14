@@ -48,23 +48,17 @@ class LogoutSerializer(serializers.Serializer):
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
-    """
-    Serializer used to validate password reset requests.
+    """Validate password reset requests.
 
-    Only validates the email format.
-
-    User existence, verification status,
-    and account status are handled inside
-    the service layer.
+    Validates only the email format. User existence, verification status,
+    and account status checks are delegated to the service layer.
     """
 
     email = serializers.EmailField()
 
 
 class ResetPasswordSerializer(serializers.Serializer):
-    """
-    Serializer used to validate password reset data.
-    """
+    """Validate password reset data."""
 
     token = serializers.CharField()
 
@@ -89,9 +83,24 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 
 class ResendPasswordResetSerializer(serializers.Serializer):
-    """
-    Serializer used to validate password reset
-    email resend requests.
-    """
+    """Validate password reset email resend requests."""
 
     email = serializers.EmailField()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for validating password change requests."""
+
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        """Validates that the new password and confirmation password match."""
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {
+                    "confirm_password": "The new password and confirmation password do not match."
+                }
+            )
+        return attrs

@@ -175,20 +175,16 @@ def logout_user(refresh_token):
 
 
 def generate_password_reset_token(user):
-    """
-    Generate and store a secure one-time password reset token.
+    """Generate and store a secure one-time password reset token.
 
-    Any previously issued unused password reset tokens
-    for the same user are invalidated before creating
-    a new token.
+    Any previously issued unused password reset tokens for the same user
+    are invalidated before creating a new token.
 
     Args:
-        user (User):
-            The verified user requesting a password reset.
+        user (User): The verified user requesting a password reset.
 
     Returns:
-        PasswordResetToken:
-            Newly created password reset token instance.
+        PasswordResetToken: The newly created password reset token instance.
     """
 
     # Invalidates old tokens
@@ -212,12 +208,10 @@ def generate_password_reset_token(user):
 
 
 def get_valid_password_reset_token(token):
-    """
-    Retrieve and validate a password reset token.
+    """Retrieve and validate a password reset token.
 
-    Ensures the token exists, has not expired,
-    has not been used, and belongs to an active,
-    verified user
+    Ensures the token exists, has not expired, has not been used,
+    and belongs to an active, verified user.
     """
     password_reset_token = (
         PasswordResetToken.objects.select_related("user").filter(token=token).first()
@@ -260,14 +254,10 @@ def get_valid_password_reset_token(token):
 
 
 def request_password_reset(email):
-    """
-    Handle a password reset request.
+    """Handle a password reset request.
 
-    For security reasons this function never reveals
-    whether an account exists.
-
-    Only active and verified users receive
-    a password reset email.
+    For security reasons, this function never reveals whether an account exists.
+    Only active and verified users receive a password reset email.
     """
 
     user = User.objects.filter(email=email).first()
@@ -303,10 +293,7 @@ def request_password_reset(email):
 
 
 def send_password_reset_email(password_reset_token):
-    """
-    Send a password reset email containing
-    a secure one-time password reset link.
-    """
+    """Send a password reset email containing a secure one-time link."""
 
     frontend_url = settings.FRONTEND_URL
 
@@ -336,14 +323,11 @@ def send_password_reset_email(password_reset_token):
 
 @transaction.atomic
 def reset_password(password_reset_token, password):
-    """
-    Reset the password for a verified user.
+    """Reset the password for a verified user.
 
-    This function validates the password using Django's
-    password validators, securely hashes it, marks the
-    current reset token as used, invalidates any remaining
-    unused reset tokens, and updates the user's password
-    within a single database transaction.
+    Validates the password using Django's password validators, securely hashes it,
+    marks the current reset token as used, invalidates any remaining unused
+    reset tokens, and updates the user's password within a single database transaction.
     """
 
     user = password_reset_token.user
@@ -361,9 +345,60 @@ def reset_password(password_reset_token, password):
     ).exclude(
         id=password_reset_token.id,
     ).update(used=True)
-    
+
     logger.info(
         "Password reset completed successfully for user_id=%s",
         user.id,
     )
+    return user
+
+
+@transaction.atomic
+def change_password(user, current_password, new_password):
+    """Change the password for an authenticated user.
+
+    Checks account status, verifies the current password, validates the new
+    password against Django's password validators, securely hashes it,
+    and saves the updated credentials within a single atomic database
+    transaction.
+    """
+    if not user.is_active:
+        logger.warning(
+            "Password change failed: Inactive account for user_id=%s",
+            user.id,
+        )
+        raise ValidationError("This account is currently inactive.")
+
+    if not user.is_verified:
+        logger.warning(
+            "Password change failed: Unverified account for user_id=%s",
+            user.id,
+        )
+        raise ValidationError("Your account has not been verified.")
+
+    if not user.check_password(current_password):
+        logger.warning(
+            "Password change failed: Invalid current password for user_id=%s",
+            user.id,
+        )
+        raise ValidationError(
+            {"current_password": "The current password you entered is incorrect."}
+        )
+
+    if current_password == new_password:
+        raise ValidationError(
+            {
+                "new_password": "The new password must be different from the current password."
+            }
+        )
+
+    validate_password(new_password, user)
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+
+    logger.info(
+        "Password changed successfully for user_id=%s",
+        user.id,
+    )
+
     return user

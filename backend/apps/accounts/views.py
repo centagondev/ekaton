@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
 from core.throttles import (
+    ChangePasswordRateThrottle,
     CheckEmailRateThrottle,
     ForgetPasswordRateThrottle,
     LoginRateThrottle,
@@ -16,6 +17,7 @@ from core.throttles import (
 )
 
 from .serializers import (
+    ChangePasswordSerializer,
     CheckEmailSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
@@ -25,6 +27,7 @@ from .serializers import (
     SetPasswordSerializer,
 )
 from .services import (
+    change_password,
     generate_account_setup_token,
     get_email_status,
     get_valid_account_setup_token,
@@ -166,42 +169,33 @@ class MeAPIView(APIView):
 
 
 class ForgetPasswordAPIView(APIView):
-    """
-    API endpoint for requesting a password reset link.
-    """
+    """API endpoint for requesting a password reset link."""
 
     permission_classes = []
     authentication_classes = []
     throttle_classes = [ForgetPasswordRateThrottle]
 
     def post(self, request):
-        """
-        Handle password reset requests.
-        """
+        """Handle password reset requests."""
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         request_password_reset(email=serializer.validated_data["email"])
 
         return success_response(
-            message=("If this email is registered, a password reset link has been sent.")
+            message="If the email is registered, a password reset link has been sent."
         )
 
 
 class ResetPasswordAPIView(APIView):
-    """
-    API endpoint to reset a user's password using
-    a valid password reset token.
-    """
+    """API endpoint to reset a user's password using a valid password reset token."""
 
     permission_classes = []
     authentication_classes = []
     throttle_classes = [ResetPasswordRateThrottle]
 
     def post(self, request):
-        """
-        Handle password reset requests.
-        """
+        """Handle password reset requests."""
 
         serializer = ResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -218,18 +212,14 @@ class ResetPasswordAPIView(APIView):
 
 
 class ResendPasswordResetAPIView(APIView):
-    """
-    API endpoint to resend a password reset email.
-    """
+    """API endpoint to resend a password reset email."""
 
     permission_classes = []
     authentication_classes = []
     throttle_classes = [ResendPasswordResetRateThrottle]
 
     def post(self, request):
-        """
-        Handle password reset email resend requests.
-        """
+        """Handle password reset email resend requests."""
         serializer = ResendPasswordResetSerializer(data=request.data)
 
         serializer.is_valid(raise_exception=True)
@@ -237,5 +227,25 @@ class ResendPasswordResetAPIView(APIView):
         request_password_reset(email=serializer.validated_data["email"])
 
         return success_response(
-            message="If this email is registered, a password reset link has been sent."
+            message="If the email is registered, a password reset link has been sent."
         )
+
+
+class ChangePasswordAPIView(APIView):
+    """API endpoint for changing the authenticated user's password."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ChangePasswordRateThrottle]
+
+    def post(self, request):
+        """Handle password change requests."""
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        change_password(
+            user=request.user,
+            current_password=serializer.validated_data["current_password"],
+            new_password=serializer.validated_data["new_password"],
+        )
+
+        return success_response(message="Your password has been changed successfully.")
