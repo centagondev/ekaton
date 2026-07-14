@@ -1,27 +1,36 @@
 from rest_framework import serializers
 
-from .models import PrivateChatRoom, PrivateMessage, Report
+from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 
 
 class PrivateChatRoomSerializer(serializers.ModelSerializer):
-    user_one_email = serializers.EmailField(source="user_one.email", read_only=True)
-    user_two_email = serializers.EmailField(source="user_two.email", read_only=True)
+    """Serializes a PrivateChatRoom instance for API responses.
+
+    Exposes only the fields required by the client. User identities (user_one
+    and user_two) are intentionally excluded to preserve chat anonymity until
+    a reveal is accepted.
+    """
 
     class Meta:
         model = PrivateChatRoom
         fields = [
             "id",
             "status",
-            "user_one_email",
-            "user_two_email",
             "reveal_completed",
             "created_at",
+            "updated_at",
+            "closed_at",
         ]
 
 
 class PrivateMessageSerializer(serializers.ModelSerializer):
+    """Serializes a PrivateMessage instance for API responses.
+
+    The `id`, `created_at`, and `updated_at` fields are read-only and are
+    always set by the server.
+    """
+
     class Meta:
-        model = PrivateMessage
         model = PrivateMessage
         fields = [
             "id",
@@ -41,6 +50,12 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
 
 
 class ReportSerializer(serializers.ModelSerializer):
+    """Serializes a Report instance for API responses.
+
+    The `id`, `created_at`, and `updated_at` fields are read-only and are
+    always set by the server.
+    """
+
     class Meta:
         model = Report
         fields = [
@@ -63,22 +78,44 @@ class ReportSerializer(serializers.ModelSerializer):
 
 
 class StartChatSerializer(serializers.Serializer):
+    """Serializer for the Start Chat endpoint.
+
+    No input fields are required. Authentication is enforced at the view level.
+    """
+
     pass
 
 
 class EndChatSerializer(serializers.Serializer):
+    """Serializer for the End Chat endpoint.
+
+    Attributes:
+        room_id: The UUID string of the chat room to end.
+    """
+
     room_id = serializers.CharField()
 
 
 class RevealRequestSerializer(serializers.Serializer):
+    """Serializer for initiating a reveal identity request.
+
+    Attributes:
+        room_id: The UUID string of the active chat room in which to send
+            the reveal request.
+    """
+
     room_id = serializers.CharField()
 
 
 class RevealResponseSerializer(serializers.Serializer):
+    """Serializer for responding to a reveal identity request.
+
+    Attributes:
+        reveal_request_id: The UUID of the reveal request being responded to.
+        status: The response decision. Must be either 'accepted' or 'rejected'.
+    """
+
     reveal_request_id = serializers.UUIDField()
     status = serializers.ChoiceField(
-        choices=(
-            ("accepted", "accepted"),
-            ("rejected", "rejected"),
-        )
+        choices=RevealRequest.Status.choices,
     )
