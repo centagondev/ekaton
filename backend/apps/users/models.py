@@ -1,9 +1,8 @@
+from apps.users.managers import UserManager
+from core.base_model import BaseModel
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
-
-from apps.users.managers import UserManager
-from core.base_model import BaseModel
 
 
 class User(BaseModel, AbstractBaseUser, PermissionsMixin):
@@ -26,14 +25,6 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     can_edit_name = models.BooleanField(default=False)
 
     is_available = models.BooleanField(default=False)
-
-    # current_chat_room = models.ForeignKey(
-    #     "chat.PrivateChatRoom",
-    #     on_delete=models.SET_NULL,
-    #     null=True,
-    #     blank=True,
-    #     related_name="active_users",
-    # )
 
     is_active = models.BooleanField(default=True)
 

@@ -1,11 +1,11 @@
 from django.contrib import admin
 
-from .models import PasswordResetToken
+from .models import AccountSetupToken
 
 
-@admin.register(PasswordResetToken)
-class PasswordResetTokenAdmin(admin.ModelAdmin):
-    """Admin configuration for the PasswordResetToken model.
+@admin.register(AccountSetupToken)
+class AccountSetupTokenAdmin(admin.ModelAdmin):
+    """Admin configuration for the AccountSetupToken model.
 
     Displays token status, expiry, and creation time for each record
     to assist with debugging account activation and password reset issues.

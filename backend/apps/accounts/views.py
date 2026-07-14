@@ -1,7 +1,3 @@
-from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
 from core.throttles import (
@@ -10,6 +6,9 @@ from core.throttles import (
     LogoutRateThrottle,
     SetPasswordRateThrottle,
 )
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from .serializers import (
     CheckEmailSerializer,
@@ -18,12 +17,12 @@ from .serializers import (
     SetPasswordSerializer,
 )
 from .services import (
-    generate_password_reset_token,
+    generate_account_setup_token,
     get_email_status,
-    get_valid_password_reset_token,
+    get_valid_account_setup_token,
     login_user,
     logout_user,
-    send_password_setup_link,
+    send_account_setup_email,
     set_password,
 )
 
@@ -50,11 +49,9 @@ class CheckEmailAPIView(APIView):
             )
 
         if not email_status.get("is_verified"):
-            password_reset_token = generate_password_reset_token(
-                email_status.get("user")
-            )
-            send_password_setup_link(
-                password_reset_token,
+            account_setup_token = generate_account_setup_token(email_status.get("user"))
+            send_account_setup_email(
+                account_setup_token,
             )
             return success_response(
                 message="If the email address is registered and unverified, a password setup link has been sent.",
@@ -78,12 +75,12 @@ class SetPasswordAPIView(APIView):
         serializer = SetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        password_reset_token = get_valid_password_reset_token(
+        account_setup_token = get_valid_account_setup_token(
             token=serializer.validated_data["token"]
         )
 
         set_password(
-            password_reset_token=password_reset_token,
+            account_setup_token=account_setup_token,
             password=serializer.validated_data["password"],
         )
 
