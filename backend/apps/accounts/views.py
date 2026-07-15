@@ -1,7 +1,3 @@
-from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
 from core.throttles import (
@@ -14,6 +10,9 @@ from core.throttles import (
     ResetPasswordRateThrottle,
     SetPasswordRateThrottle,
 )
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from .serializers import (
     ChangePasswordSerializer,

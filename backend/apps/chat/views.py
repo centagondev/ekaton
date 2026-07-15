@@ -1,7 +1,6 @@
+from core.responses import error_response, success_response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-
-from core.responses import error_response, success_response
 
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer
