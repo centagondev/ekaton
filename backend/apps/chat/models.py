@@ -1,6 +1,7 @@
+from django.db import models
+
 from apps.users.models import User
 from core.base_model import BaseModel
-from django.db import models
 
 
 class PrivateChatRoom(BaseModel):

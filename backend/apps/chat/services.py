@@ -65,6 +65,7 @@ def get_private_chat_room(room_id, user):
 
 @transaction.atomic
 def create_private_message(room, sender, message):
+    print("Saving message...")
     """Create and return a new private message in an active chat room.
 
     Validates that the room is still active and that the message content is

@@ -1,8 +1,9 @@
+from django.db.models import Q
+
 from apps.chat.models import PrivateChatRoom
 from apps.chat.services import create_private_chat_room
 from apps.users.models import User
 from core.redis import redis_client
-from django.db.models import Q
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"

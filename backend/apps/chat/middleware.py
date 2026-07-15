@@ -1,20 +1,21 @@
 from urllib.parse import parse_qs
-from channels.db import database_sync_to_async
 
+from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
-from rest_framework_simplejwt.exceptions import TokenError
-
 from apps.users.models import User
+
 
 @database_sync_to_async
 def get_user(user_id):
     """Return the authenticated user for the given ID."""
     return User.objects.filter(id=user_id).first()
 
+
 class JwtAuthMiddleware:
-    def __init__(self,inner):
+    def __init__(self, inner):
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
@@ -33,7 +34,7 @@ class JwtAuthMiddleware:
                 if user:
                     scope["user"] = user
 
-            except (TokenError,KeyError):
+            except (TokenError, KeyError):
                 pass
 
-        return await self.inner(scope,receive, send)
+        return await self.inner(scope, receive, send)

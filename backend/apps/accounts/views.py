@@ -14,6 +14,7 @@ from core.throttles import (
     ResetPasswordRateThrottle,
     SetPasswordRateThrottle,
 )
+
 from .serializers import (
     ChangePasswordSerializer,
     CheckEmailSerializer,
@@ -37,6 +38,7 @@ from .services import (
     send_account_setup_email,
     set_password,
 )
+
 
 class CheckEmailAPIView(APIView):
     """API endpoint to check if an email exists and its verification status."""
