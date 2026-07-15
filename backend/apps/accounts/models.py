@@ -2,10 +2,6 @@ from apps.users.models import User
 from core.base_model import BaseModel
 from django.db import models
 
-
-# -----------------------------
-# Abstract Base Token
-# -----------------------------
 class BaseToken(BaseModel):
     """
     Abstract base model for one-time secure tokens.
@@ -27,9 +23,6 @@ class BaseToken(BaseModel):
         abstract = True
 
 
-# -----------------------------
-# Account Setup Token
-# -----------------------------
 class AccountSetupToken(BaseToken):
     """
     One-time token used during first-time account setup.
@@ -48,13 +41,8 @@ class AccountSetupToken(BaseToken):
         return self.user.email
 
 
-# -----------------------------
-# Password Reset Token
-# -----------------------------
 class PasswordResetToken(BaseToken):
-    """
-    One-time token used for password reset.
-    """
+    """One-time token used for password reset."""
 
     user = models.ForeignKey(
         User,
@@ -67,3 +55,4 @@ class PasswordResetToken(BaseToken):
 
     def __str__(self):
         return self.user.email
+        

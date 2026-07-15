@@ -23,3 +23,39 @@ class LogoutRateThrottle(UserRateThrottle):
     """Rate limiter for the logout endpoint. Scoped to authenticated users by user ID."""
 
     scope = "logout"
+
+
+class ForgetPasswordRateThrottle(AnonRateThrottle):
+    """
+    Rate limiter for forgot password requests.
+    Scoped to anonymous users by IP.
+    """
+
+    scope = "forget_password"
+
+
+class ResetPasswordRateThrottle(AnonRateThrottle):
+    """
+    Rate limiter for password reset requests.
+    Scoped to anonymous users by IP.
+    """
+
+    scope = "reset_password"
+
+
+class ResendPasswordResetRateThrottle(AnonRateThrottle):
+    """
+    Rate limiter for password reset email resend requests.
+    Scoped to anonymous users by IP.
+    """
+
+    scope = "resend_password_reset"
+
+
+class ChangePasswordRateThrottle(UserRateThrottle):
+    """
+    Rate limiter for the change password endpoint.
+    Scoped to authenticated users.
+    """
+
+    scope = "change_password"

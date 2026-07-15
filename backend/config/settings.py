@@ -38,6 +38,9 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = []
 
+ACCOUNT_SETUP_TOKEN_LIFETIME = timedelta(minutes=30)
+
+PASSWORD_RESET_TOKEN_LIFETIME = timedelta(minutes=30)
 
 # Application definition
 
@@ -51,6 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework_simplejwt.token_blacklist",
+    "rest_framework",
     # Local apps
     "apps.accounts",
     "apps.users",
@@ -78,6 +82,10 @@ REST_FRAMEWORK = {
         "check_email": "5/min",
         "logout": "20/hour",
         "set_password": "10/hour",
+        "forget_password": "5/hour",
+        "reset_password": "10/hour",
+        "resend_password_reset": "3/hour",
+        "change_password": "5/hour",
     },
 }
 
@@ -111,6 +119,8 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
+
+FRONTEND_URL = env("FRONTEND_URL")
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -121,7 +131,6 @@ CHANNEL_LAYERS = {
         },
     },
 }
-FRONTEND_URL = env("FRONTEND_URL")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
