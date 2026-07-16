@@ -120,7 +120,7 @@ def send_account_setup_email(account_setup_token):
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
     try:
-        html_message = render_to_string("emails/account_setup.html", {"link": link})
+        html_message = render_to_string("emails/account_setup", {"link": link})
         EmailService.send_email(
             to_email=account_setup_token.user.email,
             subject="Set new password",
@@ -396,9 +396,15 @@ def change_password(user, current_password, new_password):
     user.set_password(new_password)
     user.save(update_fields=["password"])
 
+    refresh = RefreshToken.for_user(user)
+
     logger.info(
         "Password changed successfully for user_id=%s",
         user.id,
     )
 
-    return user
+    return {
+        "user": user,
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+    }

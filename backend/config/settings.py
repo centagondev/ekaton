@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework_simplejwt.token_blacklist",
     "rest_framework",
+    "drf_spectacular",
     # Local apps
     "apps.accounts",
     "apps.users",
@@ -64,6 +65,7 @@ INSTALLED_APPS = [
     "apps.complaints",
     "apps.notifications",
     "apps.administration",
+    
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -72,6 +74,8 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -228,3 +232,16 @@ CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS", default=["http://localhost:5173", "http://127.0.0.1:5173"]
 )
 CORS_ALLOW_CREDENTIALS = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Ekaton API",
+    "DESCRIPTION": "Production REST API documentation for the Ekaton platform.",
+    "VERSION": "1.0.0",
+
+    "SERVE_INCLUDE_SCHEMA": False,
+
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+    },
+}

@@ -44,3 +44,6 @@ htmlcov/
 
 # Local testing client
 frontend-demo/
+
+__pycache__/
+*.pyc

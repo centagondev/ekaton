@@ -9,6 +9,7 @@ from core.throttles import StartChatRateThrottle
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer
 from .services import end_private_chat_room, get_private_chat_room
+from .docs import end_chat_doc, start_chat_doc
 
 
 class StartChatAPIView(APIView):
@@ -25,6 +26,7 @@ class StartChatAPIView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [StartChatRateThrottle]
 
+    @start_chat_doc
     def post(self, request):
         """Trigger the matchmaking flow for the current user.
 
@@ -52,6 +54,7 @@ class EndChatAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @end_chat_doc
     def post(self, request):
         """End a specific active chat room for the current user.
 
