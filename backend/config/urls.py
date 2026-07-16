@@ -2,15 +2,9 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
-
-
 urlpatterns = [
-    
     path("admin/", admin.site.urls),
-
-   
     # API v1 — Application endpoints
-   
     path("api/v1/accounts/", include("apps.accounts.urls")),
     path("api/v1/users/", include("apps.users.urls")),
     path("api/v1/chat/", include("apps.chat.urls")),
@@ -19,9 +13,6 @@ urlpatterns = [
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/admin/", include("apps.administration.urls")),
 ]
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -41,8 +32,13 @@ if settings.DEBUG:
     )
 
     urlpatterns += [
-       
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-        path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-        path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+        path(
+            "api/docs/",
+            SpectacularSwaggerView.as_view(url_name="schema"),
+            name="swagger-ui",
+        ),
+        path(
+            "api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"
+        ),
     ]
