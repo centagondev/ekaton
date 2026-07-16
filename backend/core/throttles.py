@@ -72,5 +72,10 @@ class ReportRateThrottle(UserRateThrottle):
 
     scope = "report"
 
+
 class AdminLoginRateThrottle(UserRateThrottle):
     scope = "admin_login"
+
+
+class AdminDashboardRateThrottle(UserRateThrottle):
+    scope = "admin_dashboard"

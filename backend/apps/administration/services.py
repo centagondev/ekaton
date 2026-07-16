@@ -1,15 +1,13 @@
 from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.db import connection
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 from apps.users.models import User
-from apps.chat.models import (
-    Report,
-    PrivateChatRoom,
-    PrivateMessage,
-    RevealRequest
-)
 
 
 def admin_login(email, password):
@@ -41,26 +39,30 @@ def admin_login(email, password):
 
     return {"user": user, "refresh": str(refresh), "access": str(refresh.access_token)}
 
+
 def users_count():
     return User.objects.count()
+
 
 def active_users_count():
     return 0
 
+
 def pending_reports_count():
-    return Report.objects.filter(
-        status=Report.Status.PENDING
-    ).count()
+    return Report.objects.filter(status=Report.Status.PENDING).count()
+
 
 def active_events_count():
     return 0
 
+
 def total_chats_count():
     return PrivateChatRoom.objects.count()
 
+
 def total_messages_count():
     """Returns an approximate count of total messages for extreme performance.
-    
+
     In PostgreSQL, COUNT(*) on millions of rows triggers a slow sequential scan.
     Querying the pg_class catalog retrieves an instant approximate row count
     maintained by the vacuum process.
@@ -75,19 +77,18 @@ def total_messages_count():
                 return row[0]
     except Exception:
         pass
-        
+
     # Fallback to standard ORM count if raw query fails or doesn't return data
     return PrivateMessage.objects.count()
 
+
 def pending_reveals_count():
-    return RevealRequest.objects.filter(
-        status = RevealRequest.Status.PENDING
-    ).count()
+    return RevealRequest.objects.filter(status=RevealRequest.Status.PENDING).count()
+
 
 def blocked_users_count():
-    return User.objects.filter(
-        is_active = False
-    ).count()
+    return User.objects.filter(is_active=False).count()
+
 
 def get_dashboard_statistics():
     def fetch_stats():
@@ -104,3 +105,51 @@ def get_dashboard_statistics():
 
     return cache.get_or_set("admin_dashboard_stats", fetch_stats, timeout=60)
 
+
+def get_users(search=None, is_active=None, is_verified=None, gender=None, batch=None):
+    queryset = User.objects.order_by("-created_at")
+
+    if search:
+        queryset = queryset.filter(
+            Q(full_name__icontains=search)
+            | Q(email__icontains=search)
+            | Q(batch__icontains=search)
+        )
+
+    if is_active is not None:
+        queryset = queryset.filter(is_active=is_active.lower() == "true")
+
+    if is_verified is not None:
+        queryset = queryset.filter(is_verified=is_verified.lower() == "true")
+
+    if gender:
+        queryset = queryset.filter(gender=gender)
+
+    if batch:
+        queryset = queryset.filter(batch=batch)
+
+    return queryset
+
+
+def update_user(user_id, data):
+    """Partially update a user's profile with the provided data.
+
+    Args:
+        user_id (UUID): The primary key of the target user.
+        data (dict): A dictionary of validated field names and their new values.
+                     Only explicitly whitelisted serializer fields will be present.
+
+    Returns:
+        User: The updated user instance.
+
+    Raises:
+        Http404: If no user with the given user_id exists.
+    """
+    user = get_object_or_404(User, id=user_id)
+
+    for field, value in data.items():
+        setattr(user, field, value)
+
+    user.save(update_fields=list(data.keys()))
+
+    return user

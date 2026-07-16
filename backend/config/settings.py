@@ -91,7 +91,8 @@ REST_FRAMEWORK = {
         "change_password": "5/hour",
         "start_chat": "5/min",
         "report": "5/m",
-        "admin_login":"5/m",
+        "admin_login": "5/m",
+        "admin_dashboard": "5/m",
     },
 }
 

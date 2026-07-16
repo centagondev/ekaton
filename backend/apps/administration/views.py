@@ -1,19 +1,21 @@
 import logging
 
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
 
+from apps.users.serializers import UserSerializer
+from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
-from core.throttles import AdminLoginRateThrottle
+from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 
-from .docs import admin_login_doc, admin_dashboard_doc
-from .serializers import AdminLoginSerializer, AdminUserSerializer
-from rest_framework.permissions import IsAdminUser
-from .services import (
-    admin_login,
-    get_dashboard_statistics
+from .docs import admin_dashboard_doc, admin_login_doc, admin_update_user_doc
+from .serializers import (
+    AdminLoginSerializer,
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
 )
-
+from .services import admin_login, get_dashboard_statistics, get_users, update_user
 
 logger = logging.getLogger("authentication")
 
@@ -69,8 +71,10 @@ class AdminLoginAPIView(APIView):
             },
         )
 
+
 class AdminDashboardAPIView(APIView):
     permission_classes = [IsAdminUser]
+    throttle_classes = [AdminDashboardRateThrottle]
 
     @admin_dashboard_doc
     def get(self, request):
@@ -78,8 +82,73 @@ class AdminDashboardAPIView(APIView):
         dashboard = get_dashboard_statistics()
 
         return success_response(
-            message="dashboard fetched successfully",
-            data = {
-               "statistics": dashboard
-            }
+            message="dashboard fetched successfully", data={"statistics": dashboard}
+        )
+
+
+class AdminUsersAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+
+        users = get_users(
+            search=request.query_params.get("search"),
+            is_active=request.query_params.get("is_active"),
+            is_verified=request.query_params.get("is_verified"),
+            gender=request.query_params.get("gender"),
+            batch=request.query_params.get("batch"),
+        )
+
+        paginator = DefaultPagination()
+
+        page = paginator.paginate_queryset(users, request)
+
+        serializer = UserSerializer(page, many=True)
+
+        return success_response(
+            message="Admin users data fetched successfully",
+            data=paginator.get_paginated_response(serializer.data),
+        )
+
+
+class AdminUpdateUserAPIView(APIView):
+    """Handle a request to partially update a user's profile as an administrator."""
+
+    permission_classes = [IsAdminUser]
+
+    @admin_update_user_doc
+    def patch(self, request, user_id):
+        """Partially update a user's profile.
+
+        Args:
+            request: The incoming HTTP request. Optional body fields:
+                - full_name (str): User's display name.
+                - batch (str): User's academic batch.
+                - gender (str): 'male' or 'female'.
+                - profile_photo (url|null): Profile photo URL.
+                - is_active (bool): Whether the user is active.
+                - is_verified (bool): Whether the user is verified.
+            user_id (UUID): The primary key of the target user.
+
+        Returns:
+            A success response containing the updated user's full profile.
+        """
+        serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
+
+        serializer.is_valid(
+            raise_exception=True,
+        )
+
+        user = update_user(
+            user_id=user_id,
+            data=serializer.validated_data,
+        )
+
+        logger.info(
+            f"Admin {request.user.id} updated user {user.id}. "
+            f"Fields changed: {list(serializer.validated_data.keys())}"
+        )
+
+        return success_response(
+            message="User updated successfully", data=UserSerializer(user).data
         )
