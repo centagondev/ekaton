@@ -15,3 +15,13 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "is_superuser",
             "is_staff"
         ]
+
+class DashboardStatisticsSerializer(serializers.Serializer):
+    users_count = serializers.IntegerField()
+    active_users_count = serializers.IntegerField(allow_null=True)
+    active_events_count = serializers.IntegerField(allow_null=True)
+    pending_reports_count = serializers.IntegerField()
+    total_chats_count = serializers.IntegerField()
+    total_messages_count = serializers.IntegerField()
+    pending_reveal_request_count = serializers.IntegerField()
+    blocked_users_count = serializers.IntegerField()

@@ -88,3 +88,62 @@ admin_login_doc = extend_schema(
         ),
     },
 )
+
+# ---------------------------------------------------------------------------
+# Admin Dashboard
+# Endpoint : GET /admin/dashboard/
+
+admin_dashboard_doc = extend_schema(
+    tags=["Administration"],
+    summary="Admin Dashboard Statistics",
+    description="""
+    Retrieve aggregated statistics for the admin dashboard.
+
+    **Purpose**: Provides high-level metrics for the administration panel.
+    **Authentication requirement**: Admin only (IsAdminUser).
+    **Security behaviour**:
+    - Rejects regular authenticated users.
+    - Uses Redis caching (60s) to prevent database overload.
+    """,
+    responses={
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminDashboardResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": inline_serializer(
+                        name="AdminDashboardData",
+                        fields={
+                            "statistics": rf_serializers.DictField(
+                                child=rf_serializers.IntegerField(allow_null=True)
+                            ),
+                        },
+                    ),
+                },
+            ),
+            description="Dashboard statistics fetched successfully.",
+            examples=[
+                OpenApiExample(
+                    "Success",
+                    value={
+                        "message": "dashboard fetched successfully",
+                        "data": {
+                            "statistics": {
+                                "users_count": 1500,
+                                "active_users_count": None,
+                                "active_events_count": None,
+                                "pending_reports_count": 12,
+                                "total_chats_count": 450,
+                                "total_messages_count": 5200000,
+                                "pending_reveal_request_count": 3,
+                                "blocked_users_count": 15
+                            }
+                        }
+                    }
+                )
+            ]
+        ),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+    }
+)

@@ -6,9 +6,14 @@ from rest_framework.views import APIView
 from core.responses import error_response, success_response
 from core.throttles import AdminLoginRateThrottle
 
-from .docs import admin_login_doc
+from .docs import admin_login_doc, admin_dashboard_doc
 from .serializers import AdminLoginSerializer, AdminUserSerializer
-from .services import admin_login
+from rest_framework.permissions import IsAdminUser
+from .services import (
+    admin_login,
+    get_dashboard_statistics
+)
+
 
 logger = logging.getLogger("authentication")
 
@@ -62,4 +67,19 @@ class AdminLoginAPIView(APIView):
                 "refresh": result["refresh"],
                 "user": AdminUserSerializer(user).data,
             },
+        )
+
+class AdminDashboardAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @admin_dashboard_doc
+    def get(self, request):
+
+        dashboard = get_dashboard_statistics()
+
+        return success_response(
+            message="dashboard fetched successfully",
+            data = {
+               "statistics": dashboard
+            }
         )
