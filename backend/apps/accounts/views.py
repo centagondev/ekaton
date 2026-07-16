@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -37,6 +38,18 @@ from .services import (
     send_account_setup_email,
     set_password,
 )
+from .docs import (
+    change_password_doc,
+    check_email_doc,
+    forget_password_doc,
+    login_doc,
+    logout_doc,
+    me_doc,
+    resend_password_reset_doc,
+    reset_password_doc,
+    set_password_doc,
+)
+
 
 class CheckEmailAPIView(APIView):
     """API endpoint to check if an email exists and its verification status."""
@@ -45,6 +58,7 @@ class CheckEmailAPIView(APIView):
     authentication_classes = []
     throttle_classes = [CheckEmailRateThrottle]
 
+    @check_email_doc
     def post(self, request):
         """Handles the POST request to check email status."""
         serializer = CheckEmailSerializer(data=request.data)
@@ -81,6 +95,7 @@ class SetPasswordAPIView(APIView):
     authentication_classes = []
     throttle_classes = [SetPasswordRateThrottle]
 
+    @set_password_doc
     def post(self, request):
         """Handles the POST request to set the user's password."""
         serializer = SetPasswordSerializer(data=request.data)
@@ -105,6 +120,7 @@ class LoginAPIView(APIView):
     authentication_classes = []
     throttle_classes = [LoginRateThrottle]
 
+    @login_doc
     def post(self, request):
         """Handles the POST request for user login."""
         serializer = LoginSerializer(data=request.data)
@@ -141,6 +157,7 @@ class LogoutAPIView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [LogoutRateThrottle]
 
+    @logout_doc
     def post(self, request):
         """Handles the POST request to invalidate the provided refresh token."""
         serializer = LogoutSerializer(data=request.data)
@@ -156,6 +173,7 @@ class MeAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @me_doc
     def get(self, request):
         """Handle GET request for the current user's profile."""
 
@@ -172,6 +190,7 @@ class ForgetPasswordAPIView(APIView):
     authentication_classes = []
     throttle_classes = [ForgetPasswordRateThrottle]
 
+    @forget_password_doc
     def post(self, request):
         """Handle password reset requests."""
         serializer = ForgotPasswordSerializer(data=request.data)
@@ -191,6 +210,7 @@ class ResetPasswordAPIView(APIView):
     authentication_classes = []
     throttle_classes = [ResetPasswordRateThrottle]
 
+    @reset_password_doc
     def post(self, request):
         """Handle password reset requests."""
 
@@ -215,6 +235,7 @@ class ResendPasswordResetAPIView(APIView):
     authentication_classes = []
     throttle_classes = [ResendPasswordResetRateThrottle]
 
+    @resend_password_reset_doc
     def post(self, request):
         """Handle password reset email resend requests."""
         serializer = ResendPasswordResetSerializer(data=request.data)
@@ -234,15 +255,22 @@ class ChangePasswordAPIView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ChangePasswordRateThrottle]
 
+    @change_password_doc
     def post(self, request):
         """Handle password change requests."""
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        change_password(
+        result = change_password(
             user=request.user,
             current_password=serializer.validated_data["current_password"],
             new_password=serializer.validated_data["new_password"],
         )
 
-        return success_response(message="Your password has been changed successfully.")
+        return success_response(
+            message="Your password has been changed successfully.",
+            data={
+                "access": result["access"],
+                "refresh": result["refresh"],
+            }
+        )
