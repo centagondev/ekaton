@@ -10,7 +10,7 @@ const MobileMenu = ({ isOpen, onClose, navLinks }) => {
         {/* Header */}
 
         <div className="flex h-16 items-center justify-between border-b px-6">
-          <h2 className="text-xl font-black">CAMPUS CONNECT</h2>
+          <h1 className="text-lg font-extrabold">CAMPUS CONNECT</h1>
 
           <div className="flex items-center gap-5">
             <button>
