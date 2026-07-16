@@ -15,6 +15,7 @@ from core.throttles import (
     ResetPasswordRateThrottle,
     SetPasswordRateThrottle,
 )
+
 from .serializers import (
     ChangePasswordSerializer,
     CheckEmailSerializer,
@@ -49,6 +50,7 @@ from .docs import (
     reset_password_doc,
     set_password_doc,
 )
+
 
 
 class CheckEmailAPIView(APIView):

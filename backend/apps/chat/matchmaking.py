@@ -1,8 +1,10 @@
+from django.db.models import Q
+from redis.exceptions import LockError
+
 from apps.chat.models import PrivateChatRoom
 from apps.chat.services import create_private_chat_room
 from apps.users.models import User
 from core.redis import redis_client
-from django.db.models import Q
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"
@@ -170,51 +172,59 @@ def start_chat(user):
         blocking_timeout=2,
     )
 
-    with lock:
-        # Check if the user already has an active chat room.
-        active_room = get_active_chat_room(user)
-        if active_room:
+    try:
+        with lock:
+            # Check if the user already has an active chat room.
+            active_room = get_active_chat_room(user)
+            if active_room:
+                return {
+                    "status": "active",
+                    "message": "You are already in an active chat.",
+                    "room_id": str(active_room.id),
+                }
+
+            # Check if the user is already waiting in the queue.
+            if is_user_waiting(user):
+                return {
+                    "status": "waiting",
+                    "message": "You are already waiting for a match.",
+                }
+
+            # Attempt to pop the next waiting user from the queue atomically.
+            waiting_user = get_waiting_user()
+
+            if waiting_user is None:
+                # Queue is empty — add the current user and wait.
+                add_user_to_queue(user)
+                return {
+                    "status": "waiting",
+                    "message": "Waiting for another user...",
+                }
+
+            if waiting_user.id == user.id:
+                # Edge case: the user's own ID was at the front of the queue.
+                # Re-enqueue them and continue waiting.
+                add_user_to_queue(user)
+                return {
+                    "status": "waiting",
+                    "message": "Waiting for another user...",
+                }
+
+            # A valid match was found — create the chat room.
+            room = create_private_chat_room(
+                user_one=waiting_user,
+                user_two=user,
+            )
+
             return {
-                "status": "active",
-                "message": "You are already in an active chat.",
-                "room_id": str(active_room.id),
+                "status": "matched",
+                "message": "Match found.",
+                "room_id": str(room.id),
             }
-
-        # Check if the user is already waiting in the queue.
-        if is_user_waiting(user):
-            return {
-                "status": "waiting",
-                "message": "You are already waiting for a match.",
-            }
-
-        # Attempt to pop the next waiting user from the queue atomically.
-        waiting_user = get_waiting_user()
-
-        if waiting_user is None:
-            # Queue is empty — add the current user and wait.
-            add_user_to_queue(user)
-            return {
-                "status": "waiting",
-                "message": "Waiting for another user...",
-            }
-
-        if waiting_user.id == user.id:
-            # Edge case: the user's own ID was at the front of the queue.
-            # Re-enqueue them and continue waiting.
-            add_user_to_queue(user)
-            return {
-                "status": "waiting",
-                "message": "Waiting for another user...",
-            }
-
-        # A valid match was found — create the chat room.
-        room = create_private_chat_room(
-            user_one=waiting_user,
-            user_two=user,
-        )
-
+    except LockError:
+        # Another request from the same user is already in the matchmaking flow.
+        # Treat as still waiting rather than returning a 500.
         return {
-            "status": "matched",
-            "message": "Match found.",
-            "room_id": str(room.id),
+            "status": "waiting",
+            "message": "Waiting for another user...",
         }

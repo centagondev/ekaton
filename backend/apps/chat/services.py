@@ -42,23 +42,19 @@ def end_private_chat_room(room):
 
 
 def get_private_chat_room(room_id, user):
-    """Retrieve a private chat room by ID, scoped to the requesting user.
+    """Retrieve a private chat room by ID for a participant."""
 
-    Filters by both room ID and user participation to prevent unauthorized
-    access (IDOR). Returns None if the room does not exist or the user is
-    not a participant.
-
-    Args:
-        room_id: The UUID of the chat room to retrieve.
-        user: The User instance making the request.
-
-    Returns:
-        A PrivateChatRoom instance if found and the user is a participant,
-        otherwise None.
-    """
     return (
-        PrivateChatRoom.objects.filter(id=room_id)
-        .filter(Q(user_one=user) | Q(user_two=user))
+        PrivateChatRoom.objects.select_related(
+            "user_one",
+            "user_two",
+        )
+        .filter(
+            id=room_id,
+        )
+        .filter(
+            Q(user_one=user) | Q(user_two=user),
+        )
         .first()
     )
 
@@ -82,6 +78,8 @@ def create_private_message(room, sender, message):
     Raises:
         ValidationError: If the room is not active or the message is empty.
     """
+
+    room.refresh_from_db(fields=["status", "reveal_completed"])
     if room.status != PrivateChatRoom.Status.ACTIVE:
         raise ValidationError("This chat room is no longer active.")
 
@@ -112,6 +110,13 @@ def create_reveal_request(room, requester, receiver):
     Raises:
         ValidationError: If any of the pre-conditions are not met.
     """
+
+    room.refresh_from_db(
+        fields=[
+            "status",
+            "reveal_completed",
+        ]
+    )
     if room.status != PrivateChatRoom.Status.ACTIVE:
         raise ValidationError("This chat room is no longer active.")
 
@@ -158,6 +163,12 @@ def respond_to_reveal_request(reveal_request, receiver, status):
         ValidationError: If the request has already been processed, the
             receiver is incorrect, or an invalid status value is provided.
     """
+
+    reveal_request.refresh_from_db(
+        fields=[
+            "status",
+        ]
+    )
     if reveal_request.status != RevealRequest.Status.PENDING:
         raise ValidationError("This reveal request has already been processed.")
 
@@ -166,7 +177,10 @@ def respond_to_reveal_request(reveal_request, receiver, status):
             "You are not authorized to respond to this reveal request."
         )
 
-    if status not in [RevealRequest.Status.ACCEPTED, RevealRequest.Status.REJECTED]:
+    if status not in (
+        RevealRequest.Status.ACCEPTED,
+        RevealRequest.Status.REJECTED,
+    ):
         raise ValidationError("Invalid status. Must be 'accepted' or 'rejected'.")
 
     reveal_request.status = status
@@ -218,4 +232,29 @@ def create_report(
         reason=reason,
         description=description,
         evidence_url=evidence_url,
+    )
+
+
+def get_pending_reveal_request(room, receiver):
+    """Return the most recent pending reveal request for the given receiver in a room.
+
+    Uses select_related to pre-load the room, requester and receiver objects,
+    avoiding extra queries in respond_to_reveal_request.
+
+    Args:
+        room: The PrivateChatRoom instance to search within.
+        receiver: The User instance who should respond to the request.
+
+    Returns:
+        The most recent pending RevealRequest, or None if none exists.
+    """
+    return (
+        RevealRequest.objects.select_related("room", "requester", "receiver")
+        .filter(
+            room=room,
+            receiver=receiver,
+            status=RevealRequest.Status.PENDING,
+        )
+        .order_by("-created_at")
+        .first()
     )

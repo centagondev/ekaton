@@ -1,6 +1,7 @@
+from django.db import models
+
 from apps.users.models import User
 from core.base_model import BaseModel
-from django.db import models
 
 
 class PrivateChatRoom(BaseModel):
@@ -180,6 +181,7 @@ class RevealRequest(BaseModel):
             models.Index(fields=["room"]),
             models.Index(fields=["requester"]),
             models.Index(fields=["receiver"]),
+            models.Index(fields=["room", "receiver", "status"]),
         ]
 
     def __str__(self):

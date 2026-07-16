@@ -59,3 +59,9 @@ class ChangePasswordRateThrottle(UserRateThrottle):
     """
 
     scope = "change_password"
+
+
+class StartChatRateThrottle(UserRateThrottle):
+    """Rate limiter for the start chat endpoint. Scoped to authenticated users."""
+
+    scope = "start_chat"

@@ -1,6 +1,10 @@
-from core.responses import error_response, success_response
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+
+from core.responses import error_response, success_response
+from core.throttles import StartChatRateThrottle
 
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer
@@ -20,6 +24,7 @@ class StartChatAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [StartChatRateThrottle]
 
     @start_chat_doc
     def post(self, request):
@@ -76,5 +81,13 @@ class EndChatAPIView(APIView):
             )
 
         end_private_chat_room(room)
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"chat_{room.id}",
+            {
+                "type": "chat_ended",
+            },
+        )
 
         return success_response(message="Chat ended successfully.")
