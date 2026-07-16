@@ -4,12 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.responses import error_response, success_response
-from core.throttles import StartChatRateThrottle
+from core.throttles import ReportRateThrottle, StartChatRateThrottle
 
-from .docs import end_chat_doc, start_chat_doc
+from .docs import end_chat_doc,report_doc, start_chat_doc
 from .matchmaking import start_chat
-from .serializers import EndChatSerializer
-from .services import end_private_chat_room, get_private_chat_room
+from .serializers import EndChatSerializer,ReportSerializer
+from .services import create_report, end_private_chat_room, get_private_chat_room
 
 
 class StartChatAPIView(APIView):
@@ -91,3 +91,30 @@ class EndChatAPIView(APIView):
         )
 
         return success_response(message="Chat ended successfully.")
+
+
+class ReportAPIView(APIView):
+    throttle_classes = [ReportRateThrottle]
+    permission_classes = [IsAuthenticated]
+
+    @report_doc
+    def post(self, request):
+        serializer = ReportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        room = get_private_chat_room(
+            serializer.validated_data["room_id"], user=request.user
+        )
+
+        if room is None:
+            return error_response(message="Chat room not found", status_code=404)
+
+        create_report(
+            room=room,
+            reporter=request.user,
+            reason=serializer.validated_data["reason"],
+            description=serializer.validated_data.get("description"),
+            evidence_url=serializer.validated_data.get("evidence_url"),
+        )
+
+        return success_response(message="Report submitted successfully")

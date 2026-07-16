@@ -49,32 +49,17 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
         ]
 
 
-class ReportSerializer(serializers.ModelSerializer):
-    """Serializes a Report instance for API responses.
-
-    The `id`, `created_at`, and `updated_at` fields are read-only and are
-    always set by the server.
-    """
-
-    class Meta:
-        model = Report
-        fields = [
-            "id",
-            "room",
-            "reporter",
-            "reported_user",
-            "reason",
-            "description",
-            "evidence_url",
-            "status",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "id",
-            "created_at",
-            "updated_at",
-        ]
+class ReportSerializer(serializers.Serializer):
+    room_id = serializers.UUIDField()
+    reason = serializers.ChoiceField(choices=Report.ReportReason.choices)
+    description = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
+    evidence_url = serializers.URLField(
+        required=False,
+        allow_null=True,
+    )
 
 
 class StartChatSerializer(serializers.Serializer):

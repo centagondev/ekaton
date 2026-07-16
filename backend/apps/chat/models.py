@@ -211,6 +211,14 @@ class Report(BaseModel):
         REVIEWED = "reviewed", "Reviewed"
         RESOLVED = "resolved", "Resolved"
 
+    class ReportReason(models.TextChoices):
+        SPAM = "spam", "Spam"
+        HARASSMENT = "harassment", "Harassment"
+        ABUSIVE_LANGUAGE = "abusive_language", "Abusive Language"
+        INAPPROPRIATE_CONTENT = "inappropriate_content", "Inappropriate Content"
+        FAKE_IDENTITY = "fake_identity", "Fake Identity"
+        OTHER = "other", "Other"
+
     room = models.ForeignKey(
         PrivateChatRoom,
         on_delete=models.CASCADE,
@@ -229,7 +237,10 @@ class Report(BaseModel):
         related_name="reports_against",
     )
 
-    reason = models.CharField(max_length=255)
+    reason = models.CharField(
+        max_length=50,
+        choices=ReportReason.choices,
+    )
 
     description = models.TextField(
         blank=True,
@@ -250,11 +261,13 @@ class Report(BaseModel):
     class Meta:
         db_table = "reports"
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["room"]),
             models.Index(fields=["reporter"]),
             models.Index(fields=["reported_user"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["room", "reporter", "status"]),
         ]
 
     def __str__(self):

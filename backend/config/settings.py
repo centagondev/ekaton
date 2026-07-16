@@ -90,6 +90,7 @@ REST_FRAMEWORK = {
         "resend_password_reset": "3/hour",
         "change_password": "5/hour",
         "start_chat": "5/min",
+        "report": "5/m",
     },
 }
 

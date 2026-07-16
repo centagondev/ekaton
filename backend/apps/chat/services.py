@@ -196,34 +196,21 @@ def respond_to_reveal_request(reveal_request, receiver, status):
 
 
 @transaction.atomic
-def create_report(
-    room, reporter, reported_user, reason, description=None, evidence_url=None
-):
-    """Create and return a report against a user in a private chat room.
+def create_report(room, reporter, reason, description=None, evidence_url=None):
+    room.refresh_from_db(fields=["status", "user_one", "user_two"])
 
-    Validates that the chat room is active and that the reporter is not
-    attempting to report themselves.
+    if reporter not in (room.user_one, room.user_two):
+        raise ValidationError("You are not a participant in this chat room")
 
-    Args:
-        room: The PrivateChatRoom instance in which the incident occurred.
-        reporter: The User instance filing the report.
-        reported_user: The User instance being reported.
-        reason: A short string summarizing the reason for the report.
-        description: An optional detailed explanation of the incident.
-        evidence_url: An optional URL pointing to supporting evidence.
-
-    Returns:
-        The newly created Report instance with PENDING status.
-
-    Raises:
-        ValidationError: If the room is not active or the reporter is
-            attempting to report themselves.
-    """
-    if room.status != PrivateChatRoom.Status.ACTIVE:
-        raise ValidationError("This chat room is no longer active.")
+    reported_user = room.user_two if reporter == room.user_one else room.user_one
 
     if reporter == reported_user:
-        raise ValidationError("You cannot report yourself.")
+        raise ValidationError("You cannot report yourself")
+
+    if Report.objects.filter(
+        room=room, reporter=reporter, status=Report.Status.PENDING
+    ).exists():
+        raise ValidationError("You have already submitted a report for this chat")
 
     return Report.objects.create(
         room=room,

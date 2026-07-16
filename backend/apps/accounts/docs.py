@@ -48,11 +48,16 @@ from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
-
-from .serializers import (ChangePasswordSerializer, CheckEmailSerializer,
-                          ForgotPasswordSerializer, LoginSerializer,
-                          LogoutSerializer, ResendPasswordResetSerializer,
-                          ResetPasswordSerializer, SetPasswordSerializer)
+from .serializers import (
+    ChangePasswordSerializer,
+    CheckEmailSerializer,
+    ForgotPasswordSerializer,
+    LoginSerializer,
+    LogoutSerializer,
+    ResendPasswordResetSerializer,
+    ResetPasswordSerializer,
+    SetPasswordSerializer,
+)
 
 # ---------------------------------------------------------------------------
 # Check Email
@@ -90,10 +95,7 @@ check_email_doc = extend_schema(
             examples=[
                 OpenApiExample(
                     "Verified",
-                    value={
-                        "message": "Account is verified.",
-                        "data": {"is_verified": True},
-                    },
+                    value={"message": "Account is verified.", "data": {"is_verified": True}},
                 ),
                 OpenApiExample(
                     "Unverified",

@@ -5,6 +5,7 @@
 
 from django.contrib import admin
 
-from .models import PrivateMessage
+from .models import PrivateMessage, Report
 
 admin.site.register(PrivateMessage)
+admin.site.register(Report)
