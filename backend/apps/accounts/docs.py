@@ -43,26 +43,16 @@ Exports
 - ``change_password_doc``      → ChangePasswordAPIView.post
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
-from .serializers import (
-    ChangePasswordSerializer,
-    CheckEmailSerializer,
-    ForgotPasswordSerializer,
-    LoginSerializer,
-    LogoutSerializer,
-    ResendPasswordResetSerializer,
-    ResetPasswordSerializer,
-    SetPasswordSerializer,
-)
 
+from .serializers import (ChangePasswordSerializer, CheckEmailSerializer,
+                          ForgotPasswordSerializer, LoginSerializer,
+                          LogoutSerializer, ResendPasswordResetSerializer,
+                          ResetPasswordSerializer, SetPasswordSerializer)
 
 # ---------------------------------------------------------------------------
 # Check Email
@@ -100,7 +90,10 @@ check_email_doc = extend_schema(
             examples=[
                 OpenApiExample(
                     "Verified",
-                    value={"message": "Account is verified.", "data": {"is_verified": True}},
+                    value={
+                        "message": "Account is verified.",
+                        "data": {"is_verified": True},
+                    },
                 ),
                 OpenApiExample(
                     "Unverified",
@@ -114,7 +107,9 @@ check_email_doc = extend_schema(
         # 400: Returned when the email field fails basic format validation.
         400: OpenApiResponse(description="Bad Request - Invalid email format."),
         # 429: Returned when the client exceeds 5 requests per minute.
-        429: OpenApiResponse(description="Too Many Requests - 5 requests/minute limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 5 requests/minute limit exceeded."
+        ),
     },
 )
 
@@ -156,9 +151,13 @@ set_password_doc = extend_schema(
             ],
         ),
         # 400: Returned for an expired/invalid token or a password mismatch.
-        400: OpenApiResponse(description="Bad Request - Invalid token or password mismatch/validation failure."),
+        400: OpenApiResponse(
+            description="Bad Request - Invalid token or password mismatch/validation failure."
+        ),
         # 429: Returned when the client exceeds 10 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 10 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 10 requests/hour limit exceeded."
+        ),
     },
 )
 
@@ -193,9 +192,9 @@ login_doc = extend_schema(
                     "data": inline_serializer(
                         name="LoginData",
                         fields={
-                            "access": rf_serializers.CharField(),   # Short-lived JWT access token.
+                            "access": rf_serializers.CharField(),  # Short-lived JWT access token.
                             "refresh": rf_serializers.CharField(),  # Long-lived JWT refresh token.
-                            "user": UserSerializer(),               # Authenticated user's profile data.
+                            "user": UserSerializer(),  # Authenticated user's profile data.
                         },
                     ),
                 },
@@ -209,7 +208,10 @@ login_doc = extend_schema(
                         "data": {
                             "access": "eyJhb...",
                             "refresh": "eyJhb...",
-                            "user": {"email": "user@example.com", "full_name": "John Doe"},
+                            "user": {
+                                "email": "user@example.com",
+                                "full_name": "John Doe",
+                            },
                         },
                     },
                 )
@@ -218,9 +220,13 @@ login_doc = extend_schema(
         # 400: Returned when required fields (email/password) are missing entirely.
         400: OpenApiResponse(description="Bad Request - Missing fields."),
         # 401: Returned for wrong password, unverified account, or inactive account.
-        401: OpenApiResponse(description="Unauthorized - Incorrect credentials, unverified, or inactive account."),
+        401: OpenApiResponse(
+            description="Unauthorized - Incorrect credentials, unverified, or inactive account."
+        ),
         # 429: Returned when the client exceeds 5 requests per minute.
-        429: OpenApiResponse(description="Too Many Requests - 5 requests/minute limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 5 requests/minute limit exceeded."
+        ),
     },
 )
 
@@ -252,14 +258,22 @@ logout_doc = extend_schema(
                 fields={"message": rf_serializers.CharField()},
             ),
             description="Logged out successfully.",
-            examples=[OpenApiExample("Success", value={"message": "Logged out successfully"})],
+            examples=[
+                OpenApiExample("Success", value={"message": "Logged out successfully"})
+            ],
         ),
         # 400: Returned when the provided refresh token is already expired or invalid.
-        400: OpenApiResponse(description="Bad Request - Invalid or expired refresh token."),
+        400: OpenApiResponse(
+            description="Bad Request - Invalid or expired refresh token."
+        ),
         # 401: Returned when the request has no valid access token in the Authorization header.
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         # 429: Returned when the client exceeds 20 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 20 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 20 requests/hour limit exceeded."
+        ),
     },
 )
 
@@ -301,7 +315,9 @@ me_doc = extend_schema(
             ],
         ),
         # 401: Returned when the request has no valid access token in the Authorization header.
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
     },
 )
 
@@ -336,14 +352,18 @@ forget_password_doc = extend_schema(
             examples=[
                 OpenApiExample(
                     "Success",
-                    value={"message": "If the email is registered, a password reset link has been sent."},
+                    value={
+                        "message": "If the email is registered, a password reset link has been sent."
+                    },
                 )
             ],
         ),
         # 400: Returned when the email field fails basic format validation.
         400: OpenApiResponse(description="Bad Request - Invalid email format."),
         # 429: Returned when the client exceeds 5 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 5 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 5 requests/hour limit exceeded."
+        ),
     },
 )
 
@@ -385,9 +405,13 @@ reset_password_doc = extend_schema(
             ],
         ),
         # 400: Returned for an expired/invalid token or a password mismatch.
-        400: OpenApiResponse(description="Bad Request - Invalid token or password mismatch/validation failure."),
+        400: OpenApiResponse(
+            description="Bad Request - Invalid token or password mismatch/validation failure."
+        ),
         # 429: Returned when the client exceeds 10 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 10 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 10 requests/hour limit exceeded."
+        ),
     },
 )
 
@@ -422,14 +446,18 @@ resend_password_reset_doc = extend_schema(
             examples=[
                 OpenApiExample(
                     "Success",
-                    value={"message": "If the email is registered, a password reset link has been sent."},
+                    value={
+                        "message": "If the email is registered, a password reset link has been sent."
+                    },
                 )
             ],
         ),
         # 400: Returned when the email field fails basic format validation.
         400: OpenApiResponse(description="Bad Request - Invalid email format."),
         # 429: Returned when the client exceeds 3 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 3 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 3 requests/hour limit exceeded."
+        ),
     },
 )
 
@@ -469,7 +497,7 @@ change_password_doc = extend_schema(
                     "data": inline_serializer(
                         name="ChangePasswordData",
                         fields={
-                            "access": rf_serializers.CharField(),   # New short-lived access token.
+                            "access": rf_serializers.CharField(),  # New short-lived access token.
                             "refresh": rf_serializers.CharField(),  # New long-lived refresh token.
                         },
                     ),
@@ -487,10 +515,16 @@ change_password_doc = extend_schema(
             ],
         ),
         # 400: Returned when current_password is wrong or confirm_password does not match.
-        400: OpenApiResponse(description="Bad Request - Incorrect current password or password mismatch."),
+        400: OpenApiResponse(
+            description="Bad Request - Incorrect current password or password mismatch."
+        ),
         # 401: Returned when the request has no valid access token in the Authorization header.
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         # 429: Returned when the client exceeds 5 requests per hour.
-        429: OpenApiResponse(description="Too Many Requests - 5 requests/hour limit exceeded."),
+        429: OpenApiResponse(
+            description="Too Many Requests - 5 requests/hour limit exceeded."
+        ),
     },
 )

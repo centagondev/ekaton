@@ -6,10 +6,10 @@ from rest_framework.views import APIView
 from core.responses import error_response, success_response
 from core.throttles import StartChatRateThrottle
 
+from .docs import end_chat_doc, start_chat_doc
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer
 from .services import end_private_chat_room, get_private_chat_room
-from .docs import end_chat_doc, start_chat_doc
 
 
 class StartChatAPIView(APIView):

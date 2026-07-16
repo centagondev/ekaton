@@ -7,14 +7,9 @@ from rest_framework.exceptions import ValidationError
 
 logger = logging.getLogger("chat")
 
-from .services import (
-    create_private_message,
-    create_reveal_request,
-    end_private_chat_room,
-    get_pending_reveal_request,
-    get_private_chat_room,
-    respond_to_reveal_request,
-)
+from .services import (create_private_message, create_reveal_request,
+                       end_private_chat_room, get_pending_reveal_request,
+                       get_private_chat_room, respond_to_reveal_request)
 
 
 class ChatConsumer(AsyncWebsocketConsumer):

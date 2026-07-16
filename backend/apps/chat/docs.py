@@ -36,16 +36,11 @@ Exports
 - ``end_chat_doc``   → EndChatAPIView.post
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
 from .serializers import EndChatSerializer
-
 
 # ---------------------------------------------------------------------------
 # Start Anonymous Chat
@@ -72,9 +67,11 @@ start_chat_doc = extend_schema(
                     "data": inline_serializer(
                         name="MatchmakingResult",
                         fields={
-                            "status": rf_serializers.CharField(),                            # "matched" or "queued"
-                            "message": rf_serializers.CharField(),                          # Human-readable status message.
-                            "room_id": rf_serializers.UUIDField(required=False, allow_null=True),  # UUID of matched room; null if still queued.
+                            "status": rf_serializers.CharField(),  # "matched" or "queued"
+                            "message": rf_serializers.CharField(),  # Human-readable status message.
+                            "room_id": rf_serializers.UUIDField(
+                                required=False, allow_null=True
+                            ),  # UUID of matched room; null if still queued.
                         },
                     ),
                 },
@@ -106,7 +103,9 @@ start_chat_doc = extend_schema(
             ],
         ),
         # 401: Returned when the request has no valid access token in the Authorization header.
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
     },
 )
 
@@ -138,13 +137,19 @@ end_chat_doc = extend_schema(
                 fields={"message": rf_serializers.CharField()},
             ),
             description="Chat ended successfully.",
-            examples=[OpenApiExample("Success", value={"message": "Chat ended successfully."})],
+            examples=[
+                OpenApiExample("Success", value={"message": "Chat ended successfully."})
+            ],
         ),
         # 400: Returned when the room_id field is not a valid UUID format.
         400: OpenApiResponse(description="Bad Request - Invalid room ID format."),
         # 401: Returned when the request has no valid access token in the Authorization header.
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         # 404: Returned when the room does not exist or the user is not a participant.
-        404: OpenApiResponse(description="Not Found - Chat room not found or user is not a participant."),
+        404: OpenApiResponse(
+            description="Not Found - Chat room not found or user is not a participant."
+        ),
     },
 )
