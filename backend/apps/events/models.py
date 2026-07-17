@@ -29,6 +29,27 @@ class EventBanner(models.TextChoices):
     BANNER_6 = "banner_6", "Banner 6"
 
 
+class AnonymousName(BaseModel):
+    """
+    Represents a predefined anonymous display name
+    that can be assigned to users in anonymous events.
+    """
+
+    display_name = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    class Meta:
+        db_table = "anonymous_names"
+        ordering = ["display_name"]
+        verbose_name = "Anonymous Name"
+        verbose_name_plural = "Anonymous Names"
+
+    def __str__(self):
+        return self.display_name
+
+
 class Event(BaseModel):
     """
     Represents an event created by a user.
@@ -74,13 +95,26 @@ class Event(BaseModel):
         default=EventStatus.ACTIVE,
     )
 
+    anonymous_seed = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Random starting index for anonymous name allocation.",
+    )
+
+    anonymous_counter = models.PositiveIntegerField(
+        default=0,
+        help_text="Tracks the next anonymous name allocation.",
+    )
+
     class Meta:
         db_table = "events"
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["status"]),
             models.Index(fields=["end_time"]),
             models.Index(fields=["owner"]),
+            models.Index(fields=["is_anonymous_chat"]),
         ]
 
     def __str__(self):
@@ -109,10 +143,12 @@ class EventParticipant(BaseModel):
         related_name="event_participations",
     )
 
-    anonymous_name = models.CharField(
-        max_length=100,
+    anonymous_name = models.ForeignKey(
+        AnonymousName,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="participants",
     )
 
     is_active = models.BooleanField(
@@ -130,19 +166,20 @@ class EventParticipant(BaseModel):
 
     class Meta:
         db_table = "event_participants"
-        ordering = ["joined_at"]
+        ordering = ["-joined_at"]
+
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "user"],
                 name="unique_event_participant",
-            )
+            ),
         ]
+
         indexes = [
-            models.Index(fields=["event"]),
-            models.Index(fields=["user"]),
-            models.Index(fields=["is_active"]),
             models.Index(fields=["event", "is_active"]),
+            models.Index(fields=["user"]),
+            models.Index(fields=["anonymous_name"]),
         ]
 
     def __str__(self):
-        return f"{self.user.full_name} - {self.event.name}"
+        return f"{self.event.name} - {self.user.full_name}"

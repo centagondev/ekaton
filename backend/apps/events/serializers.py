@@ -66,15 +66,14 @@ class EventParticipantSerializer(serializers.ModelSerializer):
     Serializer used to represent an event participant.
     """
 
-    user = serializers.ReadOnlyField(source="user.full_name")
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = EventParticipant
 
         fields = (
             "id",
-            "user",
-            "anonymous_name",
+            "display_name",
             "is_active",
             "joined_at",
             "left_at",
@@ -82,6 +81,18 @@ class EventParticipantSerializer(serializers.ModelSerializer):
 
         read_only_fields = fields
 
+    def get_display_name(self, obj):
+        """
+        Return the participant's display name.
+
+        - Anonymous events → anonymous identity.
+        - Normal events → user's full name.
+        """
+
+        if obj.event.is_anonymous_chat:
+            return obj.anonymous_name.display_name
+
+        return obj.user.full_name
 
 class EventSerializer(serializers.ModelSerializer):
     """

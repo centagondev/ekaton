@@ -6,7 +6,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .models import Event, EventParticipant, EventStatus
+from .models import Event, EventParticipant, EventStatus,AnonymousName
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -16,24 +17,19 @@ def create_event(*, user, validated_data):
     """
     Create a new event owned by the authenticated user.
 
-    The authenticated user is automatically assigned as the
-    event owner. Newly created events are marked as ACTIVE
-    by default and are immediately available for other users
-    to discover and join.
-
-    Args:
-        user:
-            The authenticated user creating the event.
-
-        validated_data:
-            Validated event data from the serializer.
-
-    Returns:
-        Event:
-            The newly created event instance.
+    If anonymous chat is enabled, a unique anonymous seed is
+    generated for the event. This seed is later used to assign
+    deterministic anonymous identities to participants.
     """
-
-    event = Event.objects.create(owner=user, **validated_data)
+    event_data={
+        "owner":user,
+        **validated_data,
+    }
+    if event_data.get("is_anonymous_chat"):
+        event_data["anonymous_seed"]=secrets.randbits(63)
+        event_data["anonymous_counter"]=0
+        
+    event = Event.objects.create(**event_data)
 
     logger.info("Event '%s' created successfully by user '%s'.", event.name, user.email)
     return event
@@ -197,6 +193,33 @@ def list_events():
         .order_by("-created_at")
     )
 
+def _assign_anonymous_name(*, event):
+    """
+    Assign the next anonymous identity for an anonymous event.
+
+    This function assumes the event row is already locked using
+    select_for_update() by the caller.
+    """
+
+    total_names = AnonymousName.objects.count()
+
+    if total_names == 0:
+        raise ValidationError("No anonymous names available.")
+
+    if event.anonymous_seed is None:
+        raise ValidationError("Anonymous event seed is missing.")
+
+    index = (
+        event.anonymous_seed +
+        event.anonymous_counter
+    ) % total_names
+
+    anonymous_name = AnonymousName.objects.order_by("id")[index]
+
+    event.anonymous_counter += 1
+    event.save(update_fields=["anonymous_counter"])
+
+    return anonymous_name
 
 @transaction.atomic
 def join_event(*, event, user):
@@ -207,20 +230,11 @@ def join_event(*, event, user):
     the existing participation record is reactivated instead of
     creating a new one.
 
-    Args:
-        event:
-            The event to join.
+    
+    Join an event.
 
-        user:
-            The authenticated user joining the event.
-
-    Returns:
-        EventParticipant:
-            The active event participant instance.
-
-    Raises:
-        ValidationError:
-            If the event cannot be joined.
+    If the event uses anonymous chat, assign a deterministic
+    anonymous identity to the participant.
     """
 
     if not user.is_verified:
@@ -262,9 +276,22 @@ def join_event(*, event, user):
             event.name,
         )
         return participant
+    
+    event=Event.objects.select_for_update().get(pk=event.pk)
+    
+    anonymous_name=None
+    if event.is_anonymous_chat :
+        anonymous_name=_assign_anonymous_name(event=event)
 
     try:
-        participant = EventParticipant.objects.create(event=event, user=user)
+        participant_data={
+            "event":event,
+            "user":user
+        }
+        if event.is_anonymous_chat :
+            participant_data["anonymous_name"]=anonymous_name
+            
+        participant = EventParticipant.objects.create(**participant_data)
 
     except IntegrityError:
 
