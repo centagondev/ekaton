@@ -13,6 +13,8 @@ from drf_spectacular.utils import (
 )
 from rest_framework import serializers as rf_serializers
 
+from apps.users.serializers import UserSerializer
+
 from .serializers import (
     AdminCreateUserSerializer,
     AdminLoginSerializer,
@@ -284,6 +286,88 @@ admin_create_user_doc = extend_schema(
         ),
         400: OpenApiResponse(
             description="Bad Request - Validation error or duplicate email."
+        ),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+    },
+)
+
+# ---------------------------------------------------------------------------
+# Admin User List
+# Endpoint : GET /admin/users/
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+
+admin_users_list_doc = extend_schema(
+    tags=["Administration"],
+    summary="Admin User List",
+    description="""
+    Retrieve a paginated list of all users, with optional filtering and search.
+    
+    **Purpose**: Provides the user management table data for the admin dashboard.
+    **Authentication requirement**: Admin only (IsAdminUser).
+    """,
+    parameters=[
+        OpenApiParameter(
+            name="search",
+            description="Search by name, email, or batch",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="is_active",
+            description="Filter by active status ('true' or 'false')",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="is_verified",
+            description="Filter by verified status ('true' or 'false')",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="gender",
+            description="Filter by gender ('male' or 'female')",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="batch",
+            description="Filter by batch",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminUserListResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": inline_serializer(
+                        name="AdminUserListData",
+                        fields={
+                            "stats": rf_serializers.DictField(
+                                child=rf_serializers.IntegerField()
+                            ),
+                            "users": inline_serializer(
+                                name="PaginatedUsers",
+                                fields={
+                                    "count": rf_serializers.IntegerField(),
+                                    "next": rf_serializers.URLField(allow_null=True),
+                                    "previous": rf_serializers.URLField(
+                                        allow_null=True
+                                    ),
+                                    "results": UserSerializer(many=True),
+                                },
+                            ),
+                        },
+                    ),
+                },
+            ),
+            description="Admin users data fetched successfully.",
         ),
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),

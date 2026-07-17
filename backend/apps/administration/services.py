@@ -44,12 +44,20 @@ def users_count():
     return User.objects.count()
 
 
-def active_users_count():
+def online_users_count():
     return 0
+
+
+def active_users_count():
+    return User.objects.filter(is_active=True).count()
 
 
 def pending_reports_count():
     return Report.objects.filter(status=Report.Status.PENDING).count()
+
+
+def verified_users_count():
+    return User.objects.filter(is_verified=True).count()
 
 
 def active_events_count():
@@ -94,7 +102,7 @@ def get_dashboard_statistics():
     def fetch_stats():
         return {
             "users_count": users_count(),
-            "active_users_count": active_users_count(),
+            "online_users_count": online_users_count(),
             "active_events_count": active_events_count(),
             "pending_reports_count": pending_reports_count(),
             "total_chats_count": total_chats_count(),
@@ -128,7 +136,14 @@ def get_users(search=None, is_active=None, is_verified=None, gender=None, batch=
     if batch:
         queryset = queryset.filter(batch=batch)
 
-    return queryset
+    stats = {
+        "users_count": users_count(),
+        "active_users": active_users_count(),
+        "blocked_users": blocked_users_count(),
+        "online_users": online_users_count(),
+        "verified_users": verified_users_count(),
+    }
+    return queryset, stats
 
 
 def update_user(user_id, data):

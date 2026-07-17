@@ -14,6 +14,7 @@ from .docs import (
     admin_dashboard_doc,
     admin_login_doc,
     admin_update_user_doc,
+    admin_users_list_doc,
 )
 from .serializers import (
     AdminCreateUserSerializer,
@@ -101,9 +102,10 @@ class AdminDashboardAPIView(APIView):
 class AdminUsersAPIView(APIView):
     permission_classes = [IsAdminUser]
 
+    @admin_users_list_doc
     def get(self, request):
 
-        users = get_users(
+        users, stats = get_users(
             search=request.query_params.get("search"),
             is_active=request.query_params.get("is_active"),
             is_verified=request.query_params.get("is_verified"),
@@ -117,9 +119,15 @@ class AdminUsersAPIView(APIView):
 
         serializer = UserSerializer(page, many=True)
 
+        paginated_data = paginator.get_paginated_response(serializer.data)
+
+        logger.info(
+            f"Admin {request.user.id} fetched user list (page: {request.query_params.get('page', 1)})"
+        )
+
         return success_response(
             message="Admin users data fetched successfully",
-            data=paginator.get_paginated_response(serializer.data),
+            data={"stats": stats, "users": paginated_data},
         )
 
     @admin_create_user_doc
