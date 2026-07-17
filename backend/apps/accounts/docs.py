@@ -43,11 +43,16 @@ Exports
 - ``change_password_doc``      → ChangePasswordAPIView.post
 """
 
-from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
-                                   extend_schema, inline_serializer)
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
+
 from .serializers import (
     ChangePasswordSerializer,
     CheckEmailSerializer,
@@ -95,7 +100,10 @@ check_email_doc = extend_schema(
             examples=[
                 OpenApiExample(
                     "Verified",
-                    value={"message": "Account is verified.", "data": {"is_verified": True}},
+                    value={
+                        "message": "Account is verified.",
+                        "data": {"is_verified": True},
+                    },
                 ),
                 OpenApiExample(
                     "Unverified",

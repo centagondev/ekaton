@@ -5,11 +5,18 @@ from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.exceptions import ValidationError
 
+from core.encryption import decrypt_message
+
 logger = logging.getLogger("chat")
 
-from .services import (create_private_message, create_reveal_request,
-                       end_private_chat_room, get_pending_reveal_request,
-                       get_private_chat_room, respond_to_reveal_request)
+from .services import (
+    create_private_message,
+    create_reveal_request,
+    end_private_chat_room,
+    get_pending_reveal_request,
+    get_private_chat_room,
+    respond_to_reveal_request,
+)
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -181,13 +188,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        try:
+            plaintext = decrypt_message(private_message.message)
+        except Exception:
+            logger.exception(
+                "Failed to decrypt message %s for broadcast in room %s",
+                private_message.id,
+                self.room_id,
+            )
+            plaintext = private_message.message
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "chat_message",
                 "id": str(private_message.id),
                 "sender": private_message.sender.email,
-                "message": private_message.message,
+                "message": plaintext,
                 "created_at": private_message.created_at.isoformat(),
             },
         )

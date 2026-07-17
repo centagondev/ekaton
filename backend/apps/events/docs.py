@@ -19,7 +19,6 @@ from .serializers import (
     UpdateEventSerializer,
 )
 
-
 # Event Management Documentation
 # ==============================================================================
 

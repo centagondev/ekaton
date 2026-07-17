@@ -1,6 +1,12 @@
+import logging
+
 from rest_framework import serializers
 
+from core.encryption import decrypt_message
+
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
+
+logger = logging.getLogger("chat")
 
 
 class PrivateChatRoomSerializer(serializers.ModelSerializer):
@@ -26,9 +32,28 @@ class PrivateChatRoomSerializer(serializers.ModelSerializer):
 class PrivateMessageSerializer(serializers.ModelSerializer):
     """Serializes a PrivateMessage instance for API responses.
 
+    The `message` field is transparently decrypted before being returned to
+    the client. The database always stores the encrypted ciphertext.
+
     The `id`, `created_at`, and `updated_at` fields are read-only and are
     always set by the server.
     """
+
+    message = serializers.SerializerMethodField()
+
+    def get_message(self, obj):
+        """Decrypt the stored ciphertext and return the plaintext message.
+
+        Falls back to the raw ciphertext if decryption fails, preventing
+        the API from crashing on corrupted or legacy unencrypted records.
+        """
+        try:
+            return decrypt_message(obj.message)
+        except Exception:
+            logger.exception(
+                "Failed to decrypt message %s in room %s", obj.id, obj.room_id
+            )
+            return obj.message
 
     class Meta:
         model = PrivateMessage

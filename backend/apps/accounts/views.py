@@ -15,6 +15,18 @@ from core.throttles import (
     ResetPasswordRateThrottle,
     SetPasswordRateThrottle,
 )
+
+from .docs import (
+    change_password_doc,
+    check_email_doc,
+    forget_password_doc,
+    login_doc,
+    logout_doc,
+    me_doc,
+    resend_password_reset_doc,
+    reset_password_doc,
+    set_password_doc,
+)
 from .serializers import (
     ChangePasswordSerializer,
     CheckEmailSerializer,
@@ -38,18 +50,6 @@ from .services import (
     send_account_setup_email,
     set_password,
 )
-from .docs import (
-    change_password_doc,
-    check_email_doc,
-    forget_password_doc,
-    login_doc,
-    logout_doc,
-    me_doc,
-    resend_password_reset_doc,
-    reset_password_doc,
-    set_password_doc,
-)
-
 
 
 class CheckEmailAPIView(APIView):

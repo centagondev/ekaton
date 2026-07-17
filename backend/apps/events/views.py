@@ -3,10 +3,24 @@ from rest_framework.views import APIView
 
 from core.responses import success_response
 
-from .serializers import (CreateEventSerializer, EventDetailSerializer,
-                          EventParticipantSerializer, EventSerializer,
-                          JoinEventSerializer, LeaveEventSerializer,
-                          UpdateEventSerializer)
+from .docs import (
+    cancel_event_doc,
+    create_event_doc,
+    event_detail_doc,
+    join_event_doc,
+    leave_event_doc,
+    list_events_doc,
+    update_event_doc,
+)
+from .serializers import (
+    CreateEventSerializer,
+    EventDetailSerializer,
+    EventParticipantSerializer,
+    EventSerializer,
+    JoinEventSerializer,
+    LeaveEventSerializer,
+    UpdateEventSerializer,
+)
 from .services import (
     cancel_event,
     create_event,
@@ -15,15 +29,6 @@ from .services import (
     leave_event,
     list_events,
     update_event,
-)
-from .docs import (
-    create_event_doc,
-    list_events_doc,
-    event_detail_doc,
-    update_event_doc,
-    cancel_event_doc,
-    join_event_doc,
-    leave_event_doc,
 )
 
 

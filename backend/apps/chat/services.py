@@ -3,6 +3,8 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from core.encryption import encrypt_message
+
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 
 
@@ -88,7 +90,11 @@ def create_private_message(room, sender, message):
     if not message:
         raise ValidationError("Message content cannot be empty.")
 
-    return PrivateMessage.objects.create(room=room, sender=sender, message=message)
+    return PrivateMessage.objects.create(
+        room=room,
+        sender=sender,
+        message=encrypt_message(message),
+    )
 
 
 @transaction.atomic
