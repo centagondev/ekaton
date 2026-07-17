@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+	/* Brand Palette (Derived from your Figma design) */
+	--color-brand-yellow: #FFDE00;
+	--color-brand-lime: #CCFF00;
+	--color-brand-lavender: #E8EBFF;
+
+	/* Shadcn UI v4 CSS Variable Overrides */
+	--background: 0 0% 100%;
+	--foreground: 0 0% 0%;
+
+	--card: 0 0% 100%;
+	--card-foreground: 0 0% 0%;
+
+	--popover: 0 0% 100%;
+	--popover-foreground: 0 0% 0%;
+
+	/* Primary matches your high-contrast black buttons */
+	--primary: 0 0% 0%;
+	--primary-foreground: 0 0% 100%;
+
+	/* Secondary / Accent States */
+	--secondary: 0 0% 96%;
+	--secondary-foreground: 0 0% 0%;
+
+	--muted: 0 0% 96.1%;
+	--muted-foreground: 0 0% 45%;
+
+	--accent: 0 0% 96.1%;
+	--accent-foreground: 0 0% 0%;
+
+	--destructive: 0 84.2% 60.2%;
+	--destructive-foreground: 0 0% 98%;
+
+	/* Sharp borders & inputs */
+	--border: 0 0% 0%;
+	--input: 0 0% 89.8%;
+	--ring: 0 0% 0%;
+
+	--radius: 0.5rem;
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+		font-feature-settings: "rlig" 1, "calt" 1;
+	}
+}

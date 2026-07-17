@@ -25,11 +25,9 @@ urlpatterns = [
 #   - No API structure, no endpoint list, and no schema is exposed publicly.
 # ---------------------------------------------------------------------------
 if settings.DEBUG:
-    from drf_spectacular.views import (
-        SpectacularAPIView,
-        SpectacularRedocView,
-        SpectacularSwaggerView,
-    )
+    from drf_spectacular.views import (SpectacularAPIView,
+                                       SpectacularRedocView,
+                                       SpectacularSwaggerView)
 
     urlpatterns += [
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
