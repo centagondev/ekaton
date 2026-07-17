@@ -11,4 +11,8 @@ export const NAV_LINKS = [
     label: "COMPLAINT BOX",
     path: "/complaints",
   },
+  {
+    label: "LOGIN",
+    path: "/login",
+  }
 ];
