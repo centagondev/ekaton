@@ -13,6 +13,7 @@
   --color-brand-yellow: #FFDE00;
   --color-brand-lime: #CCFF00;
   --color-brand-lavender: #E8EBFF;
+  --color-canvas: #FBF9F5;
 
   /* Existing shadcn mappings... */
   --color-background: var(--background);
