@@ -1,9 +1,9 @@
 from django.contrib.auth import authenticate
 from django.core.cache import cache
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
@@ -153,3 +153,18 @@ def update_user(user_id, data):
     user.save(update_fields=list(data.keys()))
 
     return user
+
+
+def admin_create_user(full_name, email, batch, gender):
+    """
+    Create a new user from the admin dashboard.
+
+    The user is created with an unusable password and is_verified=False.
+    The account setup flow is handled separately via the Check Email API.
+    """
+    try:
+        return User.objects.create_user(
+            full_name=full_name, email=email, batch=batch, gender=gender, password=None
+        )
+    except IntegrityError:
+        raise ValidationError({"email": "A user with this email already exists."})

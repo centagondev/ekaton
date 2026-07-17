@@ -38,3 +38,11 @@ class AdminUserUpdateSerializer(serializers.Serializer):
 
     is_active = serializers.BooleanField(required=False)
     is_verified = serializers.BooleanField(required=False)
+
+
+class AdminCreateUserSerializer(serializers.Serializer):
+
+    full_name = serializers.CharField(max_length=255)
+    email = serializers.EmailField()
+    batch = serializers.CharField(max_length=100)
+    gender = serializers.ChoiceField(choices=User.Gender.choices)

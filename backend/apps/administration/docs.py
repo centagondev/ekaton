@@ -14,6 +14,7 @@ from drf_spectacular.utils import (
 from rest_framework import serializers as rf_serializers
 
 from .serializers import (
+    AdminCreateUserSerializer,
     AdminLoginSerializer,
     AdminUserSerializer,
     AdminUserUpdateSerializer,
@@ -232,5 +233,59 @@ admin_update_user_doc = extend_schema(
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
         # 404: Target user not found.
         404: OpenApiResponse(description="Not Found - User does not exist."),
+    },
+)
+
+# ---------------------------------------------------------------------------
+# Admin Create User
+# Endpoint : POST /admin/users/
+
+admin_create_user_doc = extend_schema(
+    tags=["Administration"],
+    summary="Admin Create User",
+    description="""
+    Allow an administrator to create a new user.
+
+    **Purpose**: Enables admins to provision users. The created user has no password
+    and `is_verified=False` by default. They must go through the standard "Check Email"
+    and setup flow to set a password and activate their account.
+    **Authentication requirement**: Admin only (IsAdminUser).
+
+    ### Request Fields
+    * `full_name` (str): User's full name.
+    * `email` (str): User's email address.
+    * `batch` (str): User's batch.
+    * `gender` (str): `"male"` or `"female"`.
+    """,
+    request=AdminCreateUserSerializer,
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminCreateUserResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": inline_serializer(
+                        name="AdminCreateUserData",
+                        fields={
+                            "id": rf_serializers.UUIDField(),
+                            "full_name": rf_serializers.CharField(),
+                            "email": rf_serializers.EmailField(),
+                            "batch": rf_serializers.CharField(),
+                            "gender": rf_serializers.CharField(),
+                            "profile_photo": rf_serializers.URLField(allow_null=True),
+                            "is_available": rf_serializers.BooleanField(),
+                            "is_verified": rf_serializers.BooleanField(),
+                            "is_active": rf_serializers.BooleanField(),
+                        },
+                    ),
+                },
+            ),
+            description="User created successfully.",
+        ),
+        400: OpenApiResponse(
+            description="Bad Request - Validation error or duplicate email."
+        ),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
     },
 )

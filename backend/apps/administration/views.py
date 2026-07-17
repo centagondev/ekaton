@@ -9,13 +9,25 @@ from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
 from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 
-from .docs import admin_dashboard_doc, admin_login_doc, admin_update_user_doc
+from .docs import (
+    admin_create_user_doc,
+    admin_dashboard_doc,
+    admin_login_doc,
+    admin_update_user_doc,
+)
 from .serializers import (
+    AdminCreateUserSerializer,
     AdminLoginSerializer,
     AdminUserSerializer,
     AdminUserUpdateSerializer,
 )
-from .services import admin_login, get_dashboard_statistics, get_users, update_user
+from .services import (
+    admin_create_user,
+    admin_login,
+    get_dashboard_statistics,
+    get_users,
+    update_user,
+)
 
 logger = logging.getLogger("authentication")
 
@@ -108,6 +120,29 @@ class AdminUsersAPIView(APIView):
         return success_response(
             message="Admin users data fetched successfully",
             data=paginator.get_paginated_response(serializer.data),
+        )
+
+    @admin_create_user_doc
+    def post(self, request):
+        """Create a new user from the admin dashboard."""
+        serializer = AdminCreateUserSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = admin_create_user(
+            full_name=serializer.validated_data["full_name"],
+            email=serializer.validated_data["email"],
+            batch=serializer.validated_data["batch"],
+            gender=serializer.validated_data["gender"],
+        )
+
+        logger.info(
+            f"Admin {request.user.id} created new user {user.id} (email: {user.email})"
+        )
+
+        return success_response(
+            message="User created successfully",
+            data=UserSerializer(user).data,
+            status_code=201,
         )
 
 
