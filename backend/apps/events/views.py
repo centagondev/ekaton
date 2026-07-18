@@ -2,11 +2,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.responses import success_response
+from django.shortcuts import get_object_or_404
+from rest_framework.generics import GenericAPIView
+from .models import Event, EventParticipant, EventMessage
 
 from .serializers import (CreateEventSerializer, EventDetailSerializer,
                           EventParticipantSerializer, EventSerializer,
                           JoinEventSerializer, LeaveEventSerializer,
-                          UpdateEventSerializer)
+                          UpdateEventSerializer,EventMessageCreateSerializer,
+                          EventMessageSerializer)
 from .services import (
     cancel_event,
     create_event,
@@ -15,6 +19,7 @@ from .services import (
     leave_event,
     list_events,
     update_event,
+    send_event_message
 )
 from .docs import (
     create_event_doc,
@@ -229,3 +234,86 @@ class LeaveEventAPIView(APIView):
             message="You have left the event successfully.",
             data=response_serializer.data,
         )
+
+class EventMessageAPIView(GenericAPIView):
+    """
+    API for retrieving and sending event chat messages.
+    """
+    permission_classes=[IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """
+        Return the serializer class based on the request method.
+        """
+        if self.request.method == "POST":
+            
+            return EventMessageCreateSerializer
+        
+        return EventMessageSerializer
+    
+    def get_event(self):
+        """
+        Return the requested event.
+        """
+        return get_object_or_404(
+    Event,
+    pk=self.kwargs["event_id"],
+)
+    
+    def get_participant(self,event):
+        """
+        Return the authenticated user's participant record.
+        """
+        return get_object_or_404(EventParticipant,event=event,user=self.request.user)
+    
+    def get_messages(self,event):
+        """
+        Return all messages for the given event.
+        """
+        return (EventMessage.objects.filter(event=event).select_related("participant","participant__user").order_by("created_at"))
+    
+    def get(self,request,*args,**kwargs):
+        """
+        Retrieve all messages for an event.
+        """
+        event=self.get_event()
+        
+        # Ensure the authenticated user is a participant.
+        self.get_participant(event)
+        
+        messages=self.get_messages(event)
+        
+        serializer=self.get_serializer(messages,many=True)
+        
+        return success_response(
+            data=serializer.data,
+            message="Messages retrieved successfully.",
+        )
+        
+    def post(self, request, *args, **kwargs):
+        """
+        Send a message to an event.
+        """
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        event = self.get_event()
+
+        participant = self.get_participant(event)
+
+        message = send_event_message(
+            participant=participant,
+            content=serializer.validated_data["content"],
+        )
+
+        response_serializer = EventMessageSerializer(message)
+
+        return success_response(
+            message="Message sent successfully.",
+            data=response_serializer.data,
+            status_code=201,
+        )
+        
+        
+        

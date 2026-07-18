@@ -183,3 +183,62 @@ class EventParticipant(BaseModel):
 
     def __str__(self):
         return f"{self.event.name} - {self.user.full_name}"
+    
+    
+class EventMessage(BaseModel):
+    """
+    Represents a single text message sent by a participant
+    inside an event chat.
+
+    Each message belongs to:
+        - One Event
+        - One EventParticipant
+
+    Messages are immutable:
+        - Cannot be edited
+        - Cannot be deleted by users
+        - Text only
+    """
+
+    event = models.ForeignKey(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="messages",
+        help_text="The event where this message was sent.",
+    )
+
+    participant = models.ForeignKey(
+        "events.EventParticipant",
+        on_delete=models.CASCADE,
+        related_name="messages",
+        help_text="The participant who sent the message.",
+    )
+
+    content = models.TextField(
+        max_length=2000,
+        help_text="Text content of the message.",
+    )
+
+    class Meta:
+        db_table = "event_messages"
+        verbose_name = "Event Message"
+        verbose_name_plural = "Event Messages"
+
+        ordering = ("created_at",)
+
+        indexes = [
+            models.Index(
+                fields=("event", "created_at"),
+                name="event_message_idx",
+            ),
+            models.Index(
+                fields=("participant",),
+                name="participant_message_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """
+        Return a readable representation of the message.
+        """
+        return f"Message by {self.participant} in {self.event}"

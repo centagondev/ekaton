@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .models import Event, EventParticipant, EventStatus,AnonymousName
+from .models import Event, EventParticipant, EventStatus,AnonymousName,EventMessage
 import secrets
 
 logger = logging.getLogger(__name__)
@@ -372,3 +372,28 @@ def leave_event(*, event, user):
     )
 
     return participant
+
+
+@transaction.atomic
+def send_event_message(*, content: str, participant: EventParticipant):
+    """
+    Create a new event message.
+
+    Args:
+        participant:
+            The event participant sending the message.
+
+        content:
+            The message text.
+
+    Returns:
+        EventMessage:
+            The newly created message.
+    """
+    message=EventMessage.objects.create(
+        event=participant.event,
+        participant=participant,
+        content=content.strip(),
+    )
+    
+    return message

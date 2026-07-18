@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Event, EventParticipant
+from .models import Event, EventParticipant,EventMessage
 
 
 class CreateEventSerializer(serializers.ModelSerializer):
@@ -163,3 +163,46 @@ class LeaveEventSerializer(serializers.Serializer):
     """
 
     pass
+
+class EventMessageCreateSerializer(serializers.Serializer):
+    """
+    Validate incoming event chat messages.
+    """
+    content=serializers.CharField(max_length=2000,
+        trim_whitespace=True,)
+    
+    def validate_content(self,value:str):
+        """
+        Ensure the message is not empty after trimming whitespace.
+        """
+        value=value.strip()
+        if not value:
+            raise serializers.ValidationError(
+                "Message content cannot be empty."
+            )
+
+        return value
+
+class EventMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventMessage
+        fields = (
+            "id",
+            "sender_name",
+            "content",
+            "created_at",
+        )
+
+    def get_sender_name(self, obj):
+        """
+        Return the appropriate display name based on
+        the event type.
+        """
+
+        if obj.event.is_anonymous:
+            return obj.participant.anonymous_name
+
+        return obj.participant.user.full_name
+        
