@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { startChatApi } from "../api/chat.api";
 
-export const useChatStore= create((set)=>({
+export const useChatStore= create(()=>({
 	loading: null,
 
 
