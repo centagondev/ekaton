@@ -139,7 +139,17 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [
-                env("REDIS_URL"),
+                {
+                    # redis-py 8.0.0 changed socket_timeout default from None
+                    # to 5 seconds. channels_redis issues BZPOPMIN with a 5-second
+                    # server-side timeout. The client-side socket fires first, raising
+                    # redis.exceptions.TimeoutError and killing every idle WebSocket.
+                    # socket_timeout=None restores correct blocking semantics for the
+                    # channel layer's long-lived receive connections.
+                    "address": env("REDIS_URL"),
+                    "socket_timeout": None,
+                    "socket_connect_timeout": 5,
+                }
             ],
         },
     },

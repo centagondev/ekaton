@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
@@ -6,9 +7,10 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .models import Event, EventParticipant, EventStatus
+from .models import AnonymousName, Event, EventMessage, EventParticipant, EventStatus
 
 logger = logging.getLogger(__name__)
+MAX_LENGTH_CONTENT = 1000
 
 
 @transaction.atomic
@@ -16,24 +18,19 @@ def create_event(*, user, validated_data):
     """
     Create a new event owned by the authenticated user.
 
-    The authenticated user is automatically assigned as the
-    event owner. Newly created events are marked as ACTIVE
-    by default and are immediately available for other users
-    to discover and join.
-
-    Args:
-        user:
-            The authenticated user creating the event.
-
-        validated_data:
-            Validated event data from the serializer.
-
-    Returns:
-        Event:
-            The newly created event instance.
+    If anonymous chat is enabled, a unique anonymous seed is
+    generated for the event. This seed is later used to assign
+    deterministic anonymous identities to participants.
     """
+    event_data = {
+        "owner": user,
+        **validated_data,
+    }
+    if event_data.get("is_anonymous_chat"):
+        event_data["anonymous_seed"] = secrets.randbits(63)
+        event_data["anonymous_counter"] = 0
 
-    event = Event.objects.create(owner=user, **validated_data)
+    event = Event.objects.create(**event_data)
 
     logger.info("Event '%s' created successfully by user '%s'.", event.name, user.email)
     return event
@@ -119,6 +116,9 @@ def cancel_event(*, event, user):
         PermissionDenied:
             If the authenticated user is not the event owner.
     """
+    # Lock the event row to prevent concurrent cancellations from race conditions
+    event = Event.objects.select_for_update().get(pk=event.pk)
+
     if event.status != EventStatus.ACTIVE:
         raise ValidationError("This event is no longer active and cannot be cancelled.")
 
@@ -191,11 +191,39 @@ def list_events():
     """
     return (
         Event.objects.select_related("owner")
-        .filter(
-            status=EventStatus.ACTIVE,
-        )
+        .filter(status=EventStatus.ACTIVE, end_time__gt=timezone.now())
         .order_by("-created_at")
     )
+
+
+def _assign_anonymous_name(*, event):
+    """
+    Assign the next anonymous identity for an anonymous event.
+
+    This function assumes the event row is already locked using
+    select_for_update() by the caller.
+    """
+
+    total_names = AnonymousName.objects.count()
+
+    if total_names == 0:
+        # Fallback for clean deployments where the database hasn't been seeded yet
+        default_name, _ = AnonymousName.objects.get_or_create(
+            name="Anonymous Participant"
+        )
+        return default_name
+
+    if event.anonymous_seed is None:
+        raise ValidationError("Anonymous event seed is missing.")
+
+    index = (event.anonymous_seed + event.anonymous_counter) % total_names
+
+    anonymous_name = AnonymousName.objects.order_by("id")[index]
+
+    event.anonymous_counter += 1
+    event.save(update_fields=["anonymous_counter"])
+
+    return anonymous_name
 
 
 @transaction.atomic
@@ -207,20 +235,11 @@ def join_event(*, event, user):
     the existing participation record is reactivated instead of
     creating a new one.
 
-    Args:
-        event:
-            The event to join.
 
-        user:
-            The authenticated user joining the event.
+    Join an event.
 
-    Returns:
-        EventParticipant:
-            The active event participant instance.
-
-    Raises:
-        ValidationError:
-            If the event cannot be joined.
+    If the event uses anonymous chat, assign a deterministic
+    anonymous identity to the participant.
     """
 
     if not user.is_verified:
@@ -229,8 +248,14 @@ def join_event(*, event, user):
     if not user.is_active:
         raise ValidationError("Your account is inactive.")
 
+    # Lock the event row FIRST to prevent race conditions with cancellation/expiry
+    event = Event.objects.select_for_update().get(pk=event.pk)
+
     if event.status != EventStatus.ACTIVE:
         raise ValidationError("This event is no longer active.")
+
+    if event.end_time < timezone.now():
+        raise ValidationError("This event has ended and can no longer be joined.")
 
     participant = (
         EventParticipant.objects.select_for_update()
@@ -263,8 +288,16 @@ def join_event(*, event, user):
         )
         return participant
 
+    anonymous_name = None
+    if event.is_anonymous_chat:
+        anonymous_name = _assign_anonymous_name(event=event)
+
     try:
-        participant = EventParticipant.objects.create(event=event, user=user)
+        participant_data = {"event": event, "user": user}
+        if event.is_anonymous_chat:
+            participant_data["anonymous_name"] = anonymous_name
+
+        participant = EventParticipant.objects.create(**participant_data)
 
     except IntegrityError:
 
@@ -309,8 +342,12 @@ def leave_event(*, event, user):
         ValidationError:
             If the user cannot leave the event.
     """
+    # Lock the event row FIRST to prevent race conditions with cancellation
+    event = Event.objects.select_for_update().get(pk=event.pk)
+
     if event.status != EventStatus.ACTIVE:
         raise ValidationError("This event is no longer active.")
+
     participant = (
         EventParticipant.objects.select_for_update()
         .filter(
@@ -345,3 +382,54 @@ def leave_event(*, event, user):
     )
 
     return participant
+
+
+@transaction.atomic
+def send_event_message(*, content: str, participant: EventParticipant):
+    """
+    Create a new event message.
+
+    Args:
+        participant:
+            The event participant sending the message.
+
+        content:
+            The message text.
+
+    Returns:
+        EventMessage:
+            The newly created message.
+    """
+    # Refresh participant to get latest database state
+    participant.refresh_from_db()
+
+    if not participant.is_active:
+        raise ValidationError("You are no longer a participant of this event.")
+
+    # Refresh event to get latest status/end_time
+    participant.event.refresh_from_db()
+
+    if participant.event.status != EventStatus.ACTIVE:
+        raise ValidationError("This event is no longer active.")
+
+    if participant.event.end_time < timezone.now():
+        raise ValidationError("This event has ended. Messages can no longer be sent.")
+
+    if not isinstance(content, str):
+        raise ValidationError("Message content must be a string.")
+
+    content = content.strip()
+
+    if not content:
+        raise ValidationError("Message content is required.")
+
+    if len(content) > MAX_LENGTH_CONTENT:
+        raise ValidationError(f"Message cannot exceed {MAX_LENGTH_CONTENT} characters.")
+
+    message = EventMessage.objects.create(
+        event=participant.event,
+        participant=participant,
+        content=content,
+    )
+
+    return message

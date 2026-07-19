@@ -14,7 +14,7 @@ logger = logging.getLogger("authentication")
 @database_sync_to_async
 def get_user(user_id):
     """Return the authenticated user for the given ID."""
-    return User.objects.filter(id=user_id).first()
+    return User.objects.filter(id=user_id, is_active=True, is_verified=True).first()
 
 
 class JwtAuthMiddleware:

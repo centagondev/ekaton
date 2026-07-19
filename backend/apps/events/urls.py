@@ -5,9 +5,10 @@ from .views import (
     CreateEventAPIView,
     EventDetailAPIView,
     EventListAPIView,
+    EventMessageAPIView,
     JoinEventAPIView,
     LeaveEventAPIView,
-    UpdateEventAPIView,
+    UpdateEventAPIView
 )
 
 urlpatterns = [
@@ -26,4 +27,9 @@ urlpatterns = [
     path("<uuid:pk>/cancel/", CancelEventAPIView.as_view(), name="event-cancel"),
     path("<uuid:pk>/join/", JoinEventAPIView.as_view(), name="event-join"),
     path("<uuid:pk>/leave/", LeaveEventAPIView.as_view(), name="event-leave"),
+    path(
+        "<uuid:event_id>/messages/",
+        EventMessageAPIView.as_view(),
+        name="event-messages",
+    ),
 ]

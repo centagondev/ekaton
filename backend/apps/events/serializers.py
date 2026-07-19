@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Event, EventParticipant
+from .models import Event, EventMessage, EventParticipant
 
 
 class CreateEventSerializer(serializers.ModelSerializer):
@@ -66,21 +66,33 @@ class EventParticipantSerializer(serializers.ModelSerializer):
     Serializer used to represent an event participant.
     """
 
-    user = serializers.ReadOnlyField(source="user.full_name")
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = EventParticipant
 
         fields = (
             "id",
-            "user",
-            "anonymous_name",
+            "display_name",
             "is_active",
             "joined_at",
             "left_at",
         )
 
         read_only_fields = fields
+
+    def get_display_name(self, obj):
+        """
+        Return the participant's display name.
+
+        - Anonymous events → anonymous identity.
+        - Normal events → user's full name.
+        """
+
+        if obj.event.is_anonymous_chat:
+            return obj.anonymous_name.display_name
+
+        return obj.user.full_name
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -152,3 +164,43 @@ class LeaveEventSerializer(serializers.Serializer):
     """
 
     pass
+
+
+class EventMessageCreateSerializer(serializers.Serializer):
+    """
+    Validate incoming event chat messages.
+    """
+
+    content = serializers.CharField(
+        max_length=2000,
+        trim_whitespace=True,
+    )
+
+    def validate_content(self, value: str):
+        """
+        Ensure the message is not empty after trimming whitespace.
+        """
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Message content cannot be empty.")
+
+        return value
+
+
+class EventMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventMessage
+        fields = (
+            "id",
+            "sender_name",
+            "content",
+            "created_at",
+        )
+
+    def get_sender_name(self, obj):
+        if obj.event.is_anonymous_chat:
+            return obj.participant.anonymous_name.display_name
+
+        return obj.participant.user.full_name

@@ -1,3 +1,7 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.shortcuts import get_object_or_404
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -11,10 +15,16 @@ from .docs import (
     leave_event_doc,
     list_events_doc,
     update_event_doc,
+    list_event_messages_doc,
+    send_event_message_doc
 )
+from .models import Event, EventMessage, EventParticipant
+from .pagination import EventMessageCursorPagination
 from .serializers import (
     CreateEventSerializer,
     EventDetailSerializer,
+    EventMessageCreateSerializer,
+    EventMessageSerializer,
     EventParticipantSerializer,
     EventSerializer,
     JoinEventSerializer,
@@ -28,6 +38,7 @@ from .services import (
     join_event,
     leave_event,
     list_events,
+    send_event_message,
     update_event,
 )
 
@@ -233,4 +244,116 @@ class LeaveEventAPIView(APIView):
         return success_response(
             message="You have left the event successfully.",
             data=response_serializer.data,
+        )
+
+
+class EventMessageAPIView(GenericAPIView):
+    """
+    API for retrieving and sending event chat messages.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = EventMessageCursorPagination
+
+    def get_serializer_class(self):
+        """
+        Return the serializer class based on the request method.
+        """
+        if self.request.method == "POST":
+
+            return EventMessageCreateSerializer
+
+        return EventMessageSerializer
+
+    def get_event(self):
+        """
+        Return the requested event.
+        """
+        return get_object_or_404(
+            Event,
+            pk=self.kwargs["event_id"],
+        )
+
+    def get_participant(self, event):
+        """
+        Return the authenticated user's participant record.
+        """
+        return get_object_or_404(
+            EventParticipant,
+            event=event,
+            user=self.request.user,
+            is_active=True,
+        )
+
+    def get_messages(self, event):
+        """
+        Return all messages for the given event.
+        """
+        return (
+            EventMessage.objects.filter(event=event)
+            .select_related(
+                "event",
+                "participant__user",
+                "participant__anonymous_name",
+            )
+            .order_by("-created_at")
+        )
+
+    @list_event_messages_doc
+    def get(self, request, *args, **kwargs):
+        """
+        Retrieve all messages for an event.
+        """
+        event = self.get_event()
+
+        # Ensure the authenticated user is a participant.
+        self.get_participant(event)
+
+        messages = self.get_messages(event)
+        page = self.paginate_queryset(messages)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(messages, many=True)
+        return success_response(
+            data=serializer.data,
+            message="Messages retrieved successfully.",
+        )
+
+    @send_event_message_doc
+    def post(self, request, *args, **kwargs):
+        """
+        Send a message to an event.
+        """
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        event = self.get_event()
+
+        participant = self.get_participant(event)
+
+        message = send_event_message(
+            participant=participant,
+            content=serializer.validated_data["content"],
+        )
+
+        response_serializer = EventMessageSerializer(message)
+
+        # Broadcast the new message to WebSocket clients
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"event_{event.id}",
+            {
+                "type": "event.message",
+                "message": response_serializer.data,
+            }
+        )
+
+        return success_response(
+            message="Message sent successfully.",
+            data=response_serializer.data,
+            status_code=201,
         )
