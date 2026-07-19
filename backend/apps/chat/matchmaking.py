@@ -3,6 +3,7 @@ from redis.exceptions import LockError
 
 from apps.chat.models import PrivateChatRoom
 from apps.chat.services import create_private_chat_room
+from .redis_utils import has_recently_skipped
 from apps.users.models import User
 from core.redis import redis_client
 
@@ -11,7 +12,6 @@ WAITING_QUEUE_KEY = "waiting_users"
 
 # Redis key for the membership SET enabling O(1) presence checks.
 WAITING_USERS_SET_KEY = "waiting_users_set"
-
 
 def add_user_to_queue(user):
     """Add a user to the anonymous chat waiting queue.
@@ -124,7 +124,6 @@ def queue_size():
     """
     return redis_client.llen(WAITING_QUEUE_KEY)
 
-
 def is_user_in_active_chat(user):
     """Check whether a user is already a participant in an active chat room.
 
@@ -142,6 +141,13 @@ def is_user_in_active_chat(user):
 
 
 def start_chat(user):
+    print("=" * 40)
+    print("User:", user.id, user.email)
+    print("Current user:", user.id)
+    print("Is waiting:", is_user_waiting(user))
+    print("Queue size:", queue_size())
+    print("Waiting set:", redis_client.smembers(WAITING_USERS_SET_KEY))
+    print("Waiting list:", redis_client.lrange(WAITING_QUEUE_KEY, 0, -1))
     """Run the matchmaking flow for a user attempting to start an anonymous chat.
 
     Acquires a per-user Redis distributed lock to prevent duplicate concurrent
@@ -189,26 +195,52 @@ def start_chat(user):
                     "status": "waiting",
                     "message": "You are already waiting for a match.",
                 }
-
             # Attempt to pop the next waiting user from the queue atomically.
-            waiting_user = get_waiting_user()
+            max_attempts = queue_size()
+            attempts = 0
+            waiting_user = None
 
+            while attempts < max_attempts:
+                waiting_user = get_waiting_user()
+                print("Popped user:", waiting_user)
+
+                if waiting_user is None:
+                    print("No waiting user found")
+                    break
+                attempts+=1
+
+
+                print("Current:", user.id)
+                print("Waiting:", waiting_user.id)
+
+            # Ignore yourself if your own ID is found in the queue.
+                print("Before self check")
+                if waiting_user.id == user.id:
+                    add_user_to_queue(user)
+                    continue
+
+    # Skip users that were recently skipped.
+                print("Before skip check")
+                if  has_recently_skipped(user, waiting_user):
+                    add_user_to_queue(waiting_user)
+                    continue
+
+    # Found a valid match.
+                print("Breaking loop")
+                break
+            print("Exited loop")
+            print("waiting_user =", waiting_user)
+            print("attempts =", attempts)
+            print("max_attempts =", max_attempts)
+
+# No suitable user found.
             if waiting_user is None:
-                # Queue is empty — add the current user and wait.
                 add_user_to_queue(user)
                 return {
-                    "status": "waiting",
-                    "message": "Waiting for another user...",
-                }
+                "status": "waiting",
+                "message": "Waiting for another user...",
+                    }
 
-            if waiting_user.id == user.id:
-                # Edge case: the user's own ID was at the front of the queue.
-                # Re-enqueue them and continue waiting.
-                add_user_to_queue(user)
-                return {
-                    "status": "waiting",
-                    "message": "Waiting for another user...",
-                }
 
             # A valid match was found — create the chat room.
             room = create_private_chat_room(
