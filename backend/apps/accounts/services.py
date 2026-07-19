@@ -119,20 +119,14 @@ def send_account_setup_email(account_setup_token):
     frontend_url = settings.FRONTEND_URL
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
-    try:
-        html_message = render_to_string("emails/account_setup", {"link": link})
-        EmailService.send_email(
-            to_email=account_setup_token.user.email,
-            subject="Set new password",
-            html=html_message,
-        )
-    except ResendError:
-        logger.exception("Failed to send password setup email")
-        raise ValidationError(
-            "Unable to send the password setup email. Please try again"
-        )
 
-
+    html_message = render_to_string("emails/account_setup", {"link": link})
+    EmailService.send_email(
+        to_email=account_setup_token.user.email,
+        subject="Set new password",
+        html=html_message,
+        )
+        
 def login_user(request, email, password):
     """Authenticates a user and generates JWT access and refresh tokens."""
 
@@ -299,27 +293,19 @@ def send_password_reset_email(password_reset_token):
 
     reset_link = f"{frontend_url}/reset-password" f"?token={password_reset_token.token}"
 
-    try:
-        html_message = render_to_string(
-            "emails/password_reset.html",
-            {
-                "link": reset_link,
-            },
-        )
+    
+    html_message = render_to_string(
+        "emails/password_reset.html",
+        {
+            "link": reset_link,
+        },
+    )
 
-        EmailService.send_email(
-            to_email=password_reset_token.user.email,
-            subject="Reset your password",
-            html=html_message,
-        )
-
-    except ResendError:
-        logger.exception("Failed to send password reset email.")
-
-        raise ValidationError(
-            "Unable to send the password reset email. Please try again."
-        )
-
+    EmailService.send_email(
+        to_email=password_reset_token.user.email,
+        subject="Reset your password",
+        html=html_message,
+    )
 
 @transaction.atomic
 def reset_password(password_reset_token, password):

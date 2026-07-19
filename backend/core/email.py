@@ -2,6 +2,7 @@ import logging
 
 import resend
 from django.conf import settings
+from core.tasks import send_email_task
 
 logger = logging.getLogger("email")
 
@@ -15,16 +16,14 @@ class EmailService:
         subject: str,
         html: str,
         from_email: str = settings.DEFAULT_FROM_EMAIL,
-    ):
+    ): 
         """
-        Send a transactional email using Resend.
+        Dispatch the email sending job to a Celery background worker.
         """
-
-        return resend.Emails.send(
-            {
-                "from": from_email,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            }
+        # Call the celery task using .delay()
+        send_email_task.delay(
+            to_email=to_email,
+            subject=subject,
+            html=html,
+            from_email=from_email,
         )
