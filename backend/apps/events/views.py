@@ -1,3 +1,5 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -339,6 +341,16 @@ class EventMessageAPIView(GenericAPIView):
         )
 
         response_serializer = EventMessageSerializer(message)
+
+        # Broadcast the new message to WebSocket clients
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"event_{event.id}",
+            {
+                "type": "event.message",
+                "message": response_serializer.data,
+            }
+        )
 
         return success_response(
             message="Message sent successfully.",
