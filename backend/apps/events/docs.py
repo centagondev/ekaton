@@ -17,6 +17,8 @@ from .serializers import (
     JoinEventSerializer,
     LeaveEventSerializer,
     UpdateEventSerializer,
+    EventMessageSerializer,
+    EventMessageCreateSerializer,
 )
 
 # Event Management Documentation
@@ -110,6 +112,36 @@ leave_event_doc = extend_schema(
         200: EventParticipantSerializer,
         400: OpenApiResponse(description="Validation Error"),
         401: OpenApiResponse(description="Unauthorized"),
+        404: OpenApiResponse(description="Not Found"),
+    },
+)
+
+
+# Event Messages Documentation
+# ==============================================================================
+
+list_event_messages_doc = extend_schema(
+    tags=["Event Messages"],
+    summary="List Event Messages",
+    description="Retrieve paginated messages for a specific event. The authenticated user must be an active participant.",
+    responses={
+        200: EventMessageSerializer(many=True),
+        401: OpenApiResponse(description="Unauthorized"),
+        403: OpenApiResponse(description="Permission Denied"),
+        404: OpenApiResponse(description="Not Found"),
+    },
+)
+
+send_event_message_doc = extend_schema(
+    tags=["Event Messages"],
+    summary="Send Event Message",
+    description="Send a new chat message to a specific event. The authenticated user must be an active participant.",
+    request=EventMessageCreateSerializer,
+    responses={
+        201: EventMessageSerializer,
+        400: OpenApiResponse(description="Validation Error"),
+        401: OpenApiResponse(description="Unauthorized"),
+        403: OpenApiResponse(description="Permission Denied"),
         404: OpenApiResponse(description="Not Found"),
     },
 )

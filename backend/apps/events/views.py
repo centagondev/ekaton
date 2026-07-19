@@ -13,6 +13,8 @@ from .docs import (
     leave_event_doc,
     list_events_doc,
     update_event_doc,
+    list_event_messages_doc,
+    send_event_message_doc,
 )
 from .models import Event, EventMessage, EventParticipant
 from .pagination import EventMessageCursorPagination
@@ -295,6 +297,7 @@ class EventMessageAPIView(GenericAPIView):
             .order_by("-created_at")
         )
 
+    @list_event_messages_doc
     def get(self, request, *args, **kwargs):
         """
         Retrieve all messages for an event.
@@ -317,6 +320,7 @@ class EventMessageAPIView(GenericAPIView):
             message="Messages retrieved successfully.",
         )
 
+    @send_event_message_doc
     def post(self, request, *args, **kwargs):
         """
         Send a message to an event.
