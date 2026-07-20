@@ -6,6 +6,10 @@ import time
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from backend.apps import presence
+from backend.apps.events import anonymous_names
+from backend.apps.presence.services import PresenceService
+
 from .models import EventMessage, EventParticipant, EventStatus
 from .serializers import EventMessageSerializer
 from .services import send_event_message
@@ -55,6 +59,12 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         await self.join_event_group()
 
         await self.accept()
+        
+        await self.mark_user_online()
+        
+        await self.send_online_users()
+
+        await self.broadcast_presence("presence.joined")
 
         # Deliver the last 150 messages to the newly connected client only.
         # This uses send_json (direct send) — not group_send — so only this
@@ -76,7 +86,10 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Handle WebSocket disconnection.
         """
-
+        await self.mark_user_offline()
+        
+        await self.broadcast_presence("presence.left")
+        
         await self.leave_event_group()
 
     async def receive_json(self, content, **kwargs):
@@ -241,3 +254,97 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         )
 
         return EventMessageSerializer(message).data
+    
+    async def mark_user_online(self):
+        """
+        Mark the current participant as online.
+        """
+        await database_sync_to_async(
+            PresenceService.mark_online
+        )(event_id=self.participant.event_id,
+          user_id=self.participant.user_id)
+        
+    async def mark_user_offline(self):
+        """
+        Remove the current participant from the event presence set.
+        """
+        await database_sync_to_async(PresenceService.mark_offline)(
+            event_id=self.participant.event_id,
+            user_id=self.participant.user_id
+        )
+    
+    async def broadcast_presence(self, event_type: str):
+        """
+        Broadcast a participant presence event to everyone in the event.
+        """
+
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": event_type,
+                "participant": {
+                    "id": str(self.participant.id),
+                    "anonymous_name": self.participant.anonymous_name.name,
+                },
+            },
+        )
+    
+    async def presence_joined(self, event):
+        """
+        Send participant joined event.
+        """
+
+        await self.send_json(
+            {
+                "type": "presence.joined",
+                "participant": event["participant"],
+            }
+        )
+
+
+    async def presence_left(self, event):
+        """
+        Send participant left event.
+        """
+
+        await self.send_json(
+            {
+                "type": "presence.left",
+                "participant": event["participant"],
+            }
+        )
+
+    @database_sync_to_async
+    def get_online_participants(self):
+        """
+        Return the online participants for this event.
+        """
+        user_ids=PresenceService.get_online_users(self.participant.event_id)
+        
+        participants=EventParticipant.objects.filter(
+            event_id=self.participant.event_id,
+            user_id__in=user_ids,
+            is_active=True,
+        ).select_related("anonymous_name")
+        
+        return [
+        {
+            "id": str(participant.id),
+            "anonymous_name": participant.anonymous_name.name,
+        }
+        for participant in participants
+    ]
+        
+    async def send_online_users(self):
+        """
+        Send the list of currently online participants.
+        """
+        participants=await self.get_online_participants()
+        
+        await self.send_json(
+           { "type":"presence.online_users",
+            "count": len(participants),
+            "participants":participants
+            }
+            
+        )
