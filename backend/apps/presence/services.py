@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from apps.core.redis import redis_client
+from core.redis import redis_client
 
 
 class PresenceService:
