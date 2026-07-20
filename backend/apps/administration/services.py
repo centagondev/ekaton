@@ -1,11 +1,14 @@
+import secrets
 from django.contrib.auth import authenticate
 from django.core.cache import cache
-from django.db import IntegrityError, connection
-from django.db.models import Q
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Q,Count
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from apps.events.models import Event, EventStatus, EventParticipant
 from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 from apps.users.models import User
 
@@ -287,3 +290,80 @@ def update_report_status(report_id, status):
     report.save(update_fields=["status"])
 
     return report
+
+def get_event_statistics():
+    """
+    Return event statistics for the admin dashboard.
+    """
+    return {
+        "total_events":Event.objects.count(),
+        "active_events":Event.objects.filter(status=EventStatus.ACTIVE).count(),
+        "ended_events":Event.objects.filter(status=EventStatus.ENDED).count(),
+        "cancelled_events":Event.objects.filter(status=EventStatus.CANCELLED).count(),
+        "anonymous_events":Event.objects.filter(is_anonymous_chat=True).count(),
+
+    }
+
+def get_events():
+    """
+    Return all events for the admin panel.
+    """
+    return (
+        Event.objects.select_related("owner").annotate(participant_count=Count(
+            "participants",
+            filter=Q(participants__is_active=True)
+        )).order_by("-created_at")
+    )
+    
+def get_event_by_id(event_id):
+    """
+    Retrieve a single event with participant count.
+    """
+
+    return get_object_or_404(
+        Event.objects.select_related("owner").annotate(
+            participant_count=Count(
+                "participants",
+                filter=Q(participants__is_active=True),
+            )
+        ),
+        id=event_id,
+    )
+    
+@transaction.atomic
+def create_event(*, validated_data):
+    """
+    Create an event for the admin dashboard.
+
+    If anonymous chat is enabled, initialize the anonymous identity seed
+    and counter used by the event chat flow.
+    """
+    event_data = {**validated_data}
+
+    if event_data.get("is_anonymous_chat"):
+        event_data["anonymous_seed"] = secrets.randbits(63)
+        event_data["anonymous_counter"] = 0
+
+    return Event.objects.create(**event_data)
+@transaction.atomic
+def update_event(*, event, validated_data):
+    """Update an event from the admin dashboard."""
+    for field, value in validated_data.items():
+        setattr(event, field, value)
+
+    event.save(update_fields=[*validated_data.keys(), "updated_at"])
+    return event
+
+
+@transaction.atomic
+def cancel_event(*, event):
+    """Cancel an event and deactivate its active participants."""
+    event.status = EventStatus.CANCELLED
+    event.save(update_fields=["status", "updated_at"])
+
+    EventParticipant.objects.filter(event=event, is_active=True).update(
+        is_active=False,
+        left_at=timezone.now(),
+    )
+
+    return event

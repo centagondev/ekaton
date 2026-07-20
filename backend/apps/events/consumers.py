@@ -96,11 +96,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         Handle incoming JSON messages.
         """
         now = time.time()
-        if hasattr(self, "last_message_time") and now - self.last_message_time < 0.5:
-            await self.send_json(
-                {"error": "You are sending messages too quickly. Please wait."}
-            )
-            return
+        
         self.last_message_time = now
 
         # Validate payload type

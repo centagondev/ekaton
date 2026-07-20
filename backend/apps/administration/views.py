@@ -1,8 +1,11 @@
 import logging
 
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.users.serializers import UserSerializer
 from core.pagination import DefaultPagination
@@ -25,6 +28,11 @@ from .serializers import (
     AdminUpdateReportStatusSerializer,
     AdminUserSerializer,
     AdminUserUpdateSerializer,
+    AdminEventSerializer,
+    AdminEventDetailSerializer,
+    AdminCreateEventSerializer,
+    AdminUpdateEventSerializer,
+    
 )
 from .services import (
     admin_create_user,
@@ -34,6 +42,12 @@ from .services import (
     get_users,
     update_report_status,
     update_user,
+    get_events,
+    get_event_statistics,
+    get_event_by_id,
+    create_event,
+    update_event,
+    cancel_event,
 )
 
 logger = logging.getLogger("authentication")
@@ -264,3 +278,119 @@ class AdminReportAPIView(APIView):
             message="report updated successfully",
             data=AdminReportSerializer(report).data,
         )
+        
+class AdminEventAPIView(GenericAPIView):
+    """
+    Retrieve all events for the admin dashboard.
+    """
+    permission_classes=[IsAdminUser]
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+    search_fields = [
+        'name',
+        'description',
+        'venue',
+        'owner__full_name',
+    ]
+    filterset_fields = ['status', 'is_anonymous_chat']
+    ordering_fields = ['created_at', 'updated_at', 'end_time', 'name']
+    ordering = ['-created_at']
+    
+    def get(self,request):
+        """
+        Return paginated events with statistics.
+        """
+        events = self.filter_queryset(get_events())
+        stats = get_event_statistics()
+
+        paginator = DefaultPagination()
+        
+        page=paginator.paginate_queryset(events,request,)
+        
+        serializer=AdminEventSerializer(page,many=True)
+        
+        paginated_data = paginator.get_paginated_response(
+            serializer.data,
+        )
+        
+        return success_response(
+            message="Events fetched successfully.",
+            data={
+                "stats": stats,
+                "events": paginated_data,
+            },
+        )
+        
+class AdminCreateEventAPIView(APIView):
+    """
+    Create an event for the admin dashboard.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = AdminCreateEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        event = create_event(validated_data=serializer.validated_data)
+
+        return success_response(
+            message="Event created successfully.",
+            data=AdminEventDetailSerializer(event).data,
+        )
+
+class AdminEventDetailAPIView(APIView):
+    """
+    Retrieve a single event.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, event_id):
+        event = get_event_by_id(event_id)
+        serializer = AdminEventDetailSerializer(event)
+
+        return success_response(
+            message="Event fetched successfully.",
+            data=serializer.data,
+        )
+
+
+class AdminUpdateEventAPIView(APIView):
+    """Update an event from the admin dashboard."""
+
+    permission_classes = [IsAdminUser]
+
+    def patch(self, request, event_id):
+        event = get_event_by_id(event_id)
+        serializer = AdminUpdateEventSerializer(
+            event,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        event = update_event(
+            event=event,
+            validated_data=serializer.validated_data,
+        )
+
+        return success_response(
+            message="Event updated successfully.",
+            data=AdminEventDetailSerializer(event).data,
+        )
+
+
+class AdminCancelEventAPIView(APIView):
+    """Cancel an event from the admin dashboard."""
+
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request, event_id):
+        event = get_event_by_id(event_id)
+        cancel_event(event=event)
+
+        return success_response(message="Event cancelled successfully.")
