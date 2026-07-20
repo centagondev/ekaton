@@ -20,6 +20,11 @@ from .docs import (
     admin_update_report_status_doc,
     admin_update_user_doc,
     admin_users_list_doc,
+    admin_event_list_doc,
+    admin_event_detail_doc,
+    admin_create_event_doc,
+    admin_update_event_doc,
+    admin_cancel_event_doc,
 )
 from .serializers import (
     AdminCreateUserSerializer,
@@ -299,6 +304,7 @@ class AdminEventAPIView(GenericAPIView):
     ordering_fields = ['created_at', 'updated_at', 'end_time', 'name']
     ordering = ['-created_at']
     
+    @admin_event_list_doc
     def get(self,request):
         """
         Return paginated events with statistics.
@@ -331,6 +337,7 @@ class AdminCreateEventAPIView(APIView):
 
     permission_classes = [IsAdminUser]
 
+    @admin_create_event_doc
     def post(self, request):
         serializer = AdminCreateEventSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -349,6 +356,7 @@ class AdminEventDetailAPIView(APIView):
 
     permission_classes = [IsAdminUser]
 
+    @admin_event_detail_doc
     def get(self, request, event_id):
         event = get_event_by_id(event_id)
         serializer = AdminEventDetailSerializer(event)
@@ -364,6 +372,7 @@ class AdminUpdateEventAPIView(APIView):
 
     permission_classes = [IsAdminUser]
 
+    @admin_update_event_doc
     def patch(self, request, event_id):
         event = get_event_by_id(event_id)
         serializer = AdminUpdateEventSerializer(
@@ -389,6 +398,7 @@ class AdminCancelEventAPIView(APIView):
 
     permission_classes = [IsAdminUser]
 
+    @admin_cancel_event_doc
     def delete(self, request, event_id):
         event = get_event_by_id(event_id)
         cancel_event(event=event)

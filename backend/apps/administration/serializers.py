@@ -123,7 +123,6 @@ class AdminEventDetailSerializer(serializers.ModelSerializer):
             "venue",
             "status",
             "is_anonymous_chat",
-            "start_time",
             "end_time",
             "participant_count",
             "created_at",
