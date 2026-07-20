@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "apps.complaints",
     "apps.notifications",
     "apps.administration",
+    "apps.presence",
 ]
 
 AUTH_USER_MODEL = "users.User"
