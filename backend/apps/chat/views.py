@@ -9,7 +9,8 @@ from core.throttles import ReportRateThrottle, StartChatRateThrottle
 from .docs import end_chat_doc, report_doc, start_chat_doc
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer, ReportSerializer
-from .services import create_report, end_private_chat_room, get_private_chat_room
+from .services import (create_report, end_private_chat_room,
+                       get_private_chat_room)
 
 
 class StartChatAPIView(APIView):

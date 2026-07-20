@@ -3,15 +3,17 @@ from redis.exceptions import LockError
 
 from apps.chat.models import PrivateChatRoom
 from apps.chat.services import create_private_chat_room
-from .redis_utils import has_recently_skipped
 from apps.users.models import User
 from core.redis import redis_client
+
+from .redis_utils import has_recently_skipped
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"
 
 # Redis key for the membership SET enabling O(1) presence checks.
 WAITING_USERS_SET_KEY = "waiting_users_set"
+
 
 def add_user_to_queue(user):
     """Add a user to the anonymous chat waiting queue.
@@ -124,6 +126,7 @@ def queue_size():
     """
     return redis_client.llen(WAITING_QUEUE_KEY)
 
+
 def is_user_in_active_chat(user):
     """Check whether a user is already a participant in an active chat room.
 
@@ -207,25 +210,24 @@ def start_chat(user):
                 if waiting_user is None:
                     print("No waiting user found")
                     break
-                attempts+=1
-
+                attempts += 1
 
                 print("Current:", user.id)
                 print("Waiting:", waiting_user.id)
 
-            # Ignore yourself if your own ID is found in the queue.
+                # Ignore yourself if your own ID is found in the queue.
                 print("Before self check")
                 if waiting_user.id == user.id:
                     add_user_to_queue(user)
                     continue
 
-    # Skip users that were recently skipped.
+                # Skip users that were recently skipped.
                 print("Before skip check")
-                if  has_recently_skipped(user, waiting_user):
+                if has_recently_skipped(user, waiting_user):
                     add_user_to_queue(waiting_user)
                     continue
 
-    # Found a valid match.
+                # Found a valid match.
                 print("Breaking loop")
                 break
             print("Exited loop")
@@ -233,14 +235,13 @@ def start_chat(user):
             print("attempts =", attempts)
             print("max_attempts =", max_attempts)
 
-# No suitable user found.
+            # No suitable user found.
             if waiting_user is None:
                 add_user_to_queue(user)
                 return {
-                "status": "waiting",
-                "message": "Waiting for another user...",
-                    }
-
+                    "status": "waiting",
+                    "message": "Waiting for another user...",
+                }
 
             # A valid match was found — create the chat room.
             room = create_private_chat_room(

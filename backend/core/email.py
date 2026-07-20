@@ -2,6 +2,7 @@ import logging
 
 import resend
 from django.conf import settings
+
 from core.tasks import send_email_task
 
 logger = logging.getLogger("email")
@@ -16,7 +17,7 @@ class EmailService:
         subject: str,
         html: str,
         from_email: str = settings.DEFAULT_FROM_EMAIL,
-    ): 
+    ):
         """
         Dispatch the email sending job to a Celery background worker.
         """

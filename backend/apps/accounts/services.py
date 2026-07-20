@@ -8,7 +8,6 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
-from resend.exceptions import ResendError
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -125,8 +124,9 @@ def send_account_setup_email(account_setup_token):
         to_email=account_setup_token.user.email,
         subject="Set new password",
         html=html_message,
-        )
-        
+    )
+
+
 def login_user(request, email, password):
     """Authenticates a user and generates JWT access and refresh tokens."""
 
@@ -293,7 +293,6 @@ def send_password_reset_email(password_reset_token):
 
     reset_link = f"{frontend_url}/reset-password" f"?token={password_reset_token.token}"
 
-    
     html_message = render_to_string(
         "emails/password_reset.html",
         {
@@ -306,6 +305,7 @@ def send_password_reset_email(password_reset_token):
         subject="Reset your password",
         html=html_message,
     )
+
 
 @transaction.atomic
 def reset_password(password_reset_token, password):

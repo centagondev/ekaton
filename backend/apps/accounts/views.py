@@ -5,51 +5,24 @@ from rest_framework.views import APIView
 
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
-from core.throttles import (
-    ChangePasswordRateThrottle,
-    CheckEmailRateThrottle,
-    ForgetPasswordRateThrottle,
-    LoginRateThrottle,
-    LogoutRateThrottle,
-    ResendPasswordResetRateThrottle,
-    ResetPasswordRateThrottle,
-    SetPasswordRateThrottle,
-)
+from core.throttles import (ChangePasswordRateThrottle, CheckEmailRateThrottle,
+                            ForgetPasswordRateThrottle, LoginRateThrottle,
+                            LogoutRateThrottle,
+                            ResendPasswordResetRateThrottle,
+                            ResetPasswordRateThrottle, SetPasswordRateThrottle)
 
-from .docs import (
-    change_password_doc,
-    check_email_doc,
-    forget_password_doc,
-    login_doc,
-    logout_doc,
-    me_doc,
-    resend_password_reset_doc,
-    reset_password_doc,
-    set_password_doc,
-)
-from .serializers import (
-    ChangePasswordSerializer,
-    CheckEmailSerializer,
-    ForgotPasswordSerializer,
-    LoginSerializer,
-    LogoutSerializer,
-    ResendPasswordResetSerializer,
-    ResetPasswordSerializer,
-    SetPasswordSerializer,
-)
-from .services import (
-    change_password,
-    generate_account_setup_token,
-    get_email_status,
-    get_valid_account_setup_token,
-    get_valid_password_reset_token,
-    login_user,
-    logout_user,
-    request_password_reset,
-    reset_password,
-    send_account_setup_email,
-    set_password,
-)
+from .docs import (change_password_doc, check_email_doc, forget_password_doc,
+                   login_doc, logout_doc, me_doc, resend_password_reset_doc,
+                   reset_password_doc, set_password_doc)
+from .serializers import (ChangePasswordSerializer, CheckEmailSerializer,
+                          ForgotPasswordSerializer, LoginSerializer,
+                          LogoutSerializer, ResendPasswordResetSerializer,
+                          ResetPasswordSerializer, SetPasswordSerializer)
+from .services import (change_password, generate_account_setup_token,
+                       get_email_status, get_valid_account_setup_token,
+                       get_valid_password_reset_token, login_user, logout_user,
+                       request_password_reset, reset_password,
+                       send_account_setup_email, set_password)
 
 
 class CheckEmailAPIView(APIView):

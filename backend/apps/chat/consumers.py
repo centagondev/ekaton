@@ -9,14 +9,9 @@ from core.encryption import decrypt_message
 
 logger = logging.getLogger("chat")
 
-from .services import (
-    create_private_message,
-    create_reveal_request,
-    end_private_chat_room,
-    get_pending_reveal_request,
-    get_private_chat_room,
-    respond_to_reveal_request,
-)
+from .services import (create_private_message, create_reveal_request,
+                       end_private_chat_room, get_pending_reveal_request,
+                       get_private_chat_room, respond_to_reveal_request)
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -41,8 +36,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if room is None:
             await self.close(code=4004)
             return
-        
-        if room.status!=room.Status.ACTIVE:
+
+        if room.status != room.Status.ACTIVE:
             await self.close(code=4001)
             return
 
@@ -63,27 +58,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if not hasattr(self, "room_group_name"):
             return
-        
+
         logger.info(
-                "User %s disconnected from room %s (code=%s)",
-                self.scope["user"].id,
-                self.room_id,
-                close_code,
-            )
+            "User %s disconnected from room %s (code=%s)",
+            self.scope["user"].id,
+            self.room_id,
+            close_code,
+        )
         try:
 
             await sync_to_async(end_private_chat_room)(self.room)
 
             await self.channel_layer.group_send(
-                self.room_group_name,{
-                    "type": "chat_ended"
-                }
+                self.room_group_name, {"type": "chat_ended"}
             )
         except Exception:
             logger.exception(
                 "Failed to clean up room %s during disconnect",
                 self.room_id,
-                )
+            )
         finally:
             await self.channel_layer.group_discard(
                 self.room_group_name,

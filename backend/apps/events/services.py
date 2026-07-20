@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .models import AnonymousName, Event, EventMessage, EventParticipant, EventStatus
+from .models import (AnonymousName, Event, EventMessage, EventParticipant,
+                     EventStatus)
 
 logger = logging.getLogger(__name__)
 MAX_LENGTH_CONTENT = 1000

@@ -1,59 +1,35 @@
 import logging
 
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
-from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.users.serializers import UserSerializer
 from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
 from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 
-from .docs import (
-    admin_create_user_doc,
-    admin_dashboard_doc,
-    admin_login_doc,
-    admin_reports_list_doc,
-    admin_update_report_status_doc,
-    admin_update_user_doc,
-    admin_users_list_doc,
-    admin_event_list_doc,
-    admin_event_detail_doc,
-    admin_create_event_doc,
-    admin_update_event_doc,
-    admin_cancel_event_doc,
-)
-from .serializers import (
-    AdminCreateUserSerializer,
-    AdminLoginSerializer,
-    AdminReportSerializer,
-    AdminUpdateReportStatusSerializer,
-    AdminUserSerializer,
-    AdminUserUpdateSerializer,
-    AdminEventSerializer,
-    AdminEventDetailSerializer,
-    AdminCreateEventSerializer,
-    AdminUpdateEventSerializer,
-    
-)
-from .services import (
-    admin_create_user,
-    admin_login,
-    get_dashboard_statistics,
-    get_reports,
-    get_users,
-    update_report_status,
-    update_user,
-    get_events,
-    get_event_statistics,
-    get_event_by_id,
-    create_event,
-    update_event,
-    cancel_event,
-)
+from .docs import (admin_cancel_event_doc, admin_create_event_doc,
+                   admin_create_user_doc, admin_dashboard_doc,
+                   admin_event_detail_doc, admin_event_list_doc,
+                   admin_login_doc, admin_reports_list_doc,
+                   admin_update_event_doc, admin_update_report_status_doc,
+                   admin_update_user_doc, admin_users_list_doc)
+from .serializers import (AdminCreateEventSerializer,
+                          AdminCreateUserSerializer,
+                          AdminEventDetailSerializer, AdminEventSerializer,
+                          AdminLoginSerializer, AdminReportSerializer,
+                          AdminUpdateEventSerializer,
+                          AdminUpdateReportStatusSerializer,
+                          AdminUserSerializer, AdminUserUpdateSerializer)
+from .services import (admin_create_user, admin_login, cancel_event,
+                       create_event, get_dashboard_statistics, get_event_by_id,
+                       get_event_statistics, get_events, get_reports,
+                       get_users, update_event, update_report_status,
+                       update_user)
 
 logger = logging.getLogger("authentication")
 
@@ -283,29 +259,31 @@ class AdminReportAPIView(APIView):
             message="report updated successfully",
             data=AdminReportSerializer(report).data,
         )
-        
+
+
 class AdminEventAPIView(GenericAPIView):
     """
     Retrieve all events for the admin dashboard.
     """
-    permission_classes=[IsAdminUser]
+
+    permission_classes = [IsAdminUser]
     filter_backends = [
         DjangoFilterBackend,
         SearchFilter,
         OrderingFilter,
     ]
     search_fields = [
-        'name',
-        'description',
-        'venue',
-        'owner__full_name',
+        "name",
+        "description",
+        "venue",
+        "owner__full_name",
     ]
-    filterset_fields = ['status', 'is_anonymous_chat']
-    ordering_fields = ['created_at', 'updated_at', 'end_time', 'name']
-    ordering = ['-created_at']
-    
+    filterset_fields = ["status", "is_anonymous_chat"]
+    ordering_fields = ["created_at", "updated_at", "end_time", "name"]
+    ordering = ["-created_at"]
+
     @admin_event_list_doc
-    def get(self,request):
+    def get(self, request):
         """
         Return paginated events with statistics.
         """
@@ -313,15 +291,18 @@ class AdminEventAPIView(GenericAPIView):
         stats = get_event_statistics()
 
         paginator = DefaultPagination()
-        
-        page=paginator.paginate_queryset(events,request,)
-        
-        serializer=AdminEventSerializer(page,many=True)
-        
+
+        page = paginator.paginate_queryset(
+            events,
+            request,
+        )
+
+        serializer = AdminEventSerializer(page, many=True)
+
         paginated_data = paginator.get_paginated_response(
             serializer.data,
         )
-        
+
         return success_response(
             message="Events fetched successfully.",
             data={
@@ -329,7 +310,8 @@ class AdminEventAPIView(GenericAPIView):
                 "events": paginated_data,
             },
         )
-        
+
+
 class AdminCreateEventAPIView(APIView):
     """
     Create an event for the admin dashboard.
@@ -344,10 +326,18 @@ class AdminCreateEventAPIView(APIView):
 
         event = create_event(validated_data=serializer.validated_data)
 
+        logger.info(
+            "Admin %s created event %s for owner %s.",
+            request.user.id,
+            event.id,
+            event.owner_id,
+        )
+
         return success_response(
             message="Event created successfully.",
             data=AdminEventDetailSerializer(event).data,
         )
+
 
 class AdminEventDetailAPIView(APIView):
     """
@@ -382,9 +372,18 @@ class AdminUpdateEventAPIView(APIView):
         )
         serializer.is_valid(raise_exception=True)
 
+        changed_fields = list(serializer.validated_data.keys())
+
         event = update_event(
             event=event,
             validated_data=serializer.validated_data,
+        )
+
+        logger.info(
+            "Admin %s updated event %s. Fields changed: %s",
+            request.user.id,
+            event.id,
+            changed_fields,
         )
 
         return success_response(
@@ -402,5 +401,7 @@ class AdminCancelEventAPIView(APIView):
     def delete(self, request, event_id):
         event = get_event_by_id(event_id)
         cancel_event(event=event)
+
+        logger.info("Admin %s cancelled event %s.", request.user.id, event.id)
 
         return success_response(message="Event cancelled successfully.")

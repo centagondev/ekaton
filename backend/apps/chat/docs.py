@@ -37,15 +37,11 @@ Exports
 - ``report_doc``     → ReportAPIView.post
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
-from .serializers import EndChatSerializer, ReportSerializer
+from .serializers import EndChatSerializer, ReportSerializer, StartChatSerializer
 
 # ---------------------------------------------------------------------------
 # Start Anonymous Chat
@@ -62,6 +58,7 @@ start_chat_doc = extend_schema(
     **Authentication requirement**: Bearer Authentication (JWT required).
     **Security behaviour**: Authenticated user only.
     """,
+    request=StartChatSerializer,
     responses={
         # 200: Returns the matchmaking result. Status will be either "matched" or "queued".
         200: OpenApiResponse(

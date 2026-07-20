@@ -1,10 +1,11 @@
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.serializers import SerializerMethodField
+
 from apps.chat.models import Report
+from apps.events.models import Event
 from apps.users.models import User
-from apps.events.models import Event
-from apps.events.models import Event
+
+
 class AdminLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
@@ -78,19 +79,23 @@ class AdminReportSerializer(serializers.ModelSerializer):
 class AdminUpdateReportStatusSerializer(serializers.Serializer):
 
     status = serializers.ChoiceField(choices=Report.Status.choices)
-    
+
+
 class AdminEventSerializer(serializers.ModelSerializer):
     """
     Serializer for listing events in the admin dashboard.
     """
-    owner=serializers.CharField(source="owner.full_name",
-        read_only=True,)
-    
-    participant_count = serializers.SerializerMethodField()
-    
-    class Meta :
-        model=Event
-        
+
+    owner = serializers.CharField(
+        source="owner.full_name",
+        read_only=True,
+    )
+
+    participant_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Event
+
         fields = (
             "id",
             "owner",
@@ -103,17 +108,14 @@ class AdminEventSerializer(serializers.ModelSerializer):
             "participant_count",
             "created_at",
         )
-    def get_participant_count(self, obj):
-        """
-        Return the number of active participants.
-        """
-        return obj.participants.filter(is_active=True).count()
+
+
 class AdminEventDetailSerializer(serializers.ModelSerializer):
-    owner =serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
     participant_count = serializers.IntegerField(read_only=True)
-    
-    class Meta :
-        model=Event
+
+    class Meta:
+        model = Event
         fields = (
             "id",
             "owner",
@@ -128,14 +130,13 @@ class AdminEventDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        
+
     def get_owner(self, obj):
         return {
             "id": obj.owner.id,
             "full_name": obj.owner.full_name,
             "email": obj.owner.email,
         }
-
 
 
 class AdminCreateEventSerializer(serializers.ModelSerializer):
@@ -164,15 +165,23 @@ class AdminCreateEventSerializer(serializers.ModelSerializer):
         return value
 
     def validate_description(self, value):
-        return value.strip()
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Description cannot be blank.")
+        return value
 
     def validate_venue(self, value):
-        return value.strip()
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Venue cannot be blank.")
+        return value
 
     def validate_end_time(self, value):
         if value <= timezone.now():
             raise serializers.ValidationError("End time must be in the future.")
         return value
+
+
 class AdminUpdateEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
@@ -194,10 +203,16 @@ class AdminUpdateEventSerializer(serializers.ModelSerializer):
         return value
 
     def validate_description(self, value):
-        return value.strip()
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Description cannot be blank.")
+        return value
 
     def validate_venue(self, value):
-        return value.strip()
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Venue cannot be blank.")
+        return value
 
     def validate_end_time(self, value):
         if value <= timezone.now():
