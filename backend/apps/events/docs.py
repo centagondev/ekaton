@@ -12,13 +12,13 @@ from rest_framework import serializers
 from .serializers import (
     CreateEventSerializer,
     EventDetailSerializer,
+    EventMessageCreateSerializer,
+    EventMessageSerializer,
     EventParticipantSerializer,
     EventSerializer,
     JoinEventSerializer,
     LeaveEventSerializer,
     UpdateEventSerializer,
-    EventMessageSerializer,
-    EventMessageCreateSerializer,
 )
 
 # Event Management Documentation

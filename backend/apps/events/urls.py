@@ -8,7 +8,7 @@ from .views import (
     EventMessageAPIView,
     JoinEventAPIView,
     LeaveEventAPIView,
-    UpdateEventAPIView
+    UpdateEventAPIView,
 )
 
 urlpatterns = [

@@ -73,6 +73,12 @@ class ReportRateThrottle(UserRateThrottle):
     scope = "report"
 
 
+class ComplaintCreateRateThrottle(UserRateThrottle):
+    """Rate limiter for complaint creation. Scoped to authenticated users."""
+
+    scope = "complaint_create"
+
+
 class AdminLoginRateThrottle(UserRateThrottle):
     scope = "admin_login"
 
