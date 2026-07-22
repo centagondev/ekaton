@@ -13,6 +13,7 @@ const LoginForm = ({
   togglePassword,
   isSubmitting,
 }) => {
+console.log(isSubmitting)
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <AuthHeader header="Login" />

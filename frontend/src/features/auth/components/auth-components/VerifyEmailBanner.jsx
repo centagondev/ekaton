@@ -18,6 +18,6 @@ const VerifyEmailBanner = () => {
       </div>
     </div>
   );
-}
+};
 
-export default VerifyEmailBanner
+export default VerifyEmailBanner;

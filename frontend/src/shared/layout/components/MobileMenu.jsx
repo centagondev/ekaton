@@ -1,21 +1,25 @@
-import { Bell, X, User } from "lucide-react";
+import { Bell, User, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
-const MobileMenu = ({ isOpen, onClose, navLinks }) => {
+const MobileMenu = ({
+  isOpen,
+  onClose,
+  navLinks,
+  isAuthenticated,
+  onLogout,
+}) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 md:hidden">
-      <div className="h-full w-full bg-white">
+      <div className="flex h-full flex-col bg-white">
         {/* Header */}
 
         <div className="flex h-16 items-center justify-between border-b px-6">
           <h1 className="text-lg font-extrabold">CAMPUS CONNECT</h1>
 
           <div className="flex items-center gap-5">
-            <button>
-              <Bell className="size-5" />
-            </button>
+            <Bell className="size-5" />
 
             <button onClick={onClose}>
               <X className="size-6" />
@@ -37,12 +41,24 @@ const MobileMenu = ({ isOpen, onClose, navLinks }) => {
                   isActive
                     ? "bg-brand-yellow/15 text-amber-600"
                     : "hover:bg-gray-100"
-                } `
+                }`
               }
             >
               {item.label}
             </NavLink>
           ))}
+
+          {isAuthenticated && (
+            <button
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              className="block w-full rounded-xl px-4 py-3 text-left font-bold tracking-wide uppercase hover:bg-gray-100"
+            >
+              LOGOUT
+            </button>
+          )}
         </div>
 
         {/* Profile */}
@@ -55,7 +71,6 @@ const MobileMenu = ({ isOpen, onClose, navLinks }) => {
 
             <div>
               <h3 className="font-bold">User Profile</h3>
-
               <p className="text-sm text-gray-500">Manage account</p>
             </div>
           </button>

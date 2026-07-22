@@ -120,7 +120,7 @@ def send_account_setup_email(account_setup_token):
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
     try:
-        html_message = render_to_string("emails/account_setup", {"link": link})
+        html_message = render_to_string("emails/account_setup.html", {"link": link})
         EmailService.send_email(
             to_email=account_setup_token.user.email,
             subject="Set new password",

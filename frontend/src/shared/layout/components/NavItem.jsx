@@ -8,7 +8,7 @@ const NavItem = ({ label, path }) => {
       className={({ isActive }) =>
         `relative flex h-full items-center px-1 text-xs font-bold tracking-wider transition-colors duration-200 ${
           isActive ? "text-black" : "text-gray-600 hover:text-black"
-        } `
+        }`
       }
     >
       {({ isActive }) => (

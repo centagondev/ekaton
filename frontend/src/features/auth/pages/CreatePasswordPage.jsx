@@ -12,10 +12,13 @@ import PasswordFooter from "../components/create-password/PasswordFooter";
 
 import { setPasswordSchema } from "../validation/set-password.schema";
 import { useAuthStore } from "../store/auth.store";
+import { useSearchParams } from "react-router-dom";
 
 const CreatePasswordPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [searchParams]= useSearchParams()
+  const token= searchParams.get("token")
 
 const setPassword = useAuthStore((state) => state.setPassword);
   const {
@@ -32,13 +35,13 @@ const setPassword = useAuthStore((state) => state.setPassword);
     },
   });
 
-  const password = watch("password", "");
+  const password = watch("password");
 
   const onSubmit = async (data) => {
     console.log(data);
 try{
 	    const res = await setPassword({
-        token: "Asdfghjkl@12",
+        token,
         password: data.password,
         confirm_password: data.confirm_password,
       });

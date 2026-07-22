@@ -11,6 +11,7 @@ const EmailField = ({ register, error }) => {
         <input
           id="email"
           type="email"
+          readOnly
           placeholder="student@gmail.com"
           className="h-14 w-full border-2 border-black px-4 pr-12 outline-none"
           {...register("email")}

@@ -7,6 +7,6 @@ import { authRoutes } from "./auth.routes";
 export const router = createBrowserRouter([
   publicRoutes, 
   chatRoutes,
-  ...authRoutes,
+  authRoutes,
   
   ]);

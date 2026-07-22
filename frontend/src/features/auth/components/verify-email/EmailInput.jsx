@@ -8,6 +8,7 @@ import InputError from "@/shared/components/app-components/InputError";
 import VerifyButton from "./VerfyButton";
 import { useAuthStore } from "../../store/auth.store";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 export default function EmailInput() {
   const navigate= useNavigate()
   const verifyEmail= useAuthStore((state)=> state.verifyEmail)
@@ -26,12 +27,21 @@ export default function EmailInput() {
      try{
       const res= await verifyEmail(data)
       const { is_verified} = res.data
-      console.log(!is_verified)
-      if(!is_verified){
-        navigate("/create-password");
+    console.log("1",res.data)
+    console.log("2",res)
+      if (is_verified) {
+        toast.success(res.message || "Account is verified")
+        navigate("/login", { state: { email: data.email } });
       }
      }catch(err){
-      console.log(err)
+      const errorData = err.response?.data;
+       const errorMessage = Array.isArray(errorData)
+         ? errorData[0]
+         : errorData?.message ||
+           Object.values(errorData || {})[0]?.[0] ||
+           "Something went wrong";
+
+       toast.error(errorMessage);
      }
 
      

@@ -1,5 +1,5 @@
 
-import EmailField from "../login/EmailField";
+import EmailField from "./EmailField";
 import ForgotPasswordBanner from "./ForgotPasswordBanner";
 import ForgotPasswordButton from "./ForgotPasswordButton";
 import ForgotPasswordFooter from "./ForgotPasswordFooter";

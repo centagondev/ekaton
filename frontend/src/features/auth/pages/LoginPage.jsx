@@ -1,8 +1,12 @@
+import { useLocation } from "react-router-dom";
 import LoginForm from "../components/login/LoginForm";
 import useLogin from "../hooks/useLogin";
 
 const LoginPage = () => {
-  const loginForm = useLogin();
+    const { state } = useLocation();
+    const email= state?.email
+  
+  const loginForm = useLogin(email);
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-[#F5F3EF] px-4 py-8">
