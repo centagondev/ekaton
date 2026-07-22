@@ -21,6 +21,15 @@ from .services import (
     update_complaint,
     delete_complaint
 )
+from .docs import (
+    comment_create_doc,
+    comment_list_doc,
+    complaint_create_doc,
+    complaint_delete_doc,
+    complaint_list_doc,
+    complaint_update_doc,
+    upvote_toggle_doc,
+)
 
 
 class ComplaintAPIView(APIView):
@@ -31,6 +40,7 @@ class ComplaintAPIView(APIView):
             return [ComplaintCreateRateThrottle()]
         return super().get_throttles()
 
+    @complaint_list_doc
     def get(self, request):
 
         complaints = get_complaints()
@@ -42,7 +52,7 @@ class ComplaintAPIView(APIView):
         if page is None:
             serializer = GetComplaintsSerializer(complaints, many=True)
             return success_response(
-                message="Complaints fetched successfully",
+                message="Complaints fetched successfully.",
                 data={
                     "count": len(serializer.data),
                     "next": None,
@@ -54,7 +64,7 @@ class ComplaintAPIView(APIView):
         serializer = GetComplaintsSerializer(page, many=True)
 
         return success_response(
-            message="Complaints fetched successfully",
+            message="Complaints fetched successfully.",
             data={
                 "count": paginator.page.paginator.count,
                 "next": paginator.get_next_link(),
@@ -63,6 +73,7 @@ class ComplaintAPIView(APIView):
             },
         )
 
+    @complaint_create_doc
     def post(self, request):
         serializer = CreateComplaintSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -76,27 +87,30 @@ class ComplaintAPIView(APIView):
         )
 
         return success_response(
-            message="complaint created successfully",
+            message="Complaint created successfully.",
             status_code=201,
             data={"id": complaint.id},
         )
 
 class ComplaintDetailAPIView(APIView):
-    def patch(selfj, request,complaint_id):
-        serializer = UpdateComplaintSerializer(data=request.data)
+    permission_classes = [IsAuthenticated]
+    @complaint_update_doc
+    def patch(self, request,complaint_id):
+        serializer = UpdateComplaintSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         complaint = update_complaint(
             user=request.user,
             complaint_id=complaint_id,
-            validated_data=serializer.validate_data
+            validated_data=serializer.validated_data
         )
 
         return success_response(
-            message="Complaint updated successfully",
+            message="Complaint updated successfully.",
             data=GetComplaintsSerializer(complaint).data
         )
     
+    @complaint_delete_doc
     def delete(self, request, complaint_id):
         delete_complaint(
             user=request.user,
@@ -104,13 +118,14 @@ class ComplaintDetailAPIView(APIView):
         )
 
         return success_response(
-            message="Compalint deleted successfully"
+            message="Complaint deleted successfully."
         )
 
 
 class ComplaintCommentAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @comment_list_doc
     def get(self, request, complaint_id):
         comments = get_comments(complaint_id)
 
@@ -141,6 +156,7 @@ class ComplaintCommentAPIView(APIView):
             },
         )
 
+    @comment_create_doc
     def post(self, request, complaint_id):
         serializer = CreateCommentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -152,7 +168,7 @@ class ComplaintCommentAPIView(APIView):
             is_anonymous=serializer.validated_data["is_anonymous"],
         )
         return success_response(
-            message="comment added successfully",
+            message="Comment added successfully.",
             data={"comment_id": comment.id},
             status_code=201,
         )
@@ -162,9 +178,10 @@ class ComplaintUpvoteAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @upvote_toggle_doc
     def post(self, request, complaint_id):
         upvote = toggle_upvote(user=request.user, complaint_id=complaint_id)
 
         return success_response(
-            message="Upvoted updated successfully", data={"upvote": upvote}
+            message="Upvote updated successfully.", data={"upvote": upvote}
         )

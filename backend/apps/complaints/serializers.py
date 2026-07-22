@@ -17,14 +17,16 @@ class CreateComplaintSerializer(serializers.ModelSerializer):
         value = value.strip()
 
         if not value:
-            raise serializers.ValidationError("title cannot be empty")
+            raise serializers.ValidationError("Title cannot be empty.")
         return value
 
     def validate_description(self, value):
         value = value.strip()
 
         if not value:
-            raise serializers.ValidationError("description cannot be empty")
+            raise serializers.ValidationError("Description cannot be empty.")
+        if len(value) > 2000:
+            raise serializers.ValidationError("Description cannot exceed 2000 characters.")
         return value
 
 
@@ -72,7 +74,9 @@ class CreateCommentSerializer(serializers.ModelSerializer):
         value = value.strip()
 
         if not value:
-            raise serializers.ValidationError({"comment": "comment cannot be empty"})
+            raise serializers.ValidationError("Comment cannot be empty.")
+        if len(value) > 2000:
+            raise serializers.ValidationError("Comment cannot exceed 2000 characters.")
 
         return value
 
@@ -90,19 +94,24 @@ class UpdateComplaintSerializer(serializers.ModelSerializer):
 
         if not value:
             raise serializers.ValidationError(
-                {
-                    "title": "title cannot be empty"
-                }
+                 "Title cannot be empty."
             )
+        return value
+    
     def validate_description(self, value):
         value = value.strip()
 
         if not value:
             raise serializers.ValidationError(
-                {
-                    "description": "description cannot be empty"
-                }
+                 "Description cannot be empty."
             )
+        if len(value) > 2000:
+            raise serializers.ValidationError(
+                 "Description cannot exceed 2000 characters."
+            )
+            
+        
+        return value
 
 class GetCommentSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()

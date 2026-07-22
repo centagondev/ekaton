@@ -119,7 +119,9 @@ def send_account_setup_email(account_setup_token):
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
 
-    html_message = render_to_string("emails/account_setup", {"link": link})
+    print(link)
+
+    html_message = render_to_string("emails/account_setup.html", {"link": link})
     EmailService.send_email(
         to_email=account_setup_token.user.email,
         subject="Set new password",
@@ -293,6 +295,7 @@ def send_password_reset_email(password_reset_token):
 
     reset_link = f"{frontend_url}/reset-password" f"?token={password_reset_token.token}"
 
+    print(reset_link)
     html_message = render_to_string(
         "emails/password_reset.html",
         {
