@@ -37,15 +37,11 @@ Exports
 - ``report_doc``     → ReportAPIView.post
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
-from .serializers import EndChatSerializer, ReportSerializer
+from .serializers import EndChatSerializer, ReportSerializer, StartChatSerializer
 
 # ---------------------------------------------------------------------------
 # Start Anonymous Chat
@@ -62,6 +58,7 @@ start_chat_doc = extend_schema(
     **Authentication requirement**: Bearer Authentication (JWT required).
     **Security behaviour**: Authenticated user only.
     """,
+    request=StartChatSerializer,
     responses={
         # 200: Returns the matchmaking result. Status will be either "matched" or "queued".
         200: OpenApiResponse(
@@ -183,7 +180,6 @@ report_doc = extend_schema(
     - The backend derives the reported user from the room — clients cannot spoof this.
     - A user cannot report the same chat partner twice while a report is still pending.
     - Rate limited to 5 requests/minute to prevent mass-report abuse.
-
     ### Request Fields
     * `room_id`: UUID of the chat room in which the incident occurred.
     * `reason`: The category of the report. Must be one of: `spam`, `harassment`, `abusive_language`, `inappropriate_content`, `fake_identity`, `other`.

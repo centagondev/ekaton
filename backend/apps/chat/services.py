@@ -3,7 +3,10 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from core.encryption import encrypt_message
+
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
+from .redis_utils import add_skip
 
 
 def create_private_chat_room(user_one, user_two):
@@ -11,7 +14,7 @@ def create_private_chat_room(user_one, user_two):
 
     This function is called by the matchmaking system immediately after a
     successful match. The room is created with ACTIVE status since both users
-    are confirmed to be online at the time of creation.
+    are confirmed to> be online at the time of creation.
 
     Args:
         user_one: The User instance dequeued from the waiting queue (the waiter).
@@ -36,9 +39,18 @@ def end_private_chat_room(room):
     Args:
         room: The PrivateChatRoom instance to end.
     """
+
+    if room.status != PrivateChatRoom.Status.ACTIVE:
+        return room
+
+    add_skip(room.user_one, room.user_two)
+    add_skip(room.user_two, room.user_one)
+
     room.status = PrivateChatRoom.Status.ENDED
     room.closed_at = timezone.now()
     room.save(update_fields=["status", "closed_at"])
+
+    return room
 
 
 def get_private_chat_room(room_id, user):
@@ -88,7 +100,11 @@ def create_private_message(room, sender, message):
     if not message:
         raise ValidationError("Message content cannot be empty.")
 
-    return PrivateMessage.objects.create(room=room, sender=sender, message=message)
+    return PrivateMessage.objects.create(
+        room=room,
+        sender=sender,
+        message=encrypt_message(message),
+    )
 
 
 @transaction.atomic

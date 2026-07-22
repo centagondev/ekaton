@@ -71,3 +71,11 @@ class ReportRateThrottle(UserRateThrottle):
     """Rate limiter for the report endpoint. Scoped to authenticated users."""
 
     scope = "report"
+
+
+class AdminLoginRateThrottle(UserRateThrottle):
+    scope = "admin_login"
+
+
+class AdminDashboardRateThrottle(UserRateThrottle):
+    scope = "admin_dashboard"

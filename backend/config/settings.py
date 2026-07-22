@@ -33,6 +33,7 @@ SECRET_KEY = env("SECRET_KEY")
 RESEND_API_KEY = env("RESEND_API_KEY")
 DEFAULT_FROM_EMAIL = "Ekaton <onboarding@resend.dev>"
 REDIS_URL = env("REDIS_URL")
+MESSAGE_ENCRYPTION_KEY = env("MESSAGE_ENCRYPTION_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
@@ -57,6 +58,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "rest_framework",
     "drf_spectacular",
+    "django_celery_beat",
     # Local apps
     "apps.accounts",
     "apps.users",
@@ -65,6 +67,7 @@ INSTALLED_APPS = [
     "apps.complaints",
     "apps.notifications",
     "apps.administration",
+    "apps.presence",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -91,6 +94,8 @@ REST_FRAMEWORK = {
         "change_password": "5/hour",
         "start_chat": "5/min",
         "report": "5/m",
+        "admin_login": "5/m",
+        "admin_dashboard": "5/m",
     },
 }
 
@@ -136,7 +141,17 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [
-                env("REDIS_URL"),
+                {
+                    # redis-py 8.0.0 changed socket_timeout default from None
+                    # to 5 seconds. channels_redis issues BZPOPMIN with a 5-second
+                    # server-side timeout. The client-side socket fires first, raising
+                    # redis.exceptions.TimeoutError and killing every idle WebSocket.
+                    # socket_timeout=None restores correct blocking semantics for the
+                    # channel layer's long-lived receive connections.
+                    "address": env("REDIS_URL"),
+                    "socket_timeout": None,
+                    "socket_connect_timeout": 5,
+                }
             ],
         },
     },
@@ -214,7 +229,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Kolkata"
 
 USE_I18N = True
 
@@ -240,5 +255,27 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "deepLinking": True,
         "persistAuthorization": True,
+    },
+}
+# Celery Configuration
+
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
+
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
+
+CELERY_ACCEPT_CONTENT = ["json"]
+
+CELERY_TASK_SERIALIZER = "json"
+
+CELERY_RESULT_SERIALIZER = "json"
+
+CELERY_TIMEZONE = TIME_ZONE
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "end-expired-events-every-minute": {
+        "task": "apps.events.tasks.end_expired_events",
+        "schedule": crontab(minute="*"),
     },
 }

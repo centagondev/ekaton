@@ -5,16 +5,13 @@ from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.exceptions import ValidationError
 
+from core.encryption import decrypt_message
+
 logger = logging.getLogger("chat")
 
-from .services import (
-    create_private_message,
-    create_reveal_request,
-    end_private_chat_room,
-    get_pending_reveal_request,
-    get_private_chat_room,
-    respond_to_reveal_request,
-)
+from .services import (create_private_message, create_reveal_request,
+                       end_private_chat_room, get_pending_reveal_request,
+                       get_private_chat_room, respond_to_reveal_request)
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -37,7 +34,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         if room is None:
-            await self.close()
+            await self.close(code=4004)
+            return
+
+        if room.status != room.Status.ACTIVE:
+            await self.close(code=4001)
             return
 
         self.room = room
@@ -55,16 +56,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         """Remove the socket from the chat group."""
 
-        if hasattr(self, "room_group_name"):
+        if not hasattr(self, "room_group_name"):
+            return
+
+        logger.info(
+            "User %s disconnected from room %s (code=%s)",
+            self.scope["user"].id,
+            self.room_id,
+            close_code,
+        )
+        try:
+
+            await sync_to_async(end_private_chat_room)(self.room)
+
+            await self.channel_layer.group_send(
+                self.room_group_name, {"type": "chat_ended"}
+            )
+        except Exception:
+            logger.exception(
+                "Failed to clean up room %s during disconnect",
+                self.room_id,
+            )
+        finally:
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name,
-            )
-            logger.info(
-                "User %s disconnected from room %s (code=%s)",
-                self.scope["user"].id,
-                self.room_id,
-                close_code,
             )
 
     # FIX 1: The entire body of receive() was unindented, placing it at module
@@ -128,6 +144,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         await handler(data)
 
+    async def _ensure_active_room(self):
+        """Ensure the current room still exists and is active."""
+
+        room = await sync_to_async(get_private_chat_room)(
+            self.room_id,
+            self.scope["user"],
+        )
+
+        if room is None or room.status != room.Status.ACTIVE:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "error",
+                        "message": "This chat room is no longer active.",
+                    }
+                )
+            )
+            await self.close(code=4000)
+            return None
+
+        self.room = room
+        return room
+
     async def handle_chat_message(self, data):
         """Validate, persist and broadcast a chat message."""
 
@@ -169,8 +208,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         try:
+            room = await self._ensure_active_room()
+            if room is None:
+                return
+
             private_message = await sync_to_async(create_private_message)(
-                room=self.room,
+                room=room,
                 sender=self.scope["user"],
                 message=message,
             )
@@ -186,19 +229,33 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        try:
+            plaintext = decrypt_message(private_message.message)
+        except Exception:
+            logger.exception(
+                "Failed to decrypt message %s for broadcast in room %s",
+                private_message.id,
+                self.room_id,
+            )
+            plaintext = private_message.message
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "chat_message",
                 "id": str(private_message.id),
                 "sender": private_message.sender.email,
-                "message": private_message.message,
+                "message": plaintext,
                 "created_at": private_message.created_at.isoformat(),
             },
         )
 
     async def handle_typing(self, data):
         """Broadcast typing status to the chat room."""
+
+        room = await self._ensure_active_room()
+        if room is None:
+            return
 
         is_typing = bool(data.get("is_typing", False))
 
@@ -240,16 +297,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def handle_reveal_request(self, data):
-        requester = self.scope["user"]
-        if self.room.user_one == requester:
+        room = await self._ensure_active_room()
+        if room is None:
+            return
 
-            receiver = self.room.user_two
+        requester = self.scope["user"]
+        if room.user_one == requester:
+            receiver = room.user_two
         else:
-            receiver = self.room.user_one
+            receiver = room.user_one
 
         try:
             await sync_to_async(create_reveal_request)(
-                room=self.room, requester=requester, receiver=receiver
+                room=room, requester=requester, receiver=receiver
             )
         except ValidationError as exc:
             await self.send(
@@ -290,6 +350,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def handle_reveal_response(self, data):
         """Handle a reveal request response."""
 
+        room = await self._ensure_active_room()
+        if room is None:
+            return
+
         status = data.get("status")
 
         if status not in ("accepted", "rejected"):
@@ -304,7 +368,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         reveal_request = await sync_to_async(get_pending_reveal_request)(
-            room=self.room,
+            room=room,
             receiver=self.scope["user"],
         )
 
@@ -390,7 +454,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def handle_skip_chat(self, data):
-        await sync_to_async(end_private_chat_room)(self.room)
+        room = await self._ensure_active_room()
+        if room is None:
+            return
+
+        await sync_to_async(end_private_chat_room)(room)
 
         await self.channel_layer.group_send(
             self.room_group_name, {"type": "chat_skipped"}
@@ -415,4 +483,4 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
         )
-        await self.close()
+        await self.close(code=4000)

@@ -17,4 +17,5 @@ class UserSerializer(serializers.ModelSerializer):
             "profile_photo",
             "is_available",
             "is_verified",
+            "is_active",
         ]

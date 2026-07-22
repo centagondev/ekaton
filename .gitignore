@@ -45,5 +45,8 @@ htmlcov/
 # Local testing client
 frontend-demo/
 
+# Redis dumps
+*.rdb
+
 __pycache__/
 *.pyc
