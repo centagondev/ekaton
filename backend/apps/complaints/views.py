@@ -10,6 +10,7 @@ from .serializers import (
     CreateComplaintSerializer,
     GetCommentSerializer,
     GetComplaintsSerializer,
+    UpdateComplaintSerializer,
 )
 from .services import (
     create_comment,
@@ -17,6 +18,8 @@ from .services import (
     get_comments,
     get_complaints,
     toggle_upvote,
+    update_complaint,
+    delete_complaint
 )
 
 
@@ -76,6 +79,32 @@ class ComplaintAPIView(APIView):
             message="complaint created successfully",
             status_code=201,
             data={"id": complaint.id},
+        )
+
+class ComplaintDetailAPIView(APIView):
+    def patch(selfj, request,complaint_id):
+        serializer = UpdateComplaintSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        complaint = update_complaint(
+            user=request.user,
+            complaint_id=complaint_id,
+            validated_data=serializer.validate_data
+        )
+
+        return success_response(
+            message="Complaint updated successfully",
+            data=GetComplaintsSerializer(complaint).data
+        )
+    
+    def delete(self, request, complaint_id):
+        delete_complaint(
+            user=request.user,
+            complaint_id=complaint_id
+        )
+
+        return success_response(
+            message="Compalint deleted successfully"
         )
 
 

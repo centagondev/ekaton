@@ -76,6 +76,33 @@ class CreateCommentSerializer(serializers.ModelSerializer):
 
         return value
 
+class UpdateComplaintSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Complaint
+        fields = [
+            "title",
+            "description",
+            "category"
+        ]
+
+    def validate_title(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                {
+                    "title": "title cannot be empty"
+                }
+            )
+    def validate_description(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                {
+                    "description": "description cannot be empty"
+                }
+            )
 
 class GetCommentSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()

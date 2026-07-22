@@ -1,12 +1,10 @@
 from django.urls import path
 
-from .views import (
-    AdminDashboardAPIView,
-    AdminLoginAPIView,
-    AdminReportAPIView,
-    AdminUpdateUserAPIView,
-    AdminUsersAPIView,
-)
+from .views import (AdminCancelEventAPIView, AdminCreateEventAPIView,
+                    AdminDashboardAPIView, AdminEventAPIView,
+                    AdminEventDetailAPIView, AdminLoginAPIView,
+                    AdminReportAPIView, AdminUpdateEventAPIView,
+                    AdminUpdateUserAPIView, AdminUsersAPIView)
 
 urlpatterns = [
     path("login/", AdminLoginAPIView.as_view(), name="admin-login"),
@@ -22,5 +20,28 @@ urlpatterns = [
         "reports/<uuid:report_id>/",
         AdminReportAPIView.as_view(),
         name="admin-update-report",
+    ),
+    path(
+        "events/",
+        AdminEventAPIView.as_view(),
+        name="admin-events",
+    ),
+    path(
+        "events/create/", AdminCreateEventAPIView.as_view(), name="admin-event-create"
+    ),
+    path(
+        "events/<uuid:event_id>/update/",
+        AdminUpdateEventAPIView.as_view(),
+        name="admin-event-update",
+    ),
+    path(
+        "events/<uuid:event_id>/cancel/",
+        AdminCancelEventAPIView.as_view(),
+        name="admin-event-cancel",
+    ),
+    path(
+        "events/<uuid:event_id>/",
+        AdminEventDetailAPIView.as_view(),
+        name="admin-event-detail",
     ),
 ]

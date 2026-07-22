@@ -20,27 +20,14 @@ from .docs import (
 )
 from .models import Event, EventMessage, EventParticipant
 from .pagination import EventMessageCursorPagination
-from .serializers import (
-    CreateEventSerializer,
-    EventDetailSerializer,
-    EventMessageCreateSerializer,
-    EventMessageSerializer,
-    EventParticipantSerializer,
-    EventSerializer,
-    JoinEventSerializer,
-    LeaveEventSerializer,
-    UpdateEventSerializer,
-)
-from .services import (
-    cancel_event,
-    create_event,
-    get_event,
-    join_event,
-    leave_event,
-    list_events,
-    send_event_message,
-    update_event,
-)
+from .serializers import (CreateEventSerializer, EventDetailSerializer,
+                          EventMessageCreateSerializer, EventMessageSerializer,
+                          EventParticipantSerializer, EventSerializer,
+                          JoinEventSerializer, LeaveEventSerializer,
+                          UpdateEventSerializer)
+from .services import (cancel_event, create_event, get_event, join_event,
+                       leave_event, list_events, send_event_message,
+                       update_event)
 
 
 class CreateEventAPIView(APIView):

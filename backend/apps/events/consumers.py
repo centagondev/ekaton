@@ -6,6 +6,8 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.presence.services import PresenceService
+
 from .models import EventMessage, EventParticipant, EventStatus
 from .serializers import EventMessageSerializer
 from .services import send_event_message
@@ -56,6 +58,12 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
         await self.accept()
 
+        await self.mark_user_online()
+
+        await self.send_online_users()
+
+        await self.broadcast_presence("presence.joined")
+
         # Deliver the last 150 messages to the newly connected client only.
         # This uses send_json (direct send) — not group_send — so only this
         # connection receives the history, not every other connected user.
@@ -76,6 +84,9 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Handle WebSocket disconnection.
         """
+        if hasattr(self, "participant"):
+            await self.mark_user_offline()
+            await self.broadcast_presence("presence.left")
 
         await self.leave_event_group()
 
@@ -84,11 +95,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         Handle incoming JSON messages.
         """
         now = time.time()
-        if hasattr(self, "last_message_time") and now - self.last_message_time < 0.5:
-            await self.send_json(
-                {"error": "You are sending messages too quickly. Please wait."}
-            )
-            return
+
         self.last_message_time = now
 
         # Validate payload type
@@ -98,6 +105,16 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                     "error": "Invalid payload format.",
                 }
             )
+            return
+
+        # Handle Typing Indicator Events
+        message_type = content.get("type")
+        if message_type == "typing.start":
+            await self.broadcast_typing_start()
+            return
+
+        if message_type == "typing.stop":
+            await self.broadcast_typing_stop()
             return
 
         message_content = content.get("content")
@@ -241,3 +258,169 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         )
 
         return EventMessageSerializer(message).data
+
+    async def mark_user_online(self):
+        """
+        Mark the current participant as online.
+        """
+        await database_sync_to_async(PresenceService.mark_online)(
+            event_id=self.participant.event_id, user_id=self.participant.user_id
+        )
+
+    async def mark_user_offline(self):
+        """
+        Remove the current participant from the event presence set.
+        """
+        await database_sync_to_async(PresenceService.mark_offline)(
+            event_id=self.participant.event_id, user_id=self.participant.user_id
+        )
+
+    async def broadcast_presence(self, event_type: str):
+        """
+        Broadcast a participant presence event to everyone in the event.
+        """
+
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": event_type,
+                "participant": {
+                    "id": str(self.participant.id),
+                    "anonymous_name": (
+                        self.participant.anonymous_name.display_name
+                        if self.participant.anonymous_name
+                        else None
+                    ),
+                },
+            },
+        )
+
+    async def broadcast_typing_start(self):
+        """
+        Broadcast that the current participant started typing.
+        """
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "typing.started",
+                "participant": {
+                    "id": str(self.participant.id),
+                    "anonymous_name": (
+                        self.participant.anonymous_name.display_name
+                        if self.participant.anonymous_name
+                        else None
+                    ),
+                    "sender_channel": self.channel_name,
+                },
+            },
+        )
+
+    async def broadcast_typing_stop(self):
+        """
+        Broadcast that the current participant stopped typing.
+        """
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "typing.stopped",
+                "participant": {
+                    "id": str(self.participant.id),
+                    "sender_channel": self.channel_name,
+                },
+            },
+        )
+
+    async def presence_joined(self, event):
+        """
+        Send participant joined event.
+        """
+
+        await self.send_json(
+            {
+                "type": "presence.joined",
+                "participant": event["participant"],
+            }
+        )
+
+    async def presence_left(self, event):
+        """
+        Send participant left event.
+        """
+
+        await self.send_json(
+            {
+                "type": "presence.left",
+                "participant": event["participant"],
+            }
+        )
+
+    async def typing_started(self, event):
+        """
+        Send typing started event to everyone except the sender.
+        """
+
+        # the sender doesn't get their own typing notification.
+        if event["participant"]["sender_channel"] == self.channel_name:
+            return
+
+        await self.send_json(
+            {
+                "type": "typing.started",
+                "participant": {
+                    "id": event["participant"]["id"],
+                    "anonymous_name": event["participant"]["anonymous_name"],
+                },
+            }
+        )
+
+    async def typing_stopped(self, event):
+        """
+        Send typing stopped event to everyone except the sender.
+        """
+
+        if event["participant"]["sender_channel"] == self.channel_name:
+            return
+
+        await self.send_json(
+            {
+                "type": "typing.stopped",
+                "participant": {
+                    "id": event["participant"]["id"],
+                },
+            }
+        )
+
+    @database_sync_to_async
+    def get_online_participants(self):
+        """
+        Return the online participants for this event.
+        """
+        user_ids = PresenceService.get_online_users(self.participant.event_id)
+
+        participants = EventParticipant.objects.filter(
+            event_id=self.participant.event_id,
+            user_id__in=user_ids,
+            is_active=True,
+        ).select_related("anonymous_name")
+
+        return [
+            {
+                "id": str(participant.id),
+                "anonymous_name": participant.anonymous_name.display_name,
+            }
+            for participant in participants
+        ]
+
+    async def send_online_users(self):
+        """
+        Send the list of currently online participants.
+        """
+        participants = await self.get_online_participants()
+
+        await self.send_json(
+            {
+                "type": "presence.online_users",
+                "count": len(participants),
+                "participants": participants,
+            }
+        )

@@ -43,26 +43,16 @@ Exports
 - ``change_password_doc``      → ChangePasswordAPIView.post
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
 
-from .serializers import (
-    ChangePasswordSerializer,
-    CheckEmailSerializer,
-    ForgotPasswordSerializer,
-    LoginSerializer,
-    LogoutSerializer,
-    ResendPasswordResetSerializer,
-    ResetPasswordSerializer,
-    SetPasswordSerializer,
-)
+from .serializers import (ChangePasswordSerializer, CheckEmailSerializer,
+                          ForgotPasswordSerializer, LoginSerializer,
+                          LogoutSerializer, ResendPasswordResetSerializer,
+                          ResetPasswordSerializer, SetPasswordSerializer)
 
 # ---------------------------------------------------------------------------
 # Check Email

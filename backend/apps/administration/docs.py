@@ -5,24 +5,16 @@ This module contains all drf-spectacular ``extend_schema`` decorator instances
 for the ``apps/administration`` API endpoints.
 """
 
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
+                                   extend_schema, inline_serializer)
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
 
-from .serializers import (
-    AdminCreateUserSerializer,
-    AdminLoginSerializer,
-    AdminReportSerializer,
-    AdminUpdateReportStatusSerializer,
-    AdminUserSerializer,
-    AdminUserUpdateSerializer,
-)
+from .serializers import (AdminCreateUserSerializer, AdminLoginSerializer,
+                          AdminReportSerializer,
+                          AdminUpdateReportStatusSerializer,
+                          AdminUserSerializer, AdminUserUpdateSerializer)
 
 # ---------------------------------------------------------------------------
 # Admin Login
@@ -534,5 +526,145 @@ admin_update_report_status_doc = extend_schema(
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
         404: OpenApiResponse(description="Not Found - Report does not exist."),
+    },
+)
+
+# ---------------------------------------------------------------------------
+# Admin Event APIs
+# Endpoint : /admin/events/
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+
+from .serializers import (AdminCreateEventSerializer,
+                          AdminEventDetailSerializer, AdminEventSerializer,
+                          AdminUpdateEventSerializer)
+
+admin_event_list_doc = extend_schema(
+    operation_id="admin_events_list",
+    tags=["Administration"],
+    summary="Admin Event List",
+    description="Retrieve a paginated list of events with optional search, filtering, and ordering. Authentication requirement: Admin only (IsAdminUser).",
+    parameters=[
+        OpenApiParameter(
+            name="search",
+            description="Search by event name, description, venue, or owner name.",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="ordering",
+            description="Order by created_at, updated_at, end_time, or name. Prefix with '-' for descending order.",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="status",
+            description="Filter by event status.",
+            required=False,
+            type=OpenApiTypes.STR,
+        ),
+        OpenApiParameter(
+            name="is_anonymous_chat",
+            description="Filter anonymous chat events ('true' or 'false').",
+            required=False,
+            type=OpenApiTypes.BOOL,
+        ),
+        OpenApiParameter(
+            name="page",
+            description="Page number.",
+            required=False,
+            type=OpenApiTypes.INT,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=AdminEventSerializer(many=True),
+            description="Events fetched successfully.",
+        ),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+    },
+)
+
+admin_event_detail_doc = extend_schema(
+    operation_id="admin_event_detail",
+    tags=["Administration"],
+    summary="Admin Event Details",
+    description="Retrieve the details of an event by its UUID. Authentication requirement: Admin only (IsAdminUser).",
+    parameters=[
+        OpenApiParameter(
+            name="event_id",
+            description="The UUID of the event.",
+            required=True,
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+        )
+    ],
+    responses={
+        200: OpenApiResponse(response=inline_serializer(name="AdminEventDetailResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event response."),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+        404: OpenApiResponse(description="Not Found - Event does not exist."),
+    },
+)
+
+admin_create_event_doc = extend_schema(
+    operation_id="admin_event_create",
+    tags=["Administration"],
+    summary="Admin Create Event",
+    description="Create an event for an active user. Name must contain at least 3 characters, text fields are trimmed, and end_time must be in the future. Authentication requirement: Admin only (IsAdminUser).",
+    request=AdminCreateEventSerializer,
+    responses={
+        201: OpenApiResponse(response=inline_serializer(name="AdminCreateEventResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event created successfully."),
+        400: OpenApiResponse(description="Bad Request - Validation error."),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+    },
+)
+
+admin_update_event_doc = extend_schema(
+    operation_id="admin_event_update",
+    tags=["Administration"],
+    summary="Admin Update Event",
+    description="Partially update an event. Editable fields are banner, name, description, venue, end_time, and is_anonymous_chat. Authentication requirement: Admin only (IsAdminUser).",
+    parameters=[
+        OpenApiParameter(
+            name="event_id",
+            description="The UUID of the event.",
+            required=True,
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+        )
+    ],
+    request=AdminUpdateEventSerializer,
+    responses={
+        200: OpenApiResponse(response=inline_serializer(name="AdminUpdateEventResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event response."),
+        400: OpenApiResponse(description="Bad Request - Validation error."),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+        404: OpenApiResponse(description="Not Found - Event does not exist."),
+    },
+)
+
+admin_cancel_event_doc = extend_schema(
+    operation_id="admin_event_cancel",
+    tags=["Administration"],
+    summary="Admin Cancel Event",
+    description="Cancel an event and deactivate its active participants. Authentication requirement: Admin only (IsAdminUser).",
+    parameters=[
+        OpenApiParameter(
+            name="event_id",
+            description="The UUID of the event.",
+            required=True,
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+        )
+    ],
+    responses={
+        200: OpenApiResponse(response=inline_serializer(name="AdminCancelEventResponse", fields={"message": rf_serializers.CharField()}), description="Event cancelled successfully."),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+        404: OpenApiResponse(description="Not Found - Event does not exist."),
     },
 )

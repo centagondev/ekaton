@@ -6,7 +6,8 @@ the Swagger and ReDoc documentation for the events endpoints.
 By keeping these decorators here, we maintain clean and readable view classes.
 """
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (OpenApiResponse, extend_schema,
+                                   inline_serializer)
 from rest_framework import serializers
 
 from .serializers import (

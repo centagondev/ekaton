@@ -1,6 +1,8 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.chat.models import Report
+from apps.events.models import Event
 from apps.users.models import User
 
 
@@ -77,3 +79,142 @@ class AdminReportSerializer(serializers.ModelSerializer):
 class AdminUpdateReportStatusSerializer(serializers.Serializer):
 
     status = serializers.ChoiceField(choices=Report.Status.choices)
+
+
+class AdminEventSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing events in the admin dashboard.
+    """
+
+    owner = serializers.CharField(
+        source="owner.full_name",
+        read_only=True,
+    )
+
+    participant_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Event
+
+        fields = (
+            "id",
+            "owner",
+            "banner",
+            "name",
+            "venue",
+            "status",
+            "is_anonymous_chat",
+            "end_time",
+            "participant_count",
+            "created_at",
+        )
+
+
+class AdminEventDetailSerializer(serializers.ModelSerializer):
+    owner = serializers.SerializerMethodField()
+    participant_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Event
+        fields = (
+            "id",
+            "owner",
+            "banner",
+            "name",
+            "description",
+            "venue",
+            "status",
+            "is_anonymous_chat",
+            "end_time",
+            "participant_count",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_owner(self, obj):
+        return {
+            "id": obj.owner.id,
+            "full_name": obj.owner.full_name,
+            "email": obj.owner.email,
+        }
+
+
+class AdminCreateEventSerializer(serializers.ModelSerializer):
+    owner = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True)
+    )
+
+    class Meta:
+        model = Event
+        fields = (
+            "owner",
+            "banner",
+            "name",
+            "description",
+            "venue",
+            "end_time",
+            "is_anonymous_chat",
+        )
+
+    def validate_name(self, value):
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Name must be at least 3 characters long."
+            )
+        return value
+
+    def validate_description(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Description cannot be blank.")
+        return value
+
+    def validate_venue(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Venue cannot be blank.")
+        return value
+
+    def validate_end_time(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("End time must be in the future.")
+        return value
+
+
+class AdminUpdateEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event
+        fields = (
+            "banner",
+            "name",
+            "description",
+            "venue",
+            "end_time",
+            "is_anonymous_chat",
+        )
+
+    def validate_name(self, value):
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Name must be at least 3 characters long."
+            )
+        return value
+
+    def validate_description(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Description cannot be blank.")
+        return value
+
+    def validate_venue(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Venue cannot be blank.")
+        return value
+
+    def validate_end_time(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("End time must be in the future.")
+        return value
