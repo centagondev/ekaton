@@ -2,6 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.pagination import DefaultPagination
+from .pagination import CommentCursorPagination
 from core.responses import success_response
 from core.throttles import ComplaintCreateRateThrottle
 
@@ -129,15 +130,14 @@ class ComplaintCommentAPIView(APIView):
     def get(self, request, complaint_id):
         comments = get_comments(complaint_id)
 
-        paginator = DefaultPagination()
-        page = paginator.paginate_queryset(comments, request)
+        paginator = CommentCursorPagination()
+        page = paginator.paginate_queryset(comments, request, view=self)
 
         if page is None:
             serializer = GetCommentSerializer(comments, many=True)
             return success_response(
                 message="Comments fetched successfully.",
                 data={
-                    "count": len(serializer.data),
                     "next": None,
                     "previous": None,
                     "results": serializer.data,
@@ -149,7 +149,6 @@ class ComplaintCommentAPIView(APIView):
         return success_response(
             message="Comments fetched successfully.",
             data={
-                "count": paginator.page.paginator.count,
                 "next": paginator.get_next_link(),
                 "previous": paginator.get_previous_link(),
                 "results": serializer.data,
