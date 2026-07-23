@@ -1,4 +1,16 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - web
+
   web:
     build:
       context: ./backend
@@ -20,6 +32,17 @@ services:
       - ./backend/.env
     depends_on:
       - redis
+  
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A config beat -l info
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - redis
+
 
   redis:
     image: redis:7-alpine
