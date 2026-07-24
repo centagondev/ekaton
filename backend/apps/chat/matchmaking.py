@@ -6,7 +6,7 @@ from apps.chat.services import create_private_chat_room
 from apps.users.models import User
 from core.redis import redis_client
 
-from .redis_utils import has_recently_skipped
+
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"
@@ -221,11 +221,7 @@ def start_chat(user):
                     add_user_to_queue(user)
                     continue
 
-                # Skip users that were recently skipped.
-                print("Before skip check")
-                if has_recently_skipped(user, waiting_user):
-                    add_user_to_queue(waiting_user)
-                    continue
+
 
                 # Found a valid match.
                 print("Breaking loop")
