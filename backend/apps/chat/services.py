@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 from core.encryption import encrypt_message
 
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
-from .redis_utils import add_skip
+
 
 
 def create_private_chat_room(user_one, user_two):
@@ -42,9 +42,6 @@ def end_private_chat_room(room):
 
     if room.status != PrivateChatRoom.Status.ACTIVE:
         return room
-
-    add_skip(room.user_one, room.user_two)
-    add_skip(room.user_two, room.user_one)
 
     room.status = PrivateChatRoom.Status.ENDED
     room.closed_at = timezone.now()
