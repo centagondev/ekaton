@@ -73,9 +73,25 @@ class ReportRateThrottle(UserRateThrottle):
     scope = "report"
 
 
+class ComplaintCreateRateThrottle(UserRateThrottle):
+    """Rate limiter for complaint creation. Scoped to authenticated users."""
+
+    scope = "complaint_create"
+
+
 class AdminLoginRateThrottle(UserRateThrottle):
     scope = "admin_login"
 
 
 class AdminDashboardRateThrottle(UserRateThrottle):
     scope = "admin_dashboard"
+
+
+class CommentCreateRateThrottle(UserRateThrottle):
+    """Rate limiter for comment creation. Scoped to authenticated users."""
+    scope = "comment_create"
+
+
+class UpvoteToggleRateThrottle(UserRateThrottle):
+    """Rate limiter for upvote toggling. Scoped to authenticated users."""
+    scope = "upvote_toggle"

@@ -48,5 +48,8 @@ frontend-demo/
 # Redis dumps
 *.rdb
 
+# Celery
+celerybeat-schedule*
+
 __pycache__/
 *.pyc

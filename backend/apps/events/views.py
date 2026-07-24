@@ -7,9 +7,17 @@ from rest_framework.views import APIView
 
 from core.responses import success_response
 
-from .docs import (cancel_event_doc, create_event_doc, event_detail_doc,
-                   join_event_doc, leave_event_doc, list_event_messages_doc,
-                   list_events_doc, send_event_message_doc, update_event_doc)
+from .docs import (
+    cancel_event_doc,
+    create_event_doc,
+    event_detail_doc,
+    join_event_doc,
+    leave_event_doc,
+    list_event_messages_doc,
+    list_events_doc,
+    send_event_message_doc,
+    update_event_doc,
+)
 from .models import Event, EventMessage, EventParticipant
 from .pagination import EventMessageCursorPagination
 from .serializers import (CreateEventSerializer, EventDetailSerializer,

@@ -10,11 +10,17 @@ from drf_spectacular.utils import (OpenApiResponse, extend_schema,
                                    inline_serializer)
 from rest_framework import serializers
 
-from .serializers import (CreateEventSerializer, EventDetailSerializer,
-                          EventMessageCreateSerializer, EventMessageSerializer,
-                          EventParticipantSerializer, EventSerializer,
-                          JoinEventSerializer, LeaveEventSerializer,
-                          UpdateEventSerializer)
+from .serializers import (
+    CreateEventSerializer,
+    EventDetailSerializer,
+    EventMessageCreateSerializer,
+    EventMessageSerializer,
+    EventParticipantSerializer,
+    EventSerializer,
+    JoinEventSerializer,
+    LeaveEventSerializer,
+    UpdateEventSerializer,
+)
 
 # Event Management Documentation
 # ==============================================================================
