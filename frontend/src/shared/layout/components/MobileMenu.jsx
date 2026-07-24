@@ -37,10 +37,9 @@ const MobileMenu = ({
               end={item.path === "/"}
               onClick={onClose}
               className={({ isActive }) =>
-                `block rounded-xl px-4 py-3 font-bold tracking-wide uppercase transition ${
-                  isActive
-                    ? "bg-brand-yellow/15 text-amber-600"
-                    : "hover:bg-gray-100"
+                `block rounded-xl px-4 py-3 font-bold tracking-wide uppercase transition ${isActive
+                  ? "bg-brand-yellow/15 text-amber-600"
+                  : "hover:bg-gray-100"
                 }`
               }
             >

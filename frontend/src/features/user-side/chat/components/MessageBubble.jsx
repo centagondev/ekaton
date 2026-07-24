@@ -3,23 +3,18 @@ const MessageBubble = ({ message }) => {
 
   return (
     <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-      <div className="max-w-[85%] sm:max-w-[75%]">
-        {/* Sender Name (optional) */}
-        {!isMine && message.senderName && (
-          <p className="mb-1 text-xs font-semibold text-gray-500">
-            {message.senderName}
-          </p>
-        )}
-
+      {/* 
+        Mobile: max 85% width so messages don't crowd edge-to-edge
+        Desktop: 70% keeps it readable on wide screens
+      */}
+      <div className="max-w-[85%] sm:max-w-[70%]">
         {/* Bubble */}
-
         <div
-          className={`rounded-lg border-2 border-black px-4 py-3 shadow-[3px_3px_0px_black] ${
+          className={`border-2 border-black px-3 py-2.5 sm:px-4 sm:py-3 ${
             isMine ? "bg-brand-yellow" : "bg-white"
-          } `}
+          }`}
         >
           {/* Text */}
-
           {message.text && (
             <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
               {message.text}
@@ -27,32 +22,25 @@ const MessageBubble = ({ message }) => {
           )}
 
           {/* Image (Future) */}
-
           {message.image && (
-            <img src={message.image} alt="" className="mt-2 rounded-md" />
+            <img src={message.image} alt="" className="mt-2 max-w-full" />
           )}
 
           {/* File (Future) */}
-
           {message.file && (
-            <div className="mt-2 rounded border bg-gray-100 p-2">
+            <div className="mt-2 border-2 border-black bg-gray-100 p-2 text-sm">
               📄 {message.file.name}
             </div>
           )}
         </div>
 
-        {/* Footer */}
-
+        {/* Timestamp */}
         <div
-          className={`mt-1 flex items-center gap-2 text-xs text-gray-500 ${
-            isMine ? "justify-end" : "justify-start"
+          className={`mt-0.5 text-[11px] text-gray-500 ${
+            isMine ? "text-right" : "text-left"
           }`}
         >
-          <span>{message.time}</span>
-
-          {isMine && message.status && (
-            <span className="capitalize">{message.status}</span>
-          )}
+          {message.time}
         </div>
       </div>
     </div>

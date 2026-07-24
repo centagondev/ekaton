@@ -16,7 +16,7 @@ const links = [
   },
 ];
 
-export const RootLayout= () =>{
+export const RootLayout = () => {
   return (
     <>
       <Navbar links={links} notifications={2} avatar="/avatar.png" />

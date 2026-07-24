@@ -1,17 +1,23 @@
 import ChatPage from "@/features/user-side/chat/pages/ChatPage";
 import ChatLayout from "../layouts/ChatLayout";
 import ConnectingPage from "@/features/user-side/chat/pages/ConnectingPage";
+import ProtectedRoute from "./ProtectedRoute";
 
 export const chatRoutes = {
-  element: <ChatLayout />,
+  element: <ProtectedRoute />,
   children: [
     {
-      path: "/connecting",
-      element: <ConnectingPage />,
-    },
-    {
-      path: "/chat",
-      element: <ChatPage />,
+      element: <ChatLayout />,
+      children: [
+        {
+          path: "/connecting",
+          element: <ConnectingPage />,
+        },
+        {
+          path: "/chat",
+          element: <ChatPage />,
+        },
+      ],
     },
   ],
 };

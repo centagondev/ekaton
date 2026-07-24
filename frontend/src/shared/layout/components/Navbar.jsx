@@ -1,22 +1,23 @@
 import { useState } from "react";
 import { Bell, Menu, User } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import NavItem from "./NavItem";
 import MobileMenu from "./MobileMenu";
 import { getNavLinks } from "./nav-links";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { ROUTES } from "@/app/router/rootPaths";
 
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
 
-  const user= useAuthStore((state) => state.user);
-  const logout= useAuthStore((state)=> state.logout)
-const isAuthenticated= !!user
-const navigate= useNavigate()
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout)
+  const isAuthenticated = !!user
+  const navigate = useNavigate()
 
   const navLinks = getNavLinks(isAuthenticated);
 
@@ -51,11 +52,19 @@ const navigate= useNavigate()
         {/* Desktop Right */}
 
         <div className="hidden items-center gap-5 md:flex">
-          <Bell className="size-5 cursor-pointer" />
+          <Link
+            to={ROUTES.NOTIFICATIONS}
+            className="relative text-gray-700 hover:text-black transition-colors"
+          >
+            <Bell className="size-5 cursor-pointer" />
+          </Link>
 
-          <div className="bg-brand-lavender flex h-10 w-10 items-center justify-center rounded-xl">
+          <Link
+            to={ROUTES.PROFILE}
+            className="bg-brand-lavender flex h-10 w-10 items-center justify-center rounded-xl hover:opacity-80 transition-opacity"
+          >
             <User />
-          </div>
+          </Link>
         </div>
 
         {/* Mobile */}

@@ -1,19 +1,16 @@
-const TypingIndicator = ({ visible = false, name = "Stranger" }) => {
+const TypingIndicator = ({ visible = false }) => {
   if (!visible) return null;
 
   return (
-    <div className="px-4 pb-3">
-      <div className="mx-auto flex max-w-4xl justify-start">
-        <div className="flex items-center gap-3 border-2 border-black bg-white px-4 py-3 shadow-[3px_3px_0px_black]">
-          <span className="text-sm font-medium">{name} is typing</span>
-
-          <div className="flex gap-1">
-            <span className="h-2 w-2 animate-bounce rounded-full bg-black [animation-delay:0ms]" />
-            <span className="h-2 w-2 animate-bounce rounded-full bg-black [animation-delay:150ms]" />
-            <span className="h-2 w-2 animate-bounce rounded-full bg-black [animation-delay:300ms]" />
-          </div>
-        </div>
-      </div>
+    <div className="mt-3 pb-1">
+      <p className="text-sm font-medium text-black">
+        typing{" "}
+        <span className="inline-flex gap-[2px]">
+          <span className="animate-bounce [animation-delay:0ms]">&#8226;</span>
+          <span className="animate-bounce [animation-delay:150ms]">&#8226;</span>
+          <span className="animate-bounce [animation-delay:300ms]">&#8226;</span>
+        </span>
+      </p>
     </div>
   );
 };

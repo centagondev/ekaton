@@ -1,18 +1,17 @@
-const variants = {
-  info: "bg-brand-lavender border-black",
-  success: "bg-brand-lime border-black",
-  warning: "bg-brand-yellow border-black",
-  error: "bg-red-100 border-red-500",
+const variantStyles = {
+  info: "bg-gray-200",
+  success: "bg-[#CCFF00]",
 };
 
-const ChatBanner = ({ title, description, variant = "info" }) => {
+const ChatBanner = ({ title, variant = "info" }) => {
+  const bg = variantStyles[variant] ?? variantStyles.info;
   return (
-    <div className={`border-b-2 px-4 py-3 text-center ${variants[variant]} `}>
-      <h3 className="text-sm font-black tracking-wide uppercase">{title}</h3>
-
-      {description && (
-        <p className="mt-1 text-xs text-gray-700">{description}</p>
-      )}
+    <div className="flex justify-center bg-[#FBF9F5] px-3 py-2 sm:px-4 sm:py-3">
+      <div className={`border-2 border-black px-3 py-1.5 sm:px-5 sm:py-2 ${bg}`}>
+        <p className="text-center text-[10px] font-black tracking-widest uppercase sm:text-xs">
+          {title}
+        </p>
+      </div>
     </div>
   );
 };
