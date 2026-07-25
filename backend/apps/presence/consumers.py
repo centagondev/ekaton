@@ -3,7 +3,9 @@ from __future__ import annotations
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from .services import PlatformPresenceService
+from .seed_services import SeedService
 
+from .constants import PLATFORM_PRESENCE_GROUP
 
 class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
     """
@@ -39,6 +41,8 @@ class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
         
         await self.mark_user_online()
         
+        await self.broadcast_online_count()
+        
     async def disconnect(self, close_code):
         
         """
@@ -46,7 +50,10 @@ class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
         """
         
         if hasattr(self,"user"):
+            
             await self.mark_user_offline()
+            
+        await self.broadcast_online_count()
             
         await self.leave_platform_group()
         
@@ -80,12 +87,38 @@ class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
         Mark the authenticated user as online.
         """
         
-        await database_sync_to_async(PlatformPresenceService.mark_online)(self.user.id)
+        await database_sync_to_async(PlatformPresenceService.mark_online)(self.user.id,self.channel_name,)
     
     async def mark_user_offline(self):
         """
         Remove the authenticated user from the online presence set.
         """
-        await database_sync_to_async(PlatformPresenceService.mark_offline)(self.user.id)
+        await database_sync_to_async(PlatformPresenceService.mark_offline)(self.user.id,self.channel_name,)
         
         
+    async def broadcast_online_count(self):
+        """
+        Broadcast the latest online user count to all connected clients.
+        """
+        count = await database_sync_to_async(
+                    SeedService.get_display_count)()
+        
+        await self.channel_layer.group_send(
+            PLATFORM_PRESENCE_GROUP,
+           {
+               "type":"platform.online_count",
+               "count":count
+           },
+        )
+        
+    async def platform_online_count(self, event):
+        """
+        Send the latest online user count to the connected client.
+        """
+        
+        await self.send_json(
+            {
+            "type":"platform.online_count",
+            "count": event["count"],
+            }
+        )

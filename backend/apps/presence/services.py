@@ -158,23 +158,38 @@ class PlatformPresenceService:
         return "presence:platform:users"
     
     @classmethod
-    def mark_online(cls,user_id:UUID) -> None:
+    def mark_online(cls,user_id:UUID,connection_id:str ) -> None:
         """
         Add a user to the platform online presence set.
         """
         
-        key=cls._platform_presence_key()
+        presence_key=cls._platform_presence_key()
         
-        redis_client.sadd(key,str(user_id))
+        connection_key=cls._connection_key(user_id)
+        
+        redis_client.sadd(connection_key,
+                          connection_id)
+        
+        connection_count=redis_client.scard(connection_key)
+        if connection_count == 1:
+            redis_client.sadd(presence_key,str(user_id))
         
     @classmethod
-    def mark_offline(cls,user_id:UUID) -> None:
+    def mark_offline(cls,user_id:UUID,connection_id: str,) -> None:
         """
         Remove a user from the platform online presence set.
         """
-        key=cls._platform_presence_key()
+        presence_key=cls._platform_presence_key()
+        connection_key=cls._connection_key(user_id)
         
-        redis_client.srem(key,str(user_id))
+        redis_client.srem(connection_key,connection_id)
+    
+        connection_count=redis_client.scard(connection_key)
+        
+        if connection_count == 0 :
+            
+            redis_client.srem(presence_key,str(user_id))
+            redis_client.delete(connection_key)
     
     @classmethod
     def get_online_users(cls)->list[str]:
@@ -222,6 +237,15 @@ class PlatformPresenceService:
         """
         key=cls._platform_presence_key()
         redis_client.delete(key)
+        
+    @staticmethod
+    def _connection_key(user_id:UUID)-> str:
+        """
+        Return the Redis key that stores all active
+        WebSocket connections for a user.
+        """
+        return f"presence:platform:connections:{user_id}"
+    
         
         
 
