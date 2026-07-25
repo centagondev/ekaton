@@ -48,6 +48,9 @@ frontend-demo/
 # Redis dumps
 *.rdb
 
+# Ruff  Ruff (your linter)
+.ruff_cache/
+
 # Celery
 celerybeat-schedule*
 

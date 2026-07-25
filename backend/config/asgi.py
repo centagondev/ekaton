@@ -27,12 +27,15 @@ from apps.chat.routing import \
     websocket_urlpatterns as chat_websocket_urlpatterns
 from apps.events.routing import \
     websocket_urlpatterns as event_websocket_urlpatterns
+from apps.presence.routing import (
+    websocket_urlpatterns as platform_websocket_urlpatterns
+)
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": JwtAuthMiddleware(
-            URLRouter(chat_websocket_urlpatterns + event_websocket_urlpatterns)
+            URLRouter(chat_websocket_urlpatterns + event_websocket_urlpatterns + platform_websocket_urlpatterns)
         ),
     }
 )

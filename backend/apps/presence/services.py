@@ -5,7 +5,7 @@ from uuid import UUID
 from core.redis import redis_client
 
 
-class PresenceService:
+class EventPresenceService:
     """
     Service responsible for managing event presence in Redis.
 
@@ -133,3 +133,110 @@ class PresenceService:
         key = cls._event_presence_key(event_id)
 
         redis_client.delete(key)
+
+
+class PlatformPresenceService:
+    """
+    Service responsible for managing platform-wide user presence in Redis.
+
+    Responsibilities:
+    - Mark users as online.
+    - Mark users as offline.
+    - Retrieve online users.
+    - Check whether a user is online.
+
+    Presence data is stored in a Redis Set.
+
+    Redis Key Format:
+        presence:platform:users
+    """
+    @classmethod
+    def _platform_presence_key(cls)->str :
+        """
+        Generate the Redis key for platform online users.
+        """
+        return "presence:platform:users"
+    
+    @classmethod
+    def mark_online(cls,user_id:UUID) -> None:
+        """
+        Add a user to the platform online presence set.
+        """
+        
+        key=cls._platform_presence_key()
+        
+        redis_client.sadd(key,str(user_id))
+        
+    @classmethod
+    def mark_offline(cls,user_id:UUID) -> None:
+        """
+        Remove a user from the platform online presence set.
+        """
+        key=cls._platform_presence_key()
+        
+        redis_client.srem(key,str(user_id))
+    
+    @classmethod
+    def get_online_users(cls)->list[str]:
+        """
+        Return the IDs of all users currently online.
+        """
+        key=cls._platform_presence_key()
+        
+        return list(redis_client.smembers(key))
+    
+    @classmethod
+    def is_online(cls,user_id:UUID)-> bool:
+        """
+        Check whether a user is currently online.
+        """
+        
+        key=cls._platform_presence_key()
+        
+        return redis_client.sismember(key,str(user_id))
+    
+    @classmethod 
+    def get_online_count(cls)-> int:
+        """
+        Return the number of users currently online.
+        """
+        
+        key=cls._platform_presence_key()
+        
+        return redis_client.scard(key)
+    
+    @classmethod
+    def has_online_users(cls) -> bool:
+        """
+        Return True if at least one user is online.
+        """
+        return cls.get_online_count() > 0
+    
+    
+    @classmethod
+    def clear_platform_presence(cls) -> None:
+        """
+        Remove all platform presence data.
+
+        Useful for development, testing, or administrative tasks.
+        """
+        key=cls._platform_presence_key()
+        redis_client.delete(key)
+        
+        
+
+    
+
+
+class SeedService:
+    """
+    Future service responsible for:
+
+    - Dynamic display seed
+    - Seed generation
+    - Seed refresh
+    - Display count calculation
+    """
+    
+
+

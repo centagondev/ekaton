@@ -1,0 +1,28 @@
+# ── 1. Heavy & Incompatible ──────────────────────────────────────────────────
+# Windows node_modules — Docker will npm install fresh on Linux
+node_modules/
+
+# ── 2. Top Secret ─────────────────────────────────────────────────────────────
+# Never burn secrets into the image — Docker reads them at runtime via env_file
+.env
+.env.*
+.env.local
+
+# ── 3. Junk / Auto-Generated ──────────────────────────────────────────────────
+# Vite production build output — not needed in dev container
+dist/
+dist-ssr/
+*.local
+
+# ── 4. Personal Editor Files ──────────────────────────────────────────────────
+# VS Code / JetBrains / OS files — Docker doesn't need these
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
