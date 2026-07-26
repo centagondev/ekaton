@@ -1,3 +1,23 @@
+# Event Presence Redis Keys
+# =============================================================================
+#
+# One set of online user ids per event, plus one set of open channel names per
+# user in that event. The per-user set is what lets a student keep two tabs
+# open on the same event: they only drop out of the online set when their last
+# socket closes.
+#
+# Both keys carry a TTL as a backstop, refreshed on every connect, so a worker
+# that dies without a clean disconnect cannot leave someone online forever.
+# Normal cleanup is explicit: apps.events.services.close_event_connections
+# clears an event's presence when it is cancelled or expires.
+
+EVENT_PRESENCE_KEY = "presence:event:{event_id}:users"
+EVENT_CONNECTION_KEY = "presence:event:{event_id}:connections:{user_id}"
+
+# Seconds; must stay an integer because it is passed straight to Redis EXPIRE.
+EVENT_PRESENCE_TTL = 60 * 60 * 24
+
+
 # Platform Presence Redis Keys
 # =============================================================================
 #

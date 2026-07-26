@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Event, EventStatus
+from .services import close_event_connections
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def end_expired_events(self):
                 if locked_event.status != EventStatus.ACTIVE:
                     continue
                 locked_event.status = EventStatus.ENDED
-                locked_event.save(update_fields=["status"])
+                locked_event.save(update_fields=["status", "updated_at"])
                 updated_count += 1
 
                 logger.info(
@@ -48,6 +49,10 @@ def end_expired_events(self):
                     locked_event.id,
                     getattr(locked_event, "name", ""),
                 )
+
+            # Outside the transaction: anyone still connected is told the
+            # event is over and the event's presence data is released.
+            close_event_connections(event=locked_event, reason="ended")
         except Exception:
             logger.exception(
                 "Failed to expire event %s",

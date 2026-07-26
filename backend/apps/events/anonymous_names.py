@@ -1,8 +1,9 @@
 """
 Predefined anonymous display names.
 
-These names are used to populate the AnonymousName table
-through the custom Django management command.
+These names populate the AnonymousName table through the
+events.0004_seed_anonymous_names data migration, so a plain
+'manage.py migrate' is all a fresh deployment needs.
 """
 
 ANONYMOUS_NAMES = [

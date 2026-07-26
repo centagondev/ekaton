@@ -1,16 +1,72 @@
 import logging
 import secrets
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from .models import AnonymousName, Event, EventMessage, EventParticipant, EventStatus
+from apps.presence.services import EventPresenceService
+
+from .models import (
+    MAX_MESSAGE_LENGTH,
+    AnonymousName,
+    Event,
+    EventMessage,
+    EventParticipant,
+    EventStatus,
+)
 
 logger = logging.getLogger(__name__)
-MAX_LENGTH_CONTENT = 1000
+
+
+def event_group_name(event_id) -> str:
+    """
+    Return the channel layer group that carries an event's chat.
+
+    Defined here so the consumer, the REST views and the Celery tasks
+    cannot drift apart on the group naming.
+    """
+    return f"event_{event_id}"
+
+
+def close_event_connections(*, event, reason):
+    """
+    Tell everyone connected to an event that it is over, then drop the
+    event's presence data.
+
+    Called after an event has been cancelled or has expired. Without this
+    the clients keep an open socket on an event that can no longer accept
+    messages, and the event's Redis presence set is never reclaimed.
+
+    Args:
+        event:
+            The event that was closed.
+
+        reason:
+            Why it closed, forwarded to the client ("cancelled" / "ended").
+    """
+    channel_layer = get_channel_layer()
+
+    if channel_layer is None:
+        logger.error(
+            "No channel layer configured; cannot close connections for event '%s'.",
+            event.id,
+        )
+        return
+
+    async_to_sync(channel_layer.group_send)(
+        event_group_name(event.id),
+        {
+            "type": "event.closed",
+            "reason": reason,
+        },
+    )
+
+    EventPresenceService.clear_event_presence(event.id)
 
 
 @transaction.atomic
@@ -56,6 +112,10 @@ def update_event(*, event, user, validated_data):
         PermissionDenied:
             If the authenticated user is not the event owner.
     """
+
+    # Lock the event row FIRST so an update cannot be applied on top of a
+    # concurrent cancellation or expiry.
+    event = Event.objects.select_for_update().get(pk=event.pk)
 
     if event.status != EventStatus.ACTIVE:
         raise ValidationError("This event is no longer active and cannot be updated.")
@@ -207,9 +267,16 @@ def _assign_anonymous_name(*, event):
     total_names = AnonymousName.objects.count()
 
     if total_names == 0:
-        # Fallback for clean deployments where the database hasn't been seeded yet
+        # Fallback for clean deployments where the database hasn't been seeded
+        # yet. Every participant shares this identity, so it is only a way to
+        # keep the event usable, not a substitute for the seeded name pool.
+        logger.warning(
+            "No anonymous names are seeded; event '%s' is falling back to a "
+            "shared identity. Run 'manage.py migrate' to seed them.",
+            event.id,
+        )
         default_name, _ = AnonymousName.objects.get_or_create(
-            name="Anonymous Participant"
+            display_name="Anonymous Participant"
         )
         return default_name
 
@@ -273,13 +340,21 @@ def join_event(*, event, user):
         participant.is_active = True
         participant.left_at = None
 
-        participant.save(
-            update_fields=[
-                "is_active",
-                "left_at",
-                "updated_at",
-            ]
-        )
+        update_fields = [
+            "is_active",
+            "left_at",
+            "updated_at",
+        ]
+
+        # A returning participant keeps the identity they had before, so the
+        # chat history stays coherent. One is assigned only when it is
+        # missing, which happens when the name row was removed while they
+        # were away.
+        if event.is_anonymous_chat and participant.anonymous_name_id is None:
+            participant.anonymous_name = _assign_anonymous_name(event=event)
+            update_fields.append("anonymous_name")
+
+        participant.save(update_fields=update_fields)
 
         logger.info(
             "User '%s' rejoined event '%s'.",
@@ -423,8 +498,8 @@ def send_event_message(*, content: str, participant: EventParticipant):
     if not content:
         raise ValidationError("Message content is required.")
 
-    if len(content) > MAX_LENGTH_CONTENT:
-        raise ValidationError(f"Message cannot exceed {MAX_LENGTH_CONTENT} characters.")
+    if len(content) > MAX_MESSAGE_LENGTH:
+        raise ValidationError(f"Message cannot exceed {MAX_MESSAGE_LENGTH} characters.")
 
     message = EventMessage.objects.create(
         event=participant.event,

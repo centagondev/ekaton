@@ -1,7 +1,11 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Event, EventMessage, EventParticipant
+from .models import MAX_MESSAGE_LENGTH, Event, EventMessage, EventParticipant
+
+# Shown when an anonymous event has a participant with no anonymous identity.
+# Falling back to the real name here would de-anonymise them, so it never does.
+ANONYMOUS_FALLBACK_NAME = "Anonymous Participant"
 
 
 class BaseEventSerializer(serializers.ModelSerializer):
@@ -126,10 +130,22 @@ class CreateEventSerializer(BaseEventSerializer):
 class UpdateEventSerializer(BaseEventSerializer):
     """
     Serializer for updating an existing event.
+
+    ``is_anonymous_chat`` is deliberately not updatable. Participants and
+    messages are rendered against the event's current mode, so turning it
+    off would reveal the real names behind messages that were sent
+    anonymously, and turning it on would leave everyone who already joined
+    without an anonymous identity.
     """
 
     class Meta(BaseEventSerializer.Meta):
-        pass
+        fields = (
+            "banner",
+            "name",
+            "description",
+            "venue",
+            "end_time",
+        )
 
 
 class EventParticipantSerializer(serializers.ModelSerializer):
@@ -161,6 +177,9 @@ class EventParticipantSerializer(serializers.ModelSerializer):
         """
 
         if obj.event.is_anonymous_chat:
+            if obj.anonymous_name is None:
+                return ANONYMOUS_FALLBACK_NAME
+
             return obj.anonymous_name.display_name
 
         return obj.user.full_name
@@ -243,7 +262,7 @@ class EventMessageCreateSerializer(serializers.Serializer):
     """
 
     content = serializers.CharField(
-        max_length=2000,
+        max_length=MAX_MESSAGE_LENGTH,
         trim_whitespace=True,
     )
 
@@ -272,6 +291,9 @@ class EventMessageSerializer(serializers.ModelSerializer):
 
     def get_sender_name(self, obj):
         if obj.event.is_anonymous_chat:
+            if obj.participant.anonymous_name is None:
+                return ANONYMOUS_FALLBACK_NAME
+
             return obj.participant.anonymous_name.display_name
 
         return obj.participant.user.full_name

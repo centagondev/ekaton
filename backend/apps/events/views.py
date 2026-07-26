@@ -33,7 +33,9 @@ from .serializers import (
 )
 from .services import (
     cancel_event,
+    close_event_connections,
     create_event,
+    event_group_name,
     get_event,
     join_event,
     leave_event,
@@ -168,6 +170,10 @@ class CancelEventAPIView(APIView):
             event=event,
             user=request.user,
         )
+
+        # Sent after the service returns so clients are only told once the
+        # cancellation has been committed.
+        close_event_connections(event=event, reason="cancelled")
 
         return success_response(
             message="Event cancelled successfully.",
@@ -345,7 +351,7 @@ class EventMessageAPIView(GenericAPIView):
         # Broadcast the new message to WebSocket clients
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            f"event_{event.id}",
+            event_group_name(event.id),
             {
                 "type": "event.message",
                 "message": response_serializer.data,

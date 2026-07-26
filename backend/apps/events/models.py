@@ -4,6 +4,11 @@ from django.utils import timezone
 
 from core.base_model import BaseModel
 
+# Maximum length of an event chat message. The model field, the REST
+# serializer and the WebSocket consumer all validate against this, so it
+# lives here as the single source of truth.
+MAX_MESSAGE_LENGTH = 1000
+
 
 class EventStatus(models.TextChoices):
     """
@@ -215,7 +220,7 @@ class EventMessage(BaseModel):
     )
 
     content = models.TextField(
-        max_length=2000,
+        max_length=MAX_MESSAGE_LENGTH,
         help_text="Text content of the message.",
     )
 
