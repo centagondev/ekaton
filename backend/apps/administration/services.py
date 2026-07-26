@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from django.contrib.auth import authenticate
@@ -6,12 +7,16 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from redis.exceptions import RedisError
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 from apps.events.models import Event, EventParticipant, EventStatus
+from apps.presence.services import PlatformPresenceService
 from apps.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 def admin_login(email, password):
@@ -49,7 +54,20 @@ def users_count():
 
 
 def online_users_count():
-    return 0
+    """Return the real number of users currently connected to the platform.
+
+    Uses the raw presence count, not the seeded number shown to students,
+    so the dashboard reflects reality.
+
+    Returns 0 if Redis is unreachable, so one unavailable stat cannot break
+    the whole dashboard.
+    """
+
+    try:
+        return PlatformPresenceService.get_online_count()
+    except RedisError:
+        logger.warning("Could not read the platform presence count from Redis.")
+        return 0
 
 
 def active_users_count():
@@ -65,7 +83,7 @@ def verified_users_count():
 
 
 def active_events_count():
-    return 0
+    return Event.objects.filter(status=EventStatus.ACTIVE).count()
 
 
 def total_chats_count():
@@ -365,11 +383,15 @@ def update_event(*, event, validated_data):
         Event: The updated event.
 
     Raises:
-        ValidationError: If anonymous mode changes after participation.
+        ValidationError: If the event is no longer active, or if anonymous
+            mode changes after participation.
 
     Transaction behavior:
         The update is atomic.
     """
+    if event.status != EventStatus.ACTIVE:
+        raise ValidationError("This event is no longer active and cannot be updated.")
+
     if "is_anonymous_chat" in validated_data:
         anonymous_chat = validated_data["is_anonymous_chat"]
         if anonymous_chat != event.is_anonymous_chat and event.participants.exists():

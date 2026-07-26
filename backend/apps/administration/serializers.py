@@ -19,8 +19,8 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
 class DashboardStatisticsSerializer(serializers.Serializer):
     users_count = serializers.IntegerField()
-    active_users_count = serializers.IntegerField(allow_null=True)
-    active_events_count = serializers.IntegerField(allow_null=True)
+    online_users_count = serializers.IntegerField()
+    active_events_count = serializers.IntegerField()
     pending_reports_count = serializers.IntegerField()
     total_chats_count = serializers.IntegerField()
     total_messages_count = serializers.IntegerField()
@@ -140,8 +140,29 @@ class AdminEventDetailSerializer(serializers.ModelSerializer):
 
 
 class AdminCreateEventSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating an event from the admin dashboard.
+    """
+
     owner = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.filter(is_active=True)
+    )
+
+    # allow_blank lets an empty value reach validate_* below,
+    # so the error message comes from our own check.
+    name = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    description = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    venue = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
     )
 
     class Meta:
@@ -162,18 +183,34 @@ class AdminCreateEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Name must be at least 3 characters long."
             )
+        if len(value) > 100:
+            raise serializers.ValidationError("Name cannot exceed 100 characters.")
         return value
 
     def validate_description(self, value):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("Description cannot be blank.")
+        if len(value) < 10:
+            raise serializers.ValidationError(
+                "Description must be at least 10 characters long."
+            )
+        if len(value) > 1000:
+            raise serializers.ValidationError(
+                "Description cannot exceed 1000 characters."
+            )
         return value
 
     def validate_venue(self, value):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("Venue cannot be blank.")
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Venue must be at least 3 characters long."
+            )
+        if len(value) > 200:
+            raise serializers.ValidationError("Venue cannot exceed 200 characters.")
         return value
 
     def validate_end_time(self, value):
@@ -183,6 +220,27 @@ class AdminCreateEventSerializer(serializers.ModelSerializer):
 
 
 class AdminUpdateEventSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating an event from the admin dashboard.
+    """
+
+    # allow_blank lets an empty value reach validate_* below,
+    # so the error message comes from our own check.
+    name = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    description = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    venue = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
     class Meta:
         model = Event
         fields = (
@@ -200,18 +258,34 @@ class AdminUpdateEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Name must be at least 3 characters long."
             )
+        if len(value) > 100:
+            raise serializers.ValidationError("Name cannot exceed 100 characters.")
         return value
 
     def validate_description(self, value):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("Description cannot be blank.")
+        if len(value) < 10:
+            raise serializers.ValidationError(
+                "Description must be at least 10 characters long."
+            )
+        if len(value) > 1000:
+            raise serializers.ValidationError(
+                "Description cannot exceed 1000 characters."
+            )
         return value
 
     def validate_venue(self, value):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("Venue cannot be blank.")
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Venue must be at least 3 characters long."
+            )
+        if len(value) > 200:
+            raise serializers.ValidationError("Venue cannot exceed 200 characters.")
         return value
 
     def validate_end_time(self, value):

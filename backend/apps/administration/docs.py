@@ -137,8 +137,8 @@ admin_dashboard_doc = extend_schema(
                         "data": {
                             "statistics": {
                                 "users_count": 1500,
-                                "active_users_count": None,
-                                "active_events_count": None,
+                                "online_users_count": 42,
+                                "active_events_count": 3,
                                 "pending_reports_count": 12,
                                 "total_chats_count": 450,
                                 "total_messages_count": 5200000,
