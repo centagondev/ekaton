@@ -26,7 +26,9 @@ class CreateComplaintSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Description cannot be empty.")
         if len(value) > 2000:
-            raise serializers.ValidationError("Description cannot exceed 2000 characters.")
+            raise serializers.ValidationError(
+                "Description cannot exceed 2000 characters."
+            )
         return value
 
 
@@ -80,38 +82,31 @@ class CreateCommentSerializer(serializers.ModelSerializer):
 
         return value
 
+
 class UpdateComplaintSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
-        fields = [
-            "title",
-            "description",
-            "category"
-        ]
+        fields = ["title", "description", "category"]
 
     def validate_title(self, value):
         value = value.strip()
 
         if not value:
-            raise serializers.ValidationError(
-                 "Title cannot be empty."
-            )
+            raise serializers.ValidationError("Title cannot be empty.")
         return value
-    
+
     def validate_description(self, value):
         value = value.strip()
 
         if not value:
-            raise serializers.ValidationError(
-                 "Description cannot be empty."
-            )
+            raise serializers.ValidationError("Description cannot be empty.")
         if len(value) > 2000:
             raise serializers.ValidationError(
-                 "Description cannot exceed 2000 characters."
+                "Description cannot exceed 2000 characters."
             )
-            
-        
+
         return value
+
 
 class GetCommentSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()

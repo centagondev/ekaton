@@ -6,7 +6,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.presence.services import PresenceService
+from apps.presence.services import EventPresenceService
 
 from .models import EventMessage, EventParticipant, EventStatus
 from .serializers import EventMessageSerializer
@@ -263,7 +263,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Mark the current participant as online.
         """
-        await database_sync_to_async(PresenceService.mark_online)(
+        await database_sync_to_async(EventPresenceService.mark_online)(
             event_id=self.participant.event_id, user_id=self.participant.user_id
         )
 
@@ -271,7 +271,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Remove the current participant from the event presence set.
         """
-        await database_sync_to_async(PresenceService.mark_offline)(
+        await database_sync_to_async(EventPresenceService.mark_offline)(
             event_id=self.participant.event_id, user_id=self.participant.user_id
         )
 
@@ -395,7 +395,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Return the online participants for this event.
         """
-        user_ids = PresenceService.get_online_users(self.participant.event_id)
+        user_ids = EventPresenceService.get_online_users(self.participant.event_id)
 
         participants = EventParticipant.objects.filter(
             event_id=self.participant.event_id,
@@ -406,7 +406,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         return [
             {
                 "id": str(participant.id),
-                "anonymous_name": participant.anonymous_name.display_name,
+                "anonymous_name": (
+                    participant.anonymous_name.display_name
+                    if participant.anonymous_name
+                    else None
+                ),
             }
             for participant in participants
         ]

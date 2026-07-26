@@ -4,10 +4,28 @@ from rest_framework import serializers
 from .models import Event, EventMessage, EventParticipant
 
 
-class CreateEventSerializer(serializers.ModelSerializer):
+class BaseEventSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating a new event.
+    Base serializer holding the validation shared by
+    creating and updating an event.
     """
+
+    # allow_blank lets an empty value reach validate_* below,
+    # so the error message comes from our own check.
+    name = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    description = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
+
+    venue = serializers.CharField(
+        trim_whitespace=True,
+        allow_blank=True,
+    )
 
     class Meta:
         model = Event
@@ -20,6 +38,69 @@ class CreateEventSerializer(serializers.ModelSerializer):
             "end_time",
             "is_anonymous_chat",
         )
+
+    def validate_name(self, value):
+        """
+        Ensure the event name is not empty and has a valid length.
+        """
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Event name cannot be empty.")
+
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Event name must be at least 3 characters long."
+            )
+
+        if len(value) > 100:
+            raise serializers.ValidationError(
+                "Event name cannot exceed 100 characters."
+            )
+
+        return value
+
+    def validate_description(self, value):
+        """
+        Ensure the event description is not empty and has a valid length.
+        """
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Event description cannot be empty.")
+
+        if len(value) < 10:
+            raise serializers.ValidationError(
+                "Event description must be at least 10 characters long."
+            )
+
+        if len(value) > 1000:
+            raise serializers.ValidationError(
+                "Event description cannot exceed 1000 characters."
+            )
+
+        return value
+
+    def validate_venue(self, value):
+        """
+        Ensure the event venue is not empty and has a valid length.
+        """
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Event venue cannot be empty.")
+
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Event venue must be at least 3 characters long."
+            )
+
+        if len(value) > 200:
+            raise serializers.ValidationError(
+                "Event venue cannot exceed 200 characters."
+            )
+
+        return value
 
     def validate_end_time(self, value):
         """
@@ -33,32 +114,22 @@ class CreateEventSerializer(serializers.ModelSerializer):
         return value
 
 
-class UpdateEventSerializer(serializers.ModelSerializer):
+class CreateEventSerializer(BaseEventSerializer):
+    """
+    Serializer for creating a new event.
+    """
+
+    class Meta(BaseEventSerializer.Meta):
+        pass
+
+
+class UpdateEventSerializer(BaseEventSerializer):
     """
     Serializer for updating an existing event.
     """
 
-    class Meta:
-        model = Event
-
-        fields = (
-            "banner",
-            "name",
-            "description",
-            "venue",
-            "end_time",
-            "is_anonymous_chat",
-        )
-
-    def validate_end_time(self, value):
-        """
-        Ensure the updated end time is in the future.
-        """
-        if value <= timezone.now():
-            raise serializers.ValidationError(
-                "The event end time must be in the future."
-            )
-        return value
+    class Meta(BaseEventSerializer.Meta):
+        pass
 
 
 class EventParticipantSerializer(serializers.ModelSerializer):

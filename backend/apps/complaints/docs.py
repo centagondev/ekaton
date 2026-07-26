@@ -5,13 +5,21 @@ This module contains all drf-spectacular ``extend_schema`` decorator instances
 for the ``apps/complaints`` API endpoints.
 """
 
-from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
-                                   extend_schema, inline_serializer)
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers as rf_serializers
 
-from .serializers import (CreateCommentSerializer, CreateComplaintSerializer,
-                          GetCommentSerializer, GetComplaintsSerializer,
-                          UpdateComplaintSerializer)
+from .serializers import (
+    CreateCommentSerializer,
+    CreateComplaintSerializer,
+    GetCommentSerializer,
+    GetComplaintsSerializer,
+    UpdateComplaintSerializer,
+)
 
 complaint_detail_doc = extend_schema(
     tags=["Complaints"],
@@ -28,13 +36,17 @@ complaint_detail_doc = extend_schema(
                 name="ComplaintDetailResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Complaint fetched successfully."),
+                    "message": rf_serializers.CharField(
+                        default="Complaint fetched successfully."
+                    ),
                     "data": GetComplaintsSerializer(),
                 },
             ),
             description="Complaint retrieved successfully.",
         ),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )
@@ -59,7 +71,9 @@ complaint_list_doc = extend_schema(
                 name="ComplaintListResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Complaints fetched successfully"),
+                    "message": rf_serializers.CharField(
+                        default="Complaints fetched successfully"
+                    ),
                     "data": inline_serializer(
                         name="ComplaintPaginatedData",
                         fields={
@@ -100,7 +114,9 @@ complaint_create_doc = extend_schema(
                 name="ComplaintCreateResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="complaint created successfully"),
+                    "message": rf_serializers.CharField(
+                        default="complaint created successfully"
+                    ),
                     "data": inline_serializer(
                         name="ComplaintCreateData",
                         fields={"id": rf_serializers.UUIDField()},
@@ -110,7 +126,9 @@ complaint_create_doc = extend_schema(
             description="Complaint created successfully.",
         ),
         400: OpenApiResponse(description="Bad Request - Invalid data format."),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         429: OpenApiResponse(description="Too Many Requests - Rate limit exceeded."),
     },
 )
@@ -136,15 +154,21 @@ complaint_update_doc = extend_schema(
                 name="ComplaintUpdateResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Complaint updated successfully"),
+                    "message": rf_serializers.CharField(
+                        default="Complaint updated successfully"
+                    ),
                     "data": GetComplaintsSerializer(),
                 },
             ),
             description="Complaint updated successfully.",
         ),
         400: OpenApiResponse(description="Bad Request - Invalid data format."),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
-        403: OpenApiResponse(description="Forbidden - Permission denied or 5-minute edit window expired."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
+        403: OpenApiResponse(
+            description="Forbidden - Permission denied or 5-minute edit window expired."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )
@@ -169,14 +193,20 @@ complaint_delete_doc = extend_schema(
                 name="ComplaintDeleteResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Complaint deleted successfully"),
+                    "message": rf_serializers.CharField(
+                        default="Complaint deleted successfully"
+                    ),
                     "data": rf_serializers.CharField(allow_null=True),
                 },
             ),
             description="Complaint deleted successfully.",
         ),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
-        403: OpenApiResponse(description="Forbidden - Permission denied or 5-minute edit window expired."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
+        403: OpenApiResponse(
+            description="Forbidden - Permission denied or 5-minute edit window expired."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )
@@ -200,7 +230,9 @@ comment_list_doc = extend_schema(
                 name="CommentListResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Comments fetched successfully."),
+                    "message": rf_serializers.CharField(
+                        default="Comments fetched successfully."
+                    ),
                     "data": inline_serializer(
                         name="CommentPaginatedData",
                         fields={
@@ -214,7 +246,9 @@ comment_list_doc = extend_schema(
             ),
             description="Comments retrieved successfully.",
         ),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )
@@ -240,7 +274,9 @@ comment_create_doc = extend_schema(
                 name="CommentCreateResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="comment added successfully"),
+                    "message": rf_serializers.CharField(
+                        default="comment added successfully"
+                    ),
                     "data": inline_serializer(
                         name="CommentCreateData",
                         fields={"comment_id": rf_serializers.UUIDField()},
@@ -250,7 +286,9 @@ comment_create_doc = extend_schema(
             description="Comment created successfully.",
         ),
         400: OpenApiResponse(description="Bad Request - Invalid data format."),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )
@@ -276,7 +314,9 @@ upvote_toggle_doc = extend_schema(
                 name="UpvoteToggleResponse",
                 fields={
                     "success": rf_serializers.BooleanField(default=True),
-                    "message": rf_serializers.CharField(default="Upvoted updated successfully"),
+                    "message": rf_serializers.CharField(
+                        default="Upvoted updated successfully"
+                    ),
                     "data": inline_serializer(
                         name="UpvoteToggleData",
                         fields={"upvote": rf_serializers.BooleanField()},
@@ -285,7 +325,9 @@ upvote_toggle_doc = extend_schema(
             ),
             description="Upvote toggled successfully.",
         ),
-        401: OpenApiResponse(description="Unauthorized - Missing or invalid access token."),
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
         404: OpenApiResponse(description="Not Found - Complaint does not exist."),
     },
 )

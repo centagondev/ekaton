@@ -233,7 +233,7 @@ class ComplaintAPITests(APITestCase):
     def test_update_complaint_after_5_minutes_fails(self):
         from datetime import timedelta
         from django.utils import timezone
-        
+
         self.authenticate()
         complaint = Complaint.objects.create(
             user=self.user,
@@ -242,13 +242,15 @@ class ComplaintAPITests(APITestCase):
             category=Complaint.Category.GENERAL,
         )
         # Mock created_at directly in DB (BaseModel overrides save, so we use update)
-        Complaint.objects.filter(id=complaint.id).update(created_at=timezone.now() - timedelta(minutes=6))
+        Complaint.objects.filter(id=complaint.id).update(
+            created_at=timezone.now() - timedelta(minutes=6)
+        )
         complaint.refresh_from_db()
 
         url = reverse("complaint-detail", kwargs={"complaint_id": complaint.id})
         response = self.client.patch(url, {"title": "New title"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        
+
     def test_delete_complaint_within_5_minutes(self):
         self.authenticate()
         complaint = Complaint.objects.create(
@@ -264,14 +266,16 @@ class ComplaintAPITests(APITestCase):
     def test_delete_complaint_after_5_minutes_fails(self):
         from datetime import timedelta
         from django.utils import timezone
-        
+
         self.authenticate()
         complaint = Complaint.objects.create(
             user=self.user,
             title="Old title",
             description="Old desc",
         )
-        Complaint.objects.filter(id=complaint.id).update(created_at=timezone.now() - timedelta(minutes=6))
+        Complaint.objects.filter(id=complaint.id).update(
+            created_at=timezone.now() - timedelta(minutes=6)
+        )
 
         url = reverse("complaint-detail", kwargs={"complaint_id": complaint.id})
         response = self.client.delete(url)
@@ -302,19 +306,25 @@ class ComplaintAPITests(APITestCase):
 
     def test_add_comment(self):
         self.authenticate()
-        complaint = Complaint.objects.create(user=self.user, title="Complaint", description="Desc")
+        complaint = Complaint.objects.create(
+            user=self.user, title="Complaint", description="Desc"
+        )
         url = reverse("complaint-comment", kwargs={"complaint_id": complaint.id})
-        response = self.client.post(url, {"comment": "My comment", "is_anonymous": True}, format="json")
+        response = self.client.post(
+            url, {"comment": "My comment", "is_anonymous": True}, format="json"
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(complaint.comments.count(), 1)
 
     def test_list_comments(self):
         self.authenticate()
-        complaint = Complaint.objects.create(user=self.user, title="Complaint", description="Desc")
+        complaint = Complaint.objects.create(
+            user=self.user, title="Complaint", description="Desc"
+        )
         url = reverse("complaint-comment", kwargs={"complaint_id": complaint.id})
         self.client.post(url, {"comment": "C1", "is_anonymous": True}, format="json")
         self.client.post(url, {"comment": "C2", "is_anonymous": True}, format="json")
-        
+
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["data"]["results"]), 2)
@@ -323,9 +333,11 @@ class ComplaintAPITests(APITestCase):
 
     def test_toggle_upvote(self):
         self.authenticate()
-        complaint = Complaint.objects.create(user=self.user, title="Complaint", description="Desc")
+        complaint = Complaint.objects.create(
+            user=self.user, title="Complaint", description="Desc"
+        )
         url = reverse("upvote-complaint", kwargs={"complaint_id": complaint.id})
-        
+
         # Upvote
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -340,14 +352,23 @@ class ComplaintAPITests(APITestCase):
 
     def test_comment_is_rate_limited(self):
         from core.throttles import CommentCreateRateThrottle
+
         self.authenticate()
-        complaint = Complaint.objects.create(user=self.user, title="Complaint", description="Desc")
+        complaint = Complaint.objects.create(
+            user=self.user, title="Complaint", description="Desc"
+        )
         url = reverse("complaint-comment", kwargs={"complaint_id": complaint.id})
 
         with patch.object(CommentCreateRateThrottle, "rate", "2/hour", create=True):
-            r1 = self.client.post(url, {"comment": "C1", "is_anonymous": True}, format="json")
-            r2 = self.client.post(url, {"comment": "C2", "is_anonymous": True}, format="json")
-            r3 = self.client.post(url, {"comment": "C3", "is_anonymous": True}, format="json")
+            r1 = self.client.post(
+                url, {"comment": "C1", "is_anonymous": True}, format="json"
+            )
+            r2 = self.client.post(
+                url, {"comment": "C2", "is_anonymous": True}, format="json"
+            )
+            r3 = self.client.post(
+                url, {"comment": "C3", "is_anonymous": True}, format="json"
+            )
 
         self.assertEqual(r1.status_code, status.HTTP_201_CREATED)
         self.assertEqual(r2.status_code, status.HTTP_201_CREATED)
@@ -355,8 +376,11 @@ class ComplaintAPITests(APITestCase):
 
     def test_upvote_is_rate_limited(self):
         from core.throttles import UpvoteToggleRateThrottle
+
         self.authenticate()
-        complaint = Complaint.objects.create(user=self.user, title="Complaint", description="Desc")
+        complaint = Complaint.objects.create(
+            user=self.user, title="Complaint", description="Desc"
+        )
         url = reverse("upvote-complaint", kwargs={"complaint_id": complaint.id})
 
         with patch.object(UpvoteToggleRateThrottle, "rate", "2/hour", create=True):

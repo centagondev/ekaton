@@ -3,10 +3,11 @@ from django.db.models import Count
 from django.http import Http404
 
 from .models import Complaint, ComplaintComment, ComplaintUpvote
-from rest_framework.exceptions import ValidationError,PermissionDenied
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta
+
 
 @transaction.atomic
 def create_complaint(user, title, description, category, is_anonymous):
@@ -24,19 +25,27 @@ def create_complaint(user, title, description, category, is_anonymous):
 from django.db.models import Count, Subquery, OuterRef
 from django.db.models.functions import Coalesce
 
-def get_complaints():
-    comments_subquery = ComplaintComment.objects.filter(
-        complaint=OuterRef("pk")
-    ).values("complaint").annotate(c=Count("id")).values("c")
 
-    upvotes_subquery = ComplaintUpvote.objects.filter(
-        complaint=OuterRef("pk")
-    ).values("complaint").annotate(c=Count("id")).values("c")
+def get_complaints():
+    comments_subquery = (
+        ComplaintComment.objects.filter(complaint=OuterRef("pk"))
+        .values("complaint")
+        .annotate(c=Count("id"))
+        .values("c")
+    )
+
+    upvotes_subquery = (
+        ComplaintUpvote.objects.filter(complaint=OuterRef("pk"))
+        .values("complaint")
+        .annotate(c=Count("id"))
+        .values("c")
+    )
 
     return Complaint.objects.select_related("user").annotate(
         comment_count=Coalesce(Subquery(comments_subquery), 0),
         upvote_count=Coalesce(Subquery(upvotes_subquery), 0),
     )
+
 
 def get_complaint(complaint_id):
     try:
@@ -44,17 +53,17 @@ def get_complaint(complaint_id):
     except Complaint.DoesNotExist:
         raise Http404("No Complaint matches the given query.")
 
+
 def can_modify_complaint(user, complaint):
-    if complaint.user !=user:
-        raise PermissionDenied(
-            "This complaint does not belong to you."
-        )
-    
+    if complaint.user != user:
+        raise PermissionDenied("This complaint does not belong to you.")
+
     if timezone.now() > complaint.created_at + timedelta(minutes=5):
         raise PermissionDenied(
             "You can only edit or delete a complaint within 5 minutes of posting."
         )
-    
+
+
 @transaction.atomic
 def update_complaint(user, complaint_id, validated_data):
 
@@ -66,14 +75,15 @@ def update_complaint(user, complaint_id, validated_data):
     can_modify_complaint(user, complaint)
 
     for fields, value in validated_data.items():
-        setattr(complaint,fields, value)
+        setattr(complaint, fields, value)
 
     update_fields = list(validated_data.keys())
     update_fields.append("updated_at")
-    
+
     complaint.save(update_fields=update_fields)
 
     return complaint
+
 
 @transaction.atomic
 def delete_complaint(user, complaint_id):
@@ -85,6 +95,7 @@ def delete_complaint(user, complaint_id):
     can_modify_complaint(user, complaint)
 
     complaint.delete()
+
 
 @transaction.atomic
 def create_comment(user, complaint_id, comment, is_anonymous):

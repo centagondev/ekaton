@@ -5,16 +5,24 @@ This module contains all drf-spectacular ``extend_schema`` decorator instances
 for the ``apps/administration`` API endpoints.
 """
 
-from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
-                                   extend_schema, inline_serializer)
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers as rf_serializers
 
 from apps.users.serializers import UserSerializer
 
-from .serializers import (AdminCreateUserSerializer, AdminLoginSerializer,
-                          AdminReportSerializer,
-                          AdminUpdateReportStatusSerializer,
-                          AdminUserSerializer, AdminUserUpdateSerializer)
+from .serializers import (
+    AdminCreateUserSerializer,
+    AdminLoginSerializer,
+    AdminReportSerializer,
+    AdminUpdateReportStatusSerializer,
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
+)
 
 # ---------------------------------------------------------------------------
 # Admin Login
@@ -129,8 +137,8 @@ admin_dashboard_doc = extend_schema(
                         "data": {
                             "statistics": {
                                 "users_count": 1500,
-                                "active_users_count": None,
-                                "active_events_count": None,
+                                "online_users_count": 42,
+                                "active_events_count": 3,
                                 "pending_reports_count": 12,
                                 "total_chats_count": 450,
                                 "total_messages_count": 5200000,
@@ -536,9 +544,12 @@ admin_update_report_status_doc = extend_schema(
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
 
-from .serializers import (AdminCreateEventSerializer,
-                          AdminEventDetailSerializer, AdminEventSerializer,
-                          AdminUpdateEventSerializer)
+from .serializers import (
+    AdminCreateEventSerializer,
+    AdminEventDetailSerializer,
+    AdminEventSerializer,
+    AdminUpdateEventSerializer,
+)
 
 admin_event_list_doc = extend_schema(
     operation_id="admin_events_list",
@@ -602,7 +613,16 @@ admin_event_detail_doc = extend_schema(
         )
     ],
     responses={
-        200: OpenApiResponse(response=inline_serializer(name="AdminEventDetailResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event response."),
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminEventDetailResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": AdminEventDetailSerializer(),
+                },
+            ),
+            description="Event response.",
+        ),
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
         404: OpenApiResponse(description="Not Found - Event does not exist."),
@@ -616,7 +636,16 @@ admin_create_event_doc = extend_schema(
     description="Create an event for an active user. Name must contain at least 3 characters, text fields are trimmed, and end_time must be in the future. Authentication requirement: Admin only (IsAdminUser).",
     request=AdminCreateEventSerializer,
     responses={
-        201: OpenApiResponse(response=inline_serializer(name="AdminCreateEventResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event created successfully."),
+        201: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminCreateEventResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": AdminEventDetailSerializer(),
+                },
+            ),
+            description="Event created successfully.",
+        ),
         400: OpenApiResponse(description="Bad Request - Validation error."),
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
@@ -639,7 +668,16 @@ admin_update_event_doc = extend_schema(
     ],
     request=AdminUpdateEventSerializer,
     responses={
-        200: OpenApiResponse(response=inline_serializer(name="AdminUpdateEventResponse", fields={"message": rf_serializers.CharField(), "data": AdminEventDetailSerializer()}), description="Event response."),
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminUpdateEventResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                    "data": AdminEventDetailSerializer(),
+                },
+            ),
+            description="Event response.",
+        ),
         400: OpenApiResponse(description="Bad Request - Validation error."),
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
@@ -662,7 +700,13 @@ admin_cancel_event_doc = extend_schema(
         )
     ],
     responses={
-        200: OpenApiResponse(response=inline_serializer(name="AdminCancelEventResponse", fields={"message": rf_serializers.CharField()}), description="Event cancelled successfully."),
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminCancelEventResponse",
+                fields={"message": rf_serializers.CharField()},
+            ),
+            description="Event cancelled successfully.",
+        ),
         401: OpenApiResponse(description="Unauthorized - Not authenticated."),
         403: OpenApiResponse(description="Forbidden - User is not an admin."),
         404: OpenApiResponse(description="Not Found - Event does not exist."),

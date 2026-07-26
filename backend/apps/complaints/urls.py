@@ -4,7 +4,7 @@ from .views import (
     ComplaintAPIView,
     ComplaintCommentAPIView,
     ComplaintUpvoteAPIView,
-    ComplaintDetailAPIView
+    ComplaintDetailAPIView,
 )
 
 urlpatterns = [
@@ -20,8 +20,8 @@ urlpatterns = [
         name="upvote-complaint",
     ),
     path(
-    "<uuid:complaint_id>/",
-    ComplaintDetailAPIView.as_view(),
-    name="complaint-detail",
-)
+        "<uuid:complaint_id>/",
+        ComplaintDetailAPIView.as_view(),
+        name="complaint-detail",
+    ),
 ]

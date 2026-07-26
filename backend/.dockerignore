@@ -1,0 +1,48 @@
+# ── 1. Heavy & Incompatible ──────────────────────────────────────────────────
+# Windows-compiled Python environments — Docker will pip install fresh on Linux
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ── 2. Top Secret ─────────────────────────────────────────────────────────────
+# Never burn secrets into the image — Docker reads them at runtime via env_file
+.env
+.env.*
+
+# ── 3. Junk / Auto-Generated ──────────────────────────────────────────────────
+# Python bytecode caches — generated fresh inside the container
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Celery Beat scheduler state — generated fresh inside the container
+celerybeat-schedule*
+
+# Local SQLite DB — we use PostgreSQL (Supabase) in Docker
+db.sqlite3
+db.sqlite3-journal
+
+# Ruff linter cache
+.ruff_cache/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── 4. Personal Editor Files ──────────────────────────────────────────────────
+# VS Code / JetBrains / OS files — Docker doesn't need these
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
