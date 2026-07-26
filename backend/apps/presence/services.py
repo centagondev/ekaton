@@ -10,6 +10,9 @@ from channels.layers import get_channel_layer
 from core.redis import redis_client
 
 from .constants import (
+    EVENT_CONNECTION_KEY,
+    EVENT_PRESENCE_KEY,
+    EVENT_PRESENCE_TTL,
     PLATFORM_BROADCAST_DEBOUNCE_KEY,
     PLATFORM_BROADCAST_DEBOUNCE_SECONDS,
     PLATFORM_CONNECTION_KEY,
@@ -34,10 +37,13 @@ class EventPresenceService:
     - Retrieve online users.
     - Check whether a user is online.
 
-    Presence data is stored in Redis Sets.
+    Presence data is stored in Redis Sets. Each user also has a set of their
+    open channel names, so several tabs on the same event count as one online
+    user; see the key documentation in .constants.
 
     Redis Key Format:
         presence:event:{event_id}:users
+        presence:event:{event_id}:connections:{user_id}
     """
 
     @classmethod
@@ -48,41 +54,101 @@ class EventPresenceService:
         """
         Generate the Redis key for an event's online users.
         """
-        return f"presence:event:{event_id}:users"
+        return EVENT_PRESENCE_KEY.format(event_id=event_id)
+
+    @classmethod
+    def _connection_key(
+        cls,
+        event_id: UUID,
+        user_id: UUID,
+    ) -> str:
+        """
+        Generate the Redis key holding a user's open sockets for an event.
+        """
+        return EVENT_CONNECTION_KEY.format(event_id=event_id, user_id=user_id)
 
     @classmethod
     def mark_online(
         cls,
         event_id: UUID,
         user_id: UUID,
-    ) -> None:
+        connection_id: str,
+    ) -> int:
         """
-        Add a user to an event's online presence set.
+        Register an open socket and add the user to the event's online set.
+
+        Returns the number of sockets the user now has open on this event, so
+        the caller can tell a genuine arrival (1) from an extra tab.
         """
-        key = cls._event_presence_key(event_id)
-        redis_client.sadd(key, str(user_id))
+        presence_key = cls._event_presence_key(event_id)
+        connection_key = cls._connection_key(event_id, user_id)
+
+        connection_count = redis_client.eval(
+            """
+            redis.call('SADD', KEYS[1], ARGV[1])
+            redis.call('SADD', KEYS[2], ARGV[2])
+            redis.call('EXPIRE', KEYS[1], ARGV[3])
+            redis.call('EXPIRE', KEYS[2], ARGV[3])
+            return redis.call('SCARD', KEYS[1])
+            """,
+            2,
+            connection_key,
+            presence_key,
+            connection_id,
+            str(user_id),
+            EVENT_PRESENCE_TTL,
+        )
+
         logger.debug(
-            "User '%s' marked online in event '%s'.",
+            "User '%s' marked online in event '%s'. Active connections: %d.",
             user_id,
             event_id,
+            connection_count,
         )
+
+        return connection_count
 
     @classmethod
     def mark_offline(
         cls,
         event_id: UUID,
         user_id: UUID,
-    ) -> None:
+        connection_id: str,
+    ) -> int:
         """
-        Remove a user from an event's online presence set.
+        Remove one open socket, and remove the user from the event's online
+        set once none of their sockets remain.
+
+        Returns the number of sockets the user still has open on this event.
         """
-        key = cls._event_presence_key(event_id)
-        redis_client.srem(key, str(user_id))
+        presence_key = cls._event_presence_key(event_id)
+        connection_key = cls._connection_key(event_id, user_id)
+
+        connection_count = redis_client.eval(
+            """
+            redis.call('SREM', KEYS[1], ARGV[1])
+            local count = redis.call('SCARD', KEYS[1])
+            if count == 0 then
+                redis.call('DEL', KEYS[1])
+                redis.call('SREM', KEYS[2], ARGV[2])
+            end
+            return count
+            """,
+            2,
+            connection_key,
+            presence_key,
+            connection_id,
+            str(user_id),
+        )
+
         logger.debug(
-            "User '%s' marked offline in event '%s'.",
+            "User '%s' closed a connection in event '%s'. Remaining: %d.",
             user_id,
             event_id,
+            connection_count,
         )
+
+        return connection_count
 
     @classmethod
     def get_online_users(
@@ -136,13 +202,24 @@ class EventPresenceService:
         """
         Remove all presence data for an event.
 
-        Useful when an event is deleted or permanently closed.
+        Used when an event is cancelled or has expired, which is also what
+        reclaims the per-user connection sets.
         """
         key = cls._event_presence_key(event_id)
-        redis_client.delete(key)
+        connection_pattern = EVENT_CONNECTION_KEY.format(
+            event_id=event_id,
+            user_id="*",
+        )
+        connection_keys = list(
+            redis_client.scan_iter(match=connection_pattern, count=500),
+        )
+
+        redis_client.delete(key, *connection_keys)
+
         logger.info(
-            "Presence data cleared for event '%s'.",
+            "Presence data cleared for event '%s'. Connection keys removed: %d.",
             event_id,
+            len(connection_keys),
         )
 
 

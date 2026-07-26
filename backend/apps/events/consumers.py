@@ -1,5 +1,4 @@
 import logging
-import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -8,13 +7,14 @@ from rest_framework.exceptions import ValidationError
 
 from apps.presence.services import EventPresenceService
 
-from .models import EventMessage, EventParticipant, EventStatus
+from .models import MAX_MESSAGE_LENGTH, EventMessage, EventParticipant, EventStatus
 from .serializers import EventMessageSerializer
-from .services import send_event_message
+from .services import event_group_name, send_event_message
 
 logger = logging.getLogger(__name__)
 
-MAX_MESSAGE_LENGTH = 1000
+# Close code sent when the event itself ends while clients are connected.
+EVENT_CLOSED_CODE = 4004
 
 
 class EventConsumer(AsyncJsonWebsocketConsumer):
@@ -36,7 +36,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         self.event_id = str(self.scope["url_route"]["kwargs"]["event_id"])
 
-        self.group_name = f"event_{self.event_id}"
+        self.group_name = event_group_name(self.event_id)
 
         # Get the authenticated user from the JWT middleware.
         user = self.scope.get("user")
@@ -53,16 +53,21 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4003)
             return
 
+        self.anonymous_display_name = await self.get_anonymous_display_name()
+
         # Join the Redis channel group.
         await self.join_event_group()
 
         await self.accept()
 
-        await self.mark_user_online()
+        connection_count = await self.mark_user_online()
 
         await self.send_online_users()
 
-        await self.broadcast_presence("presence.joined")
+        # Only the first socket is an arrival. Announcing every socket would
+        # make a second tab look like another participant joining.
+        if connection_count == 1:
+            await self.broadcast_presence("presence.joined")
 
         # Deliver the last 150 messages to the newly connected client only.
         # This uses send_json (direct send) — not group_send — so only this
@@ -71,7 +76,6 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
         # Track history IDs to drop duplicate live messages broadcasted during connection
         self.history_message_ids = {msg.get("id") for msg in history if msg.get("id")}
-        self.last_message_time = 0
 
         await self.send_json(
             {
@@ -85,8 +89,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         Handle WebSocket disconnection.
         """
         if hasattr(self, "participant"):
-            await self.mark_user_offline()
-            await self.broadcast_presence("presence.left")
+            remaining_connections = await self.mark_user_offline()
+
+            # The user has only left once their last tab is gone.
+            if remaining_connections == 0:
+                await self.broadcast_presence("presence.left")
 
         await self.leave_event_group()
 
@@ -94,10 +101,6 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         """
         Handle incoming JSON messages.
         """
-        now = time.time()
-
-        self.last_message_time = now
-
         # Validate payload type
         if not isinstance(content, dict):
             await self.send_json(
@@ -153,9 +156,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 message_content,
             )
         except ValidationError as exc:
+            # exc.detail is a list of ErrorDetail; str(exc) would send its
+            # Python repr to the client instead of the message itself.
             await self.send_json(
                 {
-                    "error": str(exc),
+                    "error": str(exc.detail[0]),
                 }
             )
 
@@ -192,8 +197,27 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             return
 
         await self.send_json(
-            message_data,
+            {
+                "type": "message",
+                "message": message_data,
+            }
         )
+
+    async def event_closed(self, event):
+        """
+        Tell the client the event is over, then close the connection.
+
+        Broadcast when an event is cancelled or expires. Without it a client
+        keeps an open socket on an event that rejects every message it sends.
+        """
+        await self.send_json(
+            {
+                "type": "event.closed",
+                "reason": event["reason"],
+            }
+        )
+
+        await self.close(code=EVENT_CLOSED_CODE)
 
     async def join_event_group(self):
         """
@@ -247,6 +271,23 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         )
 
     @database_sync_to_async
+    def get_anonymous_display_name(self):
+        """
+        Return the participant's anonymous display name, or None.
+
+        Read once at connect time, in a sync context, because the presence
+        and typing broadcasts run in the event loop and cannot follow a
+        foreign key themselves. The relation is not always cached on the
+        participant either: send_event_message refreshes it from the
+        database, which drops every cached relation.
+        """
+        return (
+            self.participant.anonymous_name.display_name
+            if self.participant.anonymous_name
+            else None
+        )
+
+    @database_sync_to_async
     def save_and_serialize_message(self, participant, content):
         """
         Create and serialize an event message in a single sync context.
@@ -262,35 +303,53 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
     async def mark_user_online(self):
         """
         Mark the current participant as online.
+
+        Returns how many sockets this participant now has open on the event.
         """
-        await database_sync_to_async(EventPresenceService.mark_online)(
-            event_id=self.participant.event_id, user_id=self.participant.user_id
+        return await database_sync_to_async(EventPresenceService.mark_online)(
+            event_id=self.participant.event_id,
+            user_id=self.participant.user_id,
+            connection_id=self.channel_name,
         )
 
     async def mark_user_offline(self):
         """
-        Remove the current participant from the event presence set.
+        Release this socket's presence for the current participant.
+
+        Returns how many of their sockets are still open on the event.
         """
-        await database_sync_to_async(EventPresenceService.mark_offline)(
-            event_id=self.participant.event_id, user_id=self.participant.user_id
+        return await database_sync_to_async(EventPresenceService.mark_offline)(
+            event_id=self.participant.event_id,
+            user_id=self.participant.user_id,
+            connection_id=self.channel_name,
         )
 
     async def broadcast_presence(self, event_type: str):
         """
         Broadcast a participant presence event to everyone in the event.
+
+        The sending channel is carried along so the handlers can skip the
+        participant the event is about, the same way the typing events do.
+        They already know they connected, and the online user list they get
+        on connect includes them.
+
+        The current online count travels with the event as well. Clients only
+        receive a count on connect otherwise, so they would have to keep their
+        own tally and it would drift: a participant who leaves the event over
+        the REST API is dropped from a later connection's online list, yet
+        still produces a presence.left when their socket finally closes.
         """
+        online_participants = await self.get_online_participants()
 
         await self.channel_layer.group_send(
             self.group_name,
             {
                 "type": event_type,
+                "count": len(online_participants),
                 "participant": {
                     "id": str(self.participant.id),
-                    "anonymous_name": (
-                        self.participant.anonymous_name.display_name
-                        if self.participant.anonymous_name
-                        else None
-                    ),
+                    "anonymous_name": self.anonymous_display_name,
+                    "sender_channel": self.channel_name,
                 },
             },
         )
@@ -305,11 +364,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "type": "typing.started",
                 "participant": {
                     "id": str(self.participant.id),
-                    "anonymous_name": (
-                        self.participant.anonymous_name.display_name
-                        if self.participant.anonymous_name
-                        else None
-                    ),
+                    "anonymous_name": self.anonymous_display_name,
                     "sender_channel": self.channel_name,
                 },
             },
@@ -332,25 +387,41 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
     async def presence_joined(self, event):
         """
-        Send participant joined event.
+        Send participant joined event to everyone except the participant
+        who joined.
         """
+
+        if event["participant"]["sender_channel"] == self.channel_name:
+            return
 
         await self.send_json(
             {
                 "type": "presence.joined",
-                "participant": event["participant"],
+                "count": event["count"],
+                "participant": {
+                    "id": event["participant"]["id"],
+                    "anonymous_name": event["participant"]["anonymous_name"],
+                },
             }
         )
 
     async def presence_left(self, event):
         """
-        Send participant left event.
+        Send participant left event to everyone except the participant
+        who left.
         """
+
+        if event["participant"]["sender_channel"] == self.channel_name:
+            return
 
         await self.send_json(
             {
                 "type": "presence.left",
-                "participant": event["participant"],
+                "count": event["count"],
+                "participant": {
+                    "id": event["participant"]["id"],
+                    "anonymous_name": event["participant"]["anonymous_name"],
+                },
             }
         )
 
