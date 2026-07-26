@@ -6,8 +6,6 @@ from apps.chat.services import create_private_chat_room
 from apps.users.models import User
 from core.redis import redis_client
 
-
-
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"
 
@@ -220,8 +218,6 @@ def start_chat(user):
                 if waiting_user.id == user.id:
                     add_user_to_queue(user)
                     continue
-
-
 
                 # Found a valid match.
                 print("Breaking loop")

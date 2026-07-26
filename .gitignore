@@ -28,6 +28,7 @@ staticfiles/
 
 # IDE / Editors
 .vscode/
+.claude/
 .idea/
 *.swp
 *.swo

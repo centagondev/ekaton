@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import logging
+import time
 from uuid import UUID
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from core.redis import redis_client
+
+from .constants import (
+    PLATFORM_BROADCAST_DEBOUNCE_KEY,
+    PLATFORM_BROADCAST_DEBOUNCE_SECONDS,
+    PLATFORM_CONNECTION_KEY,
+    PLATFORM_CONNECTION_TTL,
+    PLATFORM_LAST_BROADCAST_KEY,
+    PLATFORM_LAST_BROADCAST_TTL,
+    PLATFORM_PRESENCE_GROUP,
+    PLATFORM_PRESENCE_KEY,
+)
+from .seed_services import SeedService
+
+logger = logging.getLogger(__name__)
 
 
 class EventPresenceService:
@@ -40,12 +59,12 @@ class EventPresenceService:
         """
         Add a user to an event's online presence set.
         """
-
         key = cls._event_presence_key(event_id)
-
-        redis_client.sadd(
-            key,
-            str(user_id),
+        redis_client.sadd(key, str(user_id))
+        logger.debug(
+            "User '%s' marked online in event '%s'.",
+            user_id,
+            event_id,
         )
 
     @classmethod
@@ -57,12 +76,12 @@ class EventPresenceService:
         """
         Remove a user from an event's online presence set.
         """
-
         key = cls._event_presence_key(event_id)
-
-        redis_client.srem(
-            key,
-            str(user_id),
+        redis_client.srem(key, str(user_id))
+        logger.debug(
+            "User '%s' marked offline in event '%s'.",
+            user_id,
+            event_id,
         )
 
     @classmethod
@@ -73,9 +92,7 @@ class EventPresenceService:
         """
         Return the IDs of all users currently online in an event.
         """
-
         key = cls._event_presence_key(event_id)
-
         return list(redis_client.smembers(key))
 
     @classmethod
@@ -87,13 +104,8 @@ class EventPresenceService:
         """
         Check whether a user is currently online in an event.
         """
-
         key = cls._event_presence_key(event_id)
-
-        return redis_client.sismember(
-            key,
-            str(user_id),
-        )
+        return redis_client.sismember(key, str(user_id))
 
     @classmethod
     def get_online_count(
@@ -103,9 +115,7 @@ class EventPresenceService:
         """
         Return the number of users currently online in an event.
         """
-
         key = cls._event_presence_key(event_id)
-
         return redis_client.scard(key)
 
     @classmethod
@@ -116,7 +126,6 @@ class EventPresenceService:
         """
         Return True if the event has at least one online user.
         """
-
         return cls.get_online_count(event_id) > 0
 
     @classmethod
@@ -129,10 +138,12 @@ class EventPresenceService:
 
         Useful when an event is deleted or permanently closed.
         """
-
         key = cls._event_presence_key(event_id)
-
         redis_client.delete(key)
+        logger.info(
+            "Presence data cleared for event '%s'.",
+            event_id,
+        )
 
 
 class PlatformPresenceService:
@@ -144,90 +155,155 @@ class PlatformPresenceService:
     - Mark users as offline.
     - Retrieve online users.
     - Check whether a user is online.
+    - Broadcast updated online count via Django Channels.
 
-    Presence data is stored in a Redis Set.
+    Presence data is stored in expiry-aware Redis sorted sets, scored by the
+    UNIX timestamp at which each entry's lease expires.
 
-    Redis Key Format:
-        presence:platform:users
+    Redis Keys:
+        presence:platform:users:v2
+            member = user id, score = lease expiry. One entry per online user.
+
+        presence:platform:connections:v2:{user_id}
+            member = channel name, score = lease expiry. One entry per open
+            socket, so a user with several tabs stays online until the last
+            one closes. Carries a key-level TTL as a backstop.
+
+    Leases are renewed by the consumer's keepalive; see
+    PlatformPresenceConsumer._keepalive.
     """
+
     @classmethod
-    def _platform_presence_key(cls)->str :
+    def _platform_presence_key(cls) -> str:
         """
         Generate the Redis key for platform online users.
         """
-        return "presence:platform:users"
-    
+        return PLATFORM_PRESENCE_KEY
+
+    @staticmethod
+    def _connection_key(user_id: UUID) -> str:
+        """
+        Return the Redis key that stores all active
+        WebSocket connections for a user.
+        """
+        return PLATFORM_CONNECTION_KEY.format(user_id=user_id)
+
     @classmethod
-    def mark_online(cls,user_id:UUID,connection_id:str ) -> None:
+    def mark_online(cls, user_id: UUID, connection_id: str) -> None:
         """
-        Add a user to the platform online presence set.
+        Register a new WebSocket connection for a user and, if this
+        is their first active connection, add them to the platform
+        presence set.
         """
-        
-        presence_key=cls._platform_presence_key()
-        
-        connection_key=cls._connection_key(user_id)
-        
-        redis_client.sadd(connection_key,
-                          connection_id)
-        
-        connection_count=redis_client.scard(connection_key)
+        presence_key = cls._platform_presence_key()
+        connection_key = cls._connection_key(user_id)
+
+        connection_count = redis_client.eval(
+            """
+            redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+            redis.call('ZADD', KEYS[1], ARGV[2], ARGV[3])
+            redis.call('ZADD', KEYS[2], ARGV[2], ARGV[4])
+            redis.call('EXPIRE', KEYS[1], ARGV[5])
+            return redis.call('ZCARD', KEYS[1])
+            """,
+            2,
+            connection_key,
+            presence_key,
+            time.time(),
+            time.time() + PLATFORM_CONNECTION_TTL,
+            connection_id,
+            str(user_id),
+            PLATFORM_CONNECTION_TTL,
+        )
+
         if connection_count == 1:
-            redis_client.sadd(presence_key,str(user_id))
-        
+            logger.info(
+                "User '%s' became online on the platform. " "Active connections: %d.",
+                user_id,
+                connection_count,
+            )
+        else:
+            logger.debug(
+                "User '%s' opened an additional tab. " "Active connections: %d.",
+                user_id,
+                connection_count,
+            )
+
     @classmethod
-    def mark_offline(cls,user_id:UUID,connection_id: str,) -> None:
+    def mark_offline(cls, user_id: UUID, connection_id: str) -> None:
         """
-        Remove a user from the platform online presence set.
+        Remove a WebSocket connection for a user and, if no active
+        connections remain, remove them from the platform presence set.
         """
-        presence_key=cls._platform_presence_key()
-        connection_key=cls._connection_key(user_id)
-        
-        redis_client.srem(connection_key,connection_id)
-    
-        connection_count=redis_client.scard(connection_key)
-        
-        if connection_count == 0 :
-            
-            redis_client.srem(presence_key,str(user_id))
-            redis_client.delete(connection_key)
-    
+        presence_key = cls._platform_presence_key()
+        connection_key = cls._connection_key(user_id)
+
+        connection_count = redis_client.eval(
+            """
+            redis.call('ZREM', KEYS[1], ARGV[1])
+            redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[2])
+            local count = redis.call('ZCARD', KEYS[1])
+            if count == 0 then
+                redis.call('ZREM', KEYS[2], ARGV[3])
+                redis.call('DEL', KEYS[1])
+            end
+            return count
+            """,
+            2,
+            connection_key,
+            presence_key,
+            connection_id,
+            time.time(),
+            str(user_id),
+            PLATFORM_CONNECTION_TTL,
+        )
+
+        if connection_count == 0:
+            logger.info(
+                "User '%s' went offline from the platform. " "All connections closed.",
+                user_id,
+            )
+        else:
+            logger.debug(
+                "User '%s' closed one tab. " "Remaining connections: %d.",
+                user_id,
+                connection_count,
+            )
+
     @classmethod
-    def get_online_users(cls)->list[str]:
+    def get_online_users(cls) -> list[str]:
         """
         Return the IDs of all users currently online.
         """
-        key=cls._platform_presence_key()
-        
-        return list(redis_client.smembers(key))
-    
+        key = cls._platform_presence_key()
+        redis_client.zremrangebyscore(key, "-inf", time.time())
+        return list(redis_client.zrange(key, 0, -1))
+
     @classmethod
-    def is_online(cls,user_id:UUID)-> bool:
+    def is_online(cls, user_id: UUID) -> bool:
         """
         Check whether a user is currently online.
         """
-        
-        key=cls._platform_presence_key()
-        
-        return redis_client.sismember(key,str(user_id))
-    
-    @classmethod 
-    def get_online_count(cls)-> int:
+        key = cls._platform_presence_key()
+        redis_client.zremrangebyscore(key, "-inf", time.time())
+        return redis_client.zscore(key, str(user_id)) is not None
+
+    @classmethod
+    def get_online_count(cls) -> int:
         """
         Return the number of users currently online.
         """
-        
-        key=cls._platform_presence_key()
-        
-        return redis_client.scard(key)
-    
+        key = cls._platform_presence_key()
+        redis_client.zremrangebyscore(key, "-inf", time.time())
+        return redis_client.zcard(key)
+
     @classmethod
     def has_online_users(cls) -> bool:
         """
         Return True if at least one user is online.
         """
         return cls.get_online_count() > 0
-    
-    
+
     @classmethod
     def clear_platform_presence(cls) -> None:
         """
@@ -235,32 +311,170 @@ class PlatformPresenceService:
 
         Useful for development, testing, or administrative tasks.
         """
-        key=cls._platform_presence_key()
-        redis_client.delete(key)
-        
-    @staticmethod
-    def _connection_key(user_id:UUID)-> str:
+        key = cls._platform_presence_key()
+        connection_pattern = PLATFORM_CONNECTION_KEY.format(user_id="*")
+        connection_keys = list(
+            redis_client.scan_iter(match=connection_pattern, count=500),
+        )
+        redis_client.delete(key, *connection_keys)
+        logger.info(
+            "Platform presence data cleared. Connection keys removed: %d.",
+            len(connection_keys),
+        )
+
+    @classmethod
+    def refresh_connection(cls, user_id: UUID, connection_id: str) -> bool:
         """
-        Return the Redis key that stores all active
-        WebSocket connections for a user.
+        Extend the presence lease for a connection that is still open.
+
+        The connection is re-registered unconditionally, so a lease that has
+        already lapsed (for example after a transient Redis outage or a long
+        pause in renewals) is restored rather than left permanently invisible
+        while the socket is still connected.
+
+        Returns True if the lease was still active, False if it had expired
+        and had to be restored.
         """
-        return f"presence:platform:connections:{user_id}"
-    
-        
-        
+        connection_key = cls._connection_key(user_id)
+        presence_key = cls._platform_presence_key()
+        now = time.time()
 
-    
+        was_active = redis_client.eval(
+            """
+            redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[3])
+            local was_active = redis.call('ZSCORE', KEYS[1], ARGV[2]) and 1 or 0
+            redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
+            redis.call('ZADD', KEYS[2], ARGV[1], ARGV[4])
+            redis.call('EXPIRE', KEYS[1], ARGV[5])
+            return was_active
+            """,
+            2,
+            connection_key,
+            presence_key,
+            now + PLATFORM_CONNECTION_TTL,
+            connection_id,
+            now,
+            str(user_id),
+            PLATFORM_CONNECTION_TTL,
+        )
 
+        if not was_active:
+            logger.warning(
+                "Restored a lapsed presence lease: user='%s', channel='%s'.",
+                user_id,
+                connection_id,
+            )
 
-class SeedService:
-    """
-    Future service responsible for:
+        return bool(was_active)
 
-    - Dynamic display seed
-    - Seed generation
-    - Seed refresh
-    - Display count calculation
-    """
-    
+    @classmethod
+    def claim_broadcast(cls) -> int | None:
+        """
+        Reserve the right to broadcast, and return the count to send.
 
+        Only the first caller in each debounce window gets a value; everyone
+        else gets None and must not send. This is what stops a few hundred
+        simultaneous connects from each fanning a message out to the whole
+        group. The caller is expected to call record_broadcast afterwards.
 
+        Note this is a leading-edge debounce: the winner sends the count as it
+        was at the start of the window, so the tail of a burst is not
+        reflected. broadcast_if_changed is what settles the final value.
+        """
+        reserved = redis_client.set(
+            PLATFORM_BROADCAST_DEBOUNCE_KEY,
+            "1",
+            nx=True,
+            ex=PLATFORM_BROADCAST_DEBOUNCE_SECONDS,
+        )
+
+        if not reserved:
+            return None
+
+        return SeedService.get_display_count()
+
+    @classmethod
+    def record_broadcast(cls, count: int) -> None:
+        """
+        Remember the count that was last sent to clients.
+        """
+        redis_client.set(
+            PLATFORM_LAST_BROADCAST_KEY,
+            count,
+            ex=PLATFORM_LAST_BROADCAST_TTL,
+        )
+
+    @classmethod
+    def last_broadcast_count(cls) -> int | None:
+        """
+        Return the count clients were last told, or None if unknown.
+        """
+        count = redis_client.get(PLATFORM_LAST_BROADCAST_KEY)
+        return None if count is None else int(count)
+
+    @classmethod
+    def _send_online_count(cls, count: int) -> bool:
+        """
+        Push a count to the platform group. Returns whether it was sent.
+
+        Synchronous, for callers outside the event loop such as Celery.
+        """
+        channel_layer = get_channel_layer()
+
+        if channel_layer is None:
+            logger.error(
+                "No channel layer configured; cannot broadcast online count.",
+            )
+            return False
+
+        async_to_sync(channel_layer.group_send)(
+            PLATFORM_PRESENCE_GROUP,
+            {
+                "type": "platform.online_count",
+                "count": count,
+            },
+        )
+        cls.record_broadcast(count)
+
+        logger.debug("Platform online count broadcast. Count: %d.", count)
+        return True
+
+    @classmethod
+    def broadcast_online_count(cls, *, debounce: bool = True) -> bool:
+        """
+        Broadcast the latest platform display count to all connected clients.
+
+        Pass debounce=False for updates that must always propagate, such as a
+        seed refresh, where suppressing the message would leave clients on a
+        stale number until something else happens to trigger a send.
+        """
+        if debounce:
+            count = cls.claim_broadcast()
+            if count is None:
+                return False
+        else:
+            count = SeedService.get_display_count()
+
+        return cls._send_online_count(count)
+
+    @classmethod
+    def broadcast_if_changed(cls) -> bool:
+        """
+        Re-broadcast only when the display count has moved since the last send.
+
+        Two things make the count drift away from what clients are showing:
+        the debounce above drops the tail of a connect burst, and presence
+        leases expire silently without any connect or disconnect to react to.
+        Running this periodically settles both, and costs nothing when the
+        number has not changed.
+        """
+        count = SeedService.get_display_count()
+
+        if count == cls.last_broadcast_count():
+            return False
+
+        logger.info(
+            "Platform online count drifted; re-broadcasting %d.",
+            count,
+        )
+        return cls._send_online_count(count)

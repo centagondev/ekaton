@@ -1,10 +1,17 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .views import (ChangePasswordAPIView, CheckEmailAPIView,
-                    ForgetPasswordAPIView, LoginAPIView, LogoutAPIView,
-                    MeAPIView, ResendPasswordResetAPIView,
-                    ResetPasswordAPIView, SetPasswordAPIView)
+from .views import (
+    ChangePasswordAPIView,
+    CheckEmailAPIView,
+    ForgetPasswordAPIView,
+    LoginAPIView,
+    LogoutAPIView,
+    MeAPIView,
+    ResendPasswordResetAPIView,
+    ResetPasswordAPIView,
+    SetPasswordAPIView,
+)
 
 urlpatterns = [
     path("check-email/", CheckEmailAPIView.as_view(), name="check_email"),

@@ -12,24 +12,47 @@ from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
 from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 
-from .docs import (admin_cancel_event_doc, admin_create_event_doc,
-                   admin_create_user_doc, admin_dashboard_doc,
-                   admin_event_detail_doc, admin_event_list_doc,
-                   admin_login_doc, admin_reports_list_doc,
-                   admin_update_event_doc, admin_update_report_status_doc,
-                   admin_update_user_doc, admin_users_list_doc)
-from .serializers import (AdminCreateEventSerializer,
-                          AdminCreateUserSerializer,
-                          AdminEventDetailSerializer, AdminEventSerializer,
-                          AdminLoginSerializer, AdminReportSerializer,
-                          AdminUpdateEventSerializer,
-                          AdminUpdateReportStatusSerializer,
-                          AdminUserSerializer, AdminUserUpdateSerializer)
-from .services import (admin_create_user, admin_login, cancel_event,
-                       create_event, get_dashboard_statistics, get_event_by_id,
-                       get_event_statistics, get_events, get_reports,
-                       get_users, update_event, update_report_status,
-                       update_user)
+from .docs import (
+    admin_cancel_event_doc,
+    admin_create_event_doc,
+    admin_create_user_doc,
+    admin_dashboard_doc,
+    admin_event_detail_doc,
+    admin_event_list_doc,
+    admin_login_doc,
+    admin_reports_list_doc,
+    admin_update_event_doc,
+    admin_update_report_status_doc,
+    admin_update_user_doc,
+    admin_users_list_doc,
+)
+from .serializers import (
+    AdminCreateEventSerializer,
+    AdminCreateUserSerializer,
+    AdminEventDetailSerializer,
+    AdminEventSerializer,
+    AdminLoginSerializer,
+    AdminReportSerializer,
+    AdminUpdateEventSerializer,
+    AdminUpdateReportStatusSerializer,
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
+)
+from .services import (
+    admin_create_user,
+    admin_login,
+    cancel_event,
+    create_event,
+    get_dashboard_statistics,
+    get_event_by_id,
+    get_event_statistics,
+    get_events,
+    get_reports,
+    get_users,
+    update_event,
+    update_report_status,
+    update_user,
+)
 
 logger = logging.getLogger("authentication")
 

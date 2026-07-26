@@ -8,7 +8,6 @@ from core.encryption import encrypt_message
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 
 
-
 def create_private_chat_room(user_one, user_two):
     """Create and return a new active private chat room between two users.
 

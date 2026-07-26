@@ -1,10 +1,17 @@
 from django.urls import path
 
-from .views import (AdminCancelEventAPIView, AdminCreateEventAPIView,
-                    AdminDashboardAPIView, AdminEventAPIView,
-                    AdminEventDetailAPIView, AdminLoginAPIView,
-                    AdminReportAPIView, AdminUpdateEventAPIView,
-                    AdminUpdateUserAPIView, AdminUsersAPIView)
+from .views import (
+    AdminCancelEventAPIView,
+    AdminCreateEventAPIView,
+    AdminDashboardAPIView,
+    AdminEventAPIView,
+    AdminEventDetailAPIView,
+    AdminLoginAPIView,
+    AdminReportAPIView,
+    AdminUpdateEventAPIView,
+    AdminUpdateUserAPIView,
+    AdminUsersAPIView,
+)
 
 urlpatterns = [
     path("login/", AdminLoginAPIView.as_view(), name="admin-login"),

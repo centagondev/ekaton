@@ -37,8 +37,12 @@ Exports
 - ``report_doc``     → ReportAPIView.post
 """
 
-from drf_spectacular.utils import (OpenApiExample, OpenApiResponse,
-                                   extend_schema, inline_serializer)
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers as rf_serializers
 
 from .serializers import EndChatSerializer, ReportSerializer, StartChatSerializer

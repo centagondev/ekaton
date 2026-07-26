@@ -89,9 +89,11 @@ class AdminDashboardRateThrottle(UserRateThrottle):
 
 class CommentCreateRateThrottle(UserRateThrottle):
     """Rate limiter for comment creation. Scoped to authenticated users."""
+
     scope = "comment_create"
 
 
 class UpvoteToggleRateThrottle(UserRateThrottle):
     """Rate limiter for upvote toggling. Scoped to authenticated users."""
+
     scope = "upvote_toggle"

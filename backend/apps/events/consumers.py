@@ -406,7 +406,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         return [
             {
                 "id": str(participant.id),
-                "anonymous_name": participant.anonymous_name.display_name,
+                "anonymous_name": (
+                    participant.anonymous_name.display_name
+                    if participant.anonymous_name
+                    else None
+                ),
             }
             for participant in participants
         ]

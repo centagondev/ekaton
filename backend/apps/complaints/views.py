@@ -25,7 +25,7 @@ from .services import (
     get_complaint,
     toggle_upvote,
     update_complaint,
-    delete_complaint
+    delete_complaint,
 )
 from .docs import (
     comment_create_doc,
@@ -99,6 +99,7 @@ class ComplaintAPIView(APIView):
             data={"id": complaint.id},
         )
 
+
 class ComplaintDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -107,36 +108,30 @@ class ComplaintDetailAPIView(APIView):
         complaint = get_complaint(complaint_id)
         serializer = GetComplaintsSerializer(complaint)
         return success_response(
-            message="Complaint fetched successfully.",
-            data=serializer.data
+            message="Complaint fetched successfully.", data=serializer.data
         )
 
     @complaint_update_doc
-    def patch(self, request,complaint_id):
+    def patch(self, request, complaint_id):
         serializer = UpdateComplaintSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         complaint = update_complaint(
             user=request.user,
             complaint_id=complaint_id,
-            validated_data=serializer.validated_data
+            validated_data=serializer.validated_data,
         )
 
         return success_response(
             message="Complaint updated successfully.",
-            data=GetComplaintsSerializer(complaint).data
-        )
-    
-    @complaint_delete_doc
-    def delete(self, request, complaint_id):
-        delete_complaint(
-            user=request.user,
-            complaint_id=complaint_id
+            data=GetComplaintsSerializer(complaint).data,
         )
 
-        return success_response(
-            message="Complaint deleted successfully."
-        )
+    @complaint_delete_doc
+    def delete(self, request, complaint_id):
+        delete_complaint(user=request.user, complaint_id=complaint_id)
+
+        return success_response(message="Complaint deleted successfully.")
 
 
 class ComplaintCommentAPIView(APIView):

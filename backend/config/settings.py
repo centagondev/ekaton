@@ -281,4 +281,16 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.events.tasks.end_expired_events",
         "schedule": crontab(minute="*"),
     },
+    # This schedule is the single source of truth for how often the platform
+    # seed drifts; apps.presence.seed_services documents the dependency.
+    "refresh-platform-seed": {
+        "task": "apps.presence.tasks.refresh_platform_seed",
+        "schedule": crontab(minute="*/30"),
+    },
+    # Settles the online count after debounced connect bursts and after
+    # presence leases expire. Sends nothing when the count has not moved.
+    "reconcile-platform-online-count": {
+        "task": "apps.presence.tasks.reconcile_platform_online_count",
+        "schedule": 15.0,
+    },
 }

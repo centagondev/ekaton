@@ -9,8 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.chat.models import (PrivateChatRoom, PrivateMessage, Report,
-                              RevealRequest)
+from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 from apps.events.models import Event, EventParticipant, EventStatus
 from apps.users.models import User
 
@@ -304,6 +303,7 @@ def get_event_statistics():
         anonymous_events=Count("id", filter=Q(is_anonymous_chat=True)),
     )
     return statistics
+
 
 def get_events():
     """
