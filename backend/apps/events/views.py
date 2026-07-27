@@ -34,6 +34,7 @@ from .serializers import (
 from .services import (
     cancel_event,
     close_event_connections,
+    close_participant_connections,
     create_event,
     event_group_name,
     get_event,
@@ -66,6 +67,7 @@ class CreateEventAPIView(APIView):
 
         response_serializer = EventSerializer(
             event,
+            context={"request": request},
         )
         return success_response(
             message="Event created successfully.",
@@ -92,6 +94,7 @@ class EventListAPIView(APIView):
         serializer = EventSerializer(
             events,
             many=True,
+            context={"request": request},
         )
 
         return success_response(
@@ -112,7 +115,7 @@ class EventDetailAPIView(APIView):
 
         event = get_event(event_id=pk)
 
-        serializer = EventDetailSerializer(event)
+        serializer = EventDetailSerializer(event, context={"request": request})
 
         return success_response(
             message="Event retrieved successfully.",
@@ -144,7 +147,7 @@ class UpdateEventAPIView(APIView):
             validated_data=serializer.validated_data,
         )
 
-        response_serializer = EventSerializer(event)
+        response_serializer = EventSerializer(event, context={"request": request})
 
         return success_response(
             message="Event updated successfully.",
@@ -166,7 +169,9 @@ class CancelEventAPIView(APIView):
         """
         event = get_event(event_id=pk)
 
-        cancel_event(
+        # The cancelled instance is used below rather than the one fetched
+        # above, which still carries the pre-cancellation state.
+        event = cancel_event(
             event=event,
             user=request.user,
         )
@@ -245,6 +250,16 @@ class LeaveEventAPIView(APIView):
             event=event,
             user=request.user,
         )
+
+        # Sent after the service returns so the sockets are only dropped
+        # once the departure has been committed. Without it the tabs they
+        # left open stay in the event's group and keep receiving messages.
+        close_participant_connections(
+            event=event,
+            user=request.user,
+            reason="left",
+        )
+
         response_serializer = EventParticipantSerializer(participant)
 
         return success_response(

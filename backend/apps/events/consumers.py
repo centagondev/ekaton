@@ -9,18 +9,27 @@ from apps.presence.services import EventPresenceService
 
 from .models import MAX_MESSAGE_LENGTH, EventMessage, EventParticipant, EventStatus
 from .serializers import EventMessageSerializer
-from .services import event_group_name, send_event_message
+from .services import event_group_name, event_member_group_name, send_event_message
 
 logger = logging.getLogger(__name__)
 
 # Close code sent when the event itself ends while clients are connected.
 EVENT_CLOSED_CODE = 4004
 
+# Close codes sent when a connection is refused. They are delivered through
+# reject() rather than a bare close() so the client can actually read them.
+UNAUTHENTICATED_CODE = 4001
+NOT_A_PARTICIPANT_CODE = 4003
+
 
 class EventConsumer(AsyncJsonWebsocketConsumer):
     """
     WebSocket consumer for event chat.
     """
+
+    # Resolved once the connecting user is known. Stays None on a refused
+    # connection, which never reaches the point of joining a group.
+    member_group_name = None
 
     async def connect(self):
         """
@@ -30,7 +39,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         1. Reject unauthenticated users.
         2. Verify the authenticated user is an active participant of the event.
         3. Cache the participant for this WebSocket connection.
-        4. Join the Redis group.
+        4. Join the Redis groups.
         5. Accept the WebSocket connection.
         6. Send recent message history to the connected user.
         """
@@ -43,14 +52,18 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
         # Reject unauthenticated users.
         if user is None or user.is_anonymous:
-            await self.close(code=4001)
+            await self.reject(code=UNAUTHENTICATED_CODE)
             return
+
+        # Addresses this participant's sockets alone, which is how leaving
+        # the event reaches the tabs they left open behind them.
+        self.member_group_name = event_member_group_name(self.event_id, user.id)
 
         try:  # Verify that the authenticated user is an active participant.
 
             self.participant = await self.get_participant()
         except EventParticipant.DoesNotExist:
-            await self.close(code=4003)
+            await self.reject(code=NOT_A_PARTICIPANT_CODE)
             return
 
         self.anonymous_display_name = await self.get_anonymous_display_name()
@@ -84,6 +97,24 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
+    async def reject(self, code):
+        """
+        Refuse a connection with a close code the client can read.
+
+        Closing before accept() makes Channels answer the handshake with an
+        HTTP 403 instead of a WebSocket close frame, and browsers surface
+        that as a generic 1006. The code passed here never reaches them, so
+        the client cannot tell "not signed in" apart from "not a
+        participant". Accepting first costs one extra frame and keeps the
+        codes meaningful.
+
+        Args:
+            code:
+                The close code to send to the client.
+        """
+        await self.accept()
+        await self.close(code=code)
+
     async def disconnect(self, close_code):
         """
         Handle WebSocket disconnection.
@@ -110,8 +141,17 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             )
             return
 
-        # Handle Typing Indicator Events
         message_type = content.get("type")
+
+        # Answer the client's keep-alive. Without a branch of its own a ping
+        # falls through to the message handling below, where it has no
+        # "content" key, so every client would be sent a spurious validation
+        # error for as long as it stayed connected.
+        if message_type == "ping":
+            await self.send_json({"type": "pong"})
+            return
+
+        # Handle Typing Indicator Events
         if message_type == "typing.start":
             await self.broadcast_typing_start()
             return
@@ -205,10 +245,13 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
     async def event_closed(self, event):
         """
-        Tell the client the event is over, then close the connection.
+        Tell the client this connection is finished, then close it.
 
-        Broadcast when an event is cancelled or expires. Without it a client
-        keeps an open socket on an event that rejects every message it sends.
+        Sent to the whole event when it is cancelled or expires, and to one
+        participant's sockets when they leave. Without it a client keeps an
+        open socket on an event that rejects every message it sends — and,
+        once they have left, one that would still receive other people's
+        messages. ``reason`` says which of the three it was.
         """
         await self.send_json(
             {
@@ -221,15 +264,25 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
     async def join_event_group(self):
         """
-        Add the current connection to the event group.
+        Add the current connection to the event group and to the group that
+        carries messages addressed to this participant alone.
         """
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(self.member_group_name, self.channel_name)
 
     async def leave_event_group(self):
         """
-        Remove the current connection from the event group.
+        Remove the current connection from the groups it joined.
+
+        Also runs for refused connections, which never joined anything and
+        may have no member group resolved, so both discards are guarded.
         """
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+        if self.member_group_name:
+            await self.channel_layer.group_discard(
+                self.member_group_name, self.channel_name
+            )
 
     @database_sync_to_async
     def get_message_history(self):

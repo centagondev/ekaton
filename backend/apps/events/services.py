@@ -4,7 +4,7 @@ import secrets
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -31,6 +31,18 @@ def event_group_name(event_id) -> str:
     cannot drift apart on the group naming.
     """
     return f"event_{event_id}"
+
+
+def event_member_group_name(event_id, user_id) -> str:
+    """
+    Return the channel layer group that reaches one participant's sockets
+    on a single event.
+
+    Used to address a participant on their own, which the event-wide group
+    cannot do. Kept beside ``event_group_name`` for the same reason: the
+    consumer and the views must agree on it.
+    """
+    return f"event_{event_id}_user_{user_id}"
 
 
 def close_event_connections(*, event, reason):
@@ -67,6 +79,52 @@ def close_event_connections(*, event, reason):
     )
 
     EventPresenceService.clear_event_presence(event.id)
+
+
+def close_participant_connections(*, event, user, reason):
+    """
+    Tell one participant's sockets on an event that their participation is
+    over, so each of them closes.
+
+    Called after a participant leaves. Leaving only flips the participant
+    row, so without this their sockets stay in the event's group: they can
+    no longer send, but they keep receiving everyone else's messages until
+    the socket happens to close. One tab left open in the background is
+    enough to keep reading a chat they are no longer part of, which on an
+    anonymous event is a disclosure and not just a stale view.
+
+    Their presence is not cleared here. Closing the socket runs the
+    consumer's disconnect, which releases that connection and announces the
+    departure once their last socket is gone.
+
+    Args:
+        event:
+            The event the participant left.
+
+        user:
+            The participant who left.
+
+        reason:
+            Why their connections are closing, forwarded to the client.
+    """
+    channel_layer = get_channel_layer()
+
+    if channel_layer is None:
+        logger.error(
+            "No channel layer configured; cannot close connections for user "
+            "'%s' on event '%s'.",
+            user.id,
+            event.id,
+        )
+        return
+
+    async_to_sync(channel_layer.group_send)(
+        event_member_group_name(event.id, user.id),
+        {
+            "type": "event.closed",
+            "reason": reason,
+        },
+    )
 
 
 @transaction.atomic
@@ -117,9 +175,10 @@ def update_event(*, event, user, validated_data):
     # concurrent cancellation or expiry.
     event = Event.objects.select_for_update().get(pk=event.pk)
 
-    if event.status != EventStatus.ACTIVE:
-        raise ValidationError("This event is no longer active and cannot be updated.")
-
+    # Ownership is checked before the status so a user who does not own the
+    # event always gets the same 403, whatever state the event is in. The
+    # other order answers "no longer active" to a stranger and so tells them
+    # something about an event that is none of their business.
     if event.owner != user:
         logger.warning(
             "User '%s' attempted to update event '%s' without permission.",
@@ -128,6 +187,9 @@ def update_event(*, event, user, validated_data):
         )
         # catches it and converts it into an HTTP 403 Forbidden status code to send back to your React
         raise PermissionDenied("You do not have permission to update this event.")
+
+    if event.status != EventStatus.ACTIVE:
+        raise ValidationError("This event is no longer active and cannot be updated.")
 
     for field, value in validated_data.items():
         setattr(
@@ -179,9 +241,8 @@ def cancel_event(*, event, user):
     # Lock the event row to prevent concurrent cancellations from race conditions
     event = Event.objects.select_for_update().get(pk=event.pk)
 
-    if event.status != EventStatus.ACTIVE:
-        raise ValidationError("This event is no longer active and cannot be cancelled.")
-
+    # Checked before the status for the same reason as update_event: a
+    # stranger gets 403 and learns nothing about the event's state.
     if event.owner != user:
 
         logger.warning(
@@ -190,6 +251,9 @@ def cancel_event(*, event, user):
             event.id,
         )
         raise PermissionDenied("You do not have permission to cancel this event.")
+
+    if event.status != EventStatus.ACTIVE:
+        raise ValidationError("This event is no longer active and cannot be cancelled.")
 
     event.status = EventStatus.CANCELLED
     current_time = timezone.now()
@@ -245,6 +309,9 @@ def list_events():
     Only active events are returned, ordered by their
     creation time in descending order.
 
+    Each event carries its active participant count as an annotation, so the
+    list endpoint can render it without a query per event.
+
     Returns:
         QuerySet[Event]:
             A queryset containing all active events.
@@ -252,6 +319,13 @@ def list_events():
     return (
         Event.objects.select_related("owner")
         .filter(status=EventStatus.ACTIVE, end_time__gt=timezone.now())
+        .annotate(
+            participant_count=Count(
+                "participants",
+                filter=Q(participants__is_active=True),
+                distinct=True,
+            )
+        )
         .order_by("-created_at")
     )
 
