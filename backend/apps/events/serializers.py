@@ -191,6 +191,8 @@ class EventSerializer(serializers.ModelSerializer):
     """
 
     owner = serializers.ReadOnlyField(source="owner.full_name")
+    is_owner = serializers.SerializerMethodField()
+    participant_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -198,6 +200,7 @@ class EventSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "owner",
+            "is_owner",
             "banner",
             "name",
             "description",
@@ -205,6 +208,7 @@ class EventSerializer(serializers.ModelSerializer):
             "end_time",
             "is_anonymous_chat",
             "status",
+            "participant_count",
             "created_at",
         )
 
@@ -215,25 +219,53 @@ class EventSerializer(serializers.ModelSerializer):
             "created_at",
         )
 
+    def get_is_owner(self, obj) -> bool:
+        """
+        Return whether the requesting user owns this event.
+
+        The client cannot work this out from ``owner``: that field is a
+        display name, so two users sharing a name would both be shown the
+        owner-only controls and both be refused by the service layer.
+
+        Returns False when no request is in the serializer context, which
+        keeps the owner controls hidden rather than showing them to
+        everyone.
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        if user is None or not user.is_authenticated:
+            return False
+
+        return obj.owner_id == user.id
+
+    def get_participant_count(self, obj) -> int:
+        """
+        Return the number of active participants for the event.
+
+        Reads the annotation added by ``list_events()`` when it is present
+        and falls back to the ``participants`` prefetch attached by
+        ``get_event()``. Both avoid a query per event; the final fallback
+        only runs for a freshly created event, which has neither.
+        """
+        annotated = getattr(obj, "participant_count", None)
+
+        if annotated is not None:
+            return annotated
+
+        return len(obj.participants.all())  # uses prefeched cache,no extra query
+
 
 class EventDetailSerializer(EventSerializer):
     """
     Detailed serializer for an event.
+
+    Kept separate from ``EventSerializer`` so the detail endpoint can carry
+    fields the list endpoint should not have to pay for.
     """
 
-    participant_count = serializers.SerializerMethodField()
-
     class Meta(EventSerializer.Meta):
-        fields = EventSerializer.Meta.fields + ("participant_count",)
-
-    def get_participant_count(self, obj):
-        """
-        Return the number of active participants for the event.
-
-        Uses the prefetched ``participants`` queryset attached by ``get_event()``
-        in the service layer, so no additional database query is issued.
-        """
-        return len(obj.participants.all())  # uses prefeched cache,no extra query
+        pass
 
 
 class JoinEventSerializer(serializers.Serializer):
