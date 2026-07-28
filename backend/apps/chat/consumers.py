@@ -1,13 +1,29 @@
+import asyncio
 import json
 import logging
+import time
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.exceptions import ValidationError
 
 from core.encryption import decrypt_message
+from core.redis import redis_client
 
 logger = logging.getLogger("chat")
+
+# A private room exists only for active conversations: if neither participant
+# sends a real chat message for this long, the room is ended automatically.
+IDLE_TIMEOUT_SECONDS = 300
+
+# One socket per participant per room. Opening the same room in a second tab
+# would otherwise put three sockets in a two-person group, so the extra one is
+# refused with a code the client can tell apart from a real error.
+CONNECTION_KEY_PREFIX = "chat_conn"
+
+# Backstop only, in case a process dies without running disconnect(). Well
+# beyond any real conversation, which releases the slot the moment it ends.
+CONNECTION_TTL_SECONDS = 60 * 60 * 12
 
 from .services import (
     create_private_message,
@@ -46,6 +62,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
+        # Claim this participant's single slot in the room. SET NX is atomic,
+        # so of two tabs racing to connect exactly one wins. The key is only
+        # remembered after a successful claim: a refused socket must never be
+        # able to release the slot the winner is holding.
+        conn_key = f"{CONNECTION_KEY_PREFIX}:{room.id}:{user.id}"
+        claimed = await sync_to_async(redis_client.set)(
+            conn_key,
+            self.channel_name,
+            nx=True,
+            ex=CONNECTION_TTL_SECONDS,
+        )
+
+        if not claimed:
+            logger.info(
+                "Refused duplicate socket for user %s in room %s",
+                user.id,
+                room.id,
+            )
+            await self.close(code=4008)
+            return
+
+        self._conn_key = conn_key
         self.room = room
         self.room_id = str(room.id)
         self.room_group_name = f"chat_{self.room_id}"
@@ -58,11 +96,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
         logger.info("User %s connected to room %s", user.id, self.room_id)
 
+        # Idle timeout: authoritative on the server. The deadline is reset
+        # ONLY by real chat messages (see chat_message) — never by typing,
+        # reveal, or system events.
+        self._reset_idle_timer()
+        self._idle_task = asyncio.create_task(self._idle_watchdog())
+
     async def disconnect(self, close_code):
         """Remove the socket from the chat group."""
 
         if not hasattr(self, "room_group_name"):
             return
+
+        await self._cancel_idle_watchdog()
 
         logger.info(
             "User %s disconnected from room %s (code=%s)",
@@ -83,6 +129,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.room_id,
             )
         finally:
+            # Release the participant's slot so they can open the room again.
+            # Only this socket ever reaches here holding _conn_key — a refused
+            # duplicate returns above, before room_group_name is set.
+            if hasattr(self, "_conn_key"):
+                await sync_to_async(redis_client.delete)(self._conn_key)
+
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name,
@@ -148,6 +200,74 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         await handler(data)
+
+    # ------------------------------------------------------------------
+    # Idle timeout
+    # ------------------------------------------------------------------
+
+    def _reset_idle_timer(self):
+        """Push the idle deadline IDLE_TIMEOUT_SECONDS into the future."""
+        self._idle_deadline = time.monotonic() + IDLE_TIMEOUT_SECONDS
+
+    async def _cancel_idle_watchdog(self):
+        task = getattr(self, "_idle_task", None)
+        self._idle_task = None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    async def _idle_watchdog(self):
+        """End the room once neither participant has messaged for
+        IDLE_TIMEOUT_SECONDS.
+
+        Both participants' consumers run this watchdog and both reset on the
+        same broadcast messages, so their deadlines agree to within delivery
+        jitter. An atomic Redis SET NX claim guarantees that exactly ONE of
+        them ends the room and broadcasts — the group then delivers the same
+        chat_timeout event to both clients.
+        """
+        try:
+            while True:
+                remaining = self._idle_deadline - time.monotonic()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                    continue
+
+                claimed = await sync_to_async(redis_client.set)(
+                    f"chat_idle_timeout:{self.room_id}",
+                    "1",
+                    nx=True,
+                    ex=60,
+                )
+                if claimed:
+                    await sync_to_async(end_private_chat_room)(self.room)
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {"type": "chat_timeout"},
+                    )
+                return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Idle watchdog failed for room %s",
+                getattr(self, "room_id", "?"),
+            )
+
+    async def chat_timeout(self, event):
+        """Deliver the inactivity end event, then close the socket."""
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "chat_timeout",
+                    "message": "Chat ended due to inactivity.",
+                }
+            )
+        )
+        await self.close(code=4000)
 
     async def _ensure_active_room(self):
         """Ensure the current room still exists and is active."""
@@ -275,6 +395,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def chat_message(self, event):
         """Send a chat message event to the connected client."""
+
+        # Every REAL message — from either participant — resets the idle
+        # countdown. Typing, reveal and system events deliberately do not
+        # pass through here and so never reset it.
+        self._reset_idle_timer()
 
         await self.send(
             text_data=json.dumps(

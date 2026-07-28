@@ -6,7 +6,6 @@ for the ``apps/complaints`` API endpoints.
 """
 
 from drf_spectacular.utils import (
-    OpenApiExample,
     OpenApiResponse,
     extend_schema,
     inline_serializer,

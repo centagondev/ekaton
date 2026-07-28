@@ -92,7 +92,7 @@ REST_FRAMEWORK = {
         "reset_password": "10/hour",
         "resend_password_reset": "3/hour",
         "change_password": "5/hour",
-        "start_chat": "5/min",
+        "start_chat": "30/min",
         "report": "5/m",
         "complaint_create": "10/hour",
         "admin_login": "5/m",
@@ -294,3 +294,26 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 15.0,
     },
 }
+
+
+# Security Headers
+# =============================================================================
+#
+# The HTTPS-dependent settings are gated on DEBUG so local development keeps
+# working over plain HTTP. SECURE_PROXY_SSL_HEADER is what lets Django see the
+# original scheme when it runs behind a TLS-terminating proxy; without it
+# SECURE_SSL_REDIRECT would loop.
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
+# Needed for the Django admin (and any form POST) once the site is on HTTPS.
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

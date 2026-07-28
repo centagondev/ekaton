@@ -16,7 +16,7 @@ from apps.users.models import User
 from core.email import EmailService
 
 from .models import AccountSetupToken, PasswordResetToken
-
+from django.core.exceptions import ValidationError as DjangoValidationError
 logger = logging.getLogger("authentication")
 
 
@@ -118,8 +118,6 @@ def send_account_setup_email(account_setup_token):
     frontend_url = settings.FRONTEND_URL
 
     link = f"{frontend_url}/set-password" f"?token={account_setup_token.token}"
-
-    print(link)
 
     html_message = render_to_string("emails/account_setup.html", {"link": link})
     EmailService.send_email(
@@ -294,8 +292,6 @@ def send_password_reset_email(password_reset_token):
     frontend_url = settings.FRONTEND_URL
 
     reset_link = f"{frontend_url}/reset-password" f"?token={password_reset_token.token}"
-
-    print(reset_link)
     html_message = render_to_string(
         "emails/password_reset.html",
         {
@@ -380,8 +376,13 @@ def change_password(user, current_password, new_password):
                 "new_password": "The new password must be different from the current password."
             }
         )
+    try:
 
-    validate_password(new_password, user)
+        validate_password(new_password, user)
+    except DjangoValidationError as e:
+        raise ValidationError({
+            "new_password":e.messages
+        })
     user.set_password(new_password)
     user.save(update_fields=["password"])
 
