@@ -2,7 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      viewport-fit=cover: without it env(safe-area-inset-*) resolves to 0 on
+      notched iPhones, so the composer sits under the home indicator.
+      interactive-widget=resizes-content: makes Android Chrome shrink the
+      layout viewport for the keyboard instead of overlaying it.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#fbf9f5" />
     <meta
       name="description"

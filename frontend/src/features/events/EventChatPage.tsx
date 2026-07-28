@@ -22,7 +22,14 @@ import {
 import { eventsApi, EVENT_MESSAGE_MAX } from "@/lib/api/events";
 import { parseApiError } from "@/lib/errors";
 import { cn, cursorFromUrl, formatTime } from "@/lib/utils";
+import {
+  COARSE_POINTER,
+  chatSurfaceStyle,
+  composerPaddingStyle,
+  useChatViewport,
+} from "@/lib/useChatViewport";
 import { Button } from "@/components/ui/Button";
+import { useGoBack } from "@/components/ui/BackButton";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -122,6 +129,9 @@ function TypingBubble({ names }: { names: string[] }) {
 export function EventChatPage() {
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Landing here from a shared link has no history behind it, so fall back to
+  // this event's own page rather than the whole events list.
+  const goBack = useGoBack(`/events/${id}`);
   const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState("");
@@ -309,6 +319,14 @@ export function EventChatPage() {
     else setUnseen((count) => count + 1);
   }, [messages.length, scrollToBottom]);
 
+  // Track the visible viewport so the composer rides above the keyboard and
+  // the newest message stays visible while it opens.
+  useChatViewport(
+    useCallback(() => {
+      if (nearBottomRef.current) scrollToBottom("auto");
+    }, [scrollToBottom]),
+  );
+
   // Drop optimistic entries once the server echoes them back.
   useEffect(() => {
     if (pending.length === 0) return;
@@ -482,15 +500,24 @@ export function EventChatPage() {
   /* --------------------------------- render -------------------------------- */
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas">
+    <div
+      className="fixed inset-x-0 flex flex-col overflow-hidden bg-canvas"
+      style={chatSurfaceStyle}
+    >
       {/* -------------------------------- header ------------------------------- */}
-      <header className="shrink-0 border-b-2 border-ink bg-surface">
+      <header
+        className="shrink-0 border-b-2 border-ink bg-surface"
+        style={{
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+        }}
+      >
         <div className="mx-auto flex h-16 w-full max-w-[1800px] items-center justify-between gap-3 px-3 sm:px-4 lg:h-[4.5rem] lg:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
-              onClick={() => navigate("/events")}
+              onClick={goBack}
               aria-label="Back to event"
-              className="-ml-1 p-1.5 transition-all hover:-translate-x-0.5 hover:bg-raised"
+              className="-ml-1 p-2 transition-all hover:-translate-x-0.5 hover:bg-raised"
             >
               <ChevronLeft className="size-5" />
             </button>
@@ -742,7 +769,10 @@ export function EventChatPage() {
           </div>
 
           {/* composer */}
-          <div className="shrink-0 border-t-2 border-ink bg-surface pb-[env(safe-area-inset-bottom)]">
+          <div
+            className="shrink-0 border-t-2 border-ink bg-surface"
+            style={composerPaddingStyle}
+          >
             <div className="mx-auto w-full max-w-4xl px-4 py-3 sm:px-6 lg:max-w-5xl lg:px-10 lg:py-4 xl:max-w-6xl">
               {/* Typing is surfaced in the transcript itself (see TypingBubble),
                   so the composer stays uncluttered. */}
@@ -777,8 +807,10 @@ export function EventChatPage() {
                     }
                     disabled={!isActive || !joined}
                     aria-label="Message"
-                    autoFocus
-                    className="max-h-44 min-h-[3.25rem] w-full resize-none bg-transparent px-4 py-3.5 text-[15px] outline-none placeholder:text-muted/60 lg:px-5 lg:text-base"
+                    autoFocus={!COARSE_POINTER}
+                    enterKeyHint="send"
+                    /* 16px minimum, otherwise iOS Safari zooms in on focus. */
+                    className="max-h-44 min-h-[3.25rem] w-full resize-none bg-transparent px-4 py-3.5 text-base outline-none placeholder:text-muted/60 lg:px-5"
                   />
                   <AnimatePresence>
                     {draft.length > EVENT_MESSAGE_MAX - 150 && (

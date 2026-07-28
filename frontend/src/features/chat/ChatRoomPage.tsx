@@ -23,6 +23,12 @@ import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Textarea } from "@/components/ui/Field";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn, formatTime } from "@/lib/utils";
+import {
+  COARSE_POINTER,
+  chatSurfaceStyle,
+  composerPaddingStyle,
+  useChatViewport,
+} from "@/lib/useChatViewport";
 import type { ReportReason } from "@/types/api";
 
 const MAX_LENGTH = 500;
@@ -186,6 +192,11 @@ export function ChatRoomPage() {
   const typingSentRef = useRef(false);
   const typingStopRef = useRef<number | undefined>(undefined);
   const skipRequestedRef = useRef(false);
+  // "End chat" means stop, not "find me another". The server's chat_ended
+  // broadcast arrives before the REST call resolves, so without this flag the
+  // auto-return would fire first and drop the user straight back into a search
+  // they just opted out of.
+  const endRequestedRef = useRef(false);
 
   const online = status === "connected";
   const revealPending = reveal.phase === "outgoing" || revealClicking;
@@ -232,6 +243,18 @@ export function ChatRoomPage() {
     if (partnerTyping && nearBottomRef.current) scrollToBottom();
   }, [partnerTyping, scrollToBottom]);
 
+  /**
+   * Keep the surface glued to the visible viewport, and re-pin the transcript
+   * as the keyboard slides in so the newest message stays in view instead of
+   * being covered. "auto" rather than "smooth": the keyboard is already
+   * animating, and a second easing on top of it reads as lag.
+   */
+  useChatViewport(
+    useCallback(() => {
+      if (nearBottomRef.current) scrollToBottom("auto");
+    }, [scrollToBottom]),
+  );
+
   /* ------------------------------- side effects ------------------------------ */
 
   useEffect(() => {
@@ -254,43 +277,33 @@ export function ChatRoomPage() {
     return () => window.clearTimeout(timer);
   }, [reveal.phase, dismissReveal]);
 
-  // I skipped -> glide straight back into matchmaking.
-  useEffect(() => {
-    if (status === "ended" && endInfo?.kind === "skipped" && skipRequestedRef.current) {
-      const timer = window.setTimeout(
-        () => navigate("/home", { state: { autostart: true } }),
-        450,
-      );
-      return () => window.clearTimeout(timer);
-    }
-  }, [status, endInfo, navigate]);
-
   /**
-   * Server-initiated ends return the user to matchmaking automatically:
-   *  - "timeout": the backend ended the room after 20s of mutual silence —
-   *    BOTH clients receive the same event and both auto-research.
-   *  - "ended": the partner disconnected or ended remotely — the remaining
-   *    user auto-researches. (Ending it yourself navigates directly and
-   *    never shows this overlay; a received skip keeps its manual card.)
-   * The short delay is purely presentational so the reason is readable.
+   * Every way a room can end — they left, they skipped, they closed the tab,
+   * the server timed it out, or I skipped — lands the user straight back in
+   * matchmaking. There is deliberately no delay: sitting in a dead room
+   * reading a notice is the worst possible use of the seconds it takes to find
+   * the next person, so the reason travels to the home page as a toast and the
+   * search starts immediately.
+   *
+   * `status === "error"` is excluded — that means we never got in, so it keeps
+   * its manual card instead of silently bouncing the user.
    */
-  const autoReturnReason =
-    status === "ended" && !skipRequestedRef.current
-      ? endInfo?.kind === "timeout"
-        ? "Chat ended due to inactivity."
-        : endInfo?.kind === "ended"
-          ? endInfo.message || "The chat has been ended."
-          : null
-      : null;
+  const exitNotice =
+    status !== "ended" || endRequestedRef.current
+      ? null
+      : endInfo?.kind === "timeout"
+        ? "Chat ended — it went quiet for too long."
+        : endInfo?.kind === "skipped"
+          ? skipRequestedRef.current
+            ? "Skipped. Finding someone new…"
+            : "Stranger skipped to a new chat."
+          : "Stranger disconnected.";
 
   useEffect(() => {
-    if (!autoReturnReason) return;
-    const timer = window.setTimeout(
-      () => navigate("/home", { state: { autostart: true } }),
-      1800,
-    );
-    return () => window.clearTimeout(timer);
-  }, [autoReturnReason, navigate]);
+    if (!exitNotice) return;
+    // replace: the dead room must not sit in history behind /home.
+    navigate("/home", { replace: true, state: { autostart: true, notice: exitNotice } });
+  }, [exitNotice, navigate]);
 
   // The typing debounce outlives the component if you navigate away mid-word.
   useEffect(() => () => window.clearTimeout(typingStopRef.current), []);
@@ -346,6 +359,7 @@ export function ChatRoomPage() {
   };
 
   const endChat = async () => {
+    endRequestedRef.current = true;
     setEnding(true);
     try {
       if (roomId) await chatApi.end(roomId);
@@ -376,7 +390,6 @@ export function ChatRoomPage() {
     });
   }, [messages]);
 
-  const iAmSkipping = endInfo?.kind === "skipped" && skipRequestedRef.current;
   const statusText = !roomId
     ? "Invalid room"
     : status === "connecting"
@@ -388,15 +401,24 @@ export function ChatRoomPage() {
         : "Disconnected";
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas">
+    <div
+      className="fixed inset-x-0 flex flex-col overflow-hidden bg-canvas"
+      style={chatSurfaceStyle}
+    >
       {/* -------------------------------- header -------------------------------- */}
-      <header className="border-b-2 border-ink bg-surface">
+      <header
+        className="shrink-0 border-b-2 border-ink bg-surface"
+        style={{
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+        }}
+      >
         <div className="mx-auto flex h-16 w-full max-w-[1800px] items-center justify-between gap-3 px-3 sm:px-4 lg:h-[4.5rem] lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <button
               onClick={() => (online ? setConfirmEnd(true) : navigate("/home"))}
               aria-label="Leave chat"
-              className="-ml-1 p-1.5 transition-all hover:-translate-x-0.5 hover:bg-raised"
+              className="-ml-1 p-2 transition-all hover:-translate-x-0.5 hover:bg-raised"
             >
               <ChevronLeft className="size-5" />
             </button>
@@ -524,7 +546,11 @@ export function ChatRoomPage() {
                 <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-muted">
                   Reveal declined — you're both still anonymous.
                 </p>
-                <button onClick={dismissReveal} aria-label="Dismiss" className="p-1 text-muted hover:text-ink">
+                <button
+                  onClick={dismissReveal}
+                  aria-label="Dismiss"
+                  className="-mr-2 p-2 text-muted hover:text-ink"
+                >
                   <X className="size-3.5" />
                 </button>
               </div>
@@ -534,7 +560,7 @@ export function ChatRoomPage() {
       </header>
 
       {/* -------------------------------- body --------------------------------- */}
-      <div className="mx-auto flex w-full max-w-[1800px] flex-1 overflow-hidden">
+      <div className="mx-auto flex w-full max-w-[1800px] min-h-0 flex-1 overflow-hidden">
         {/* desktop sidebar */}
         <aside
           className="hidden w-80 shrink-0 flex-col gap-5 overflow-y-auto border-r-2 border-ink bg-surface p-6 lg:flex xl:w-[22rem]"
@@ -609,11 +635,11 @@ export function ChatRoomPage() {
         </aside>
 
         {/* conversation */}
-        <main className="relative flex min-w-0 flex-1 flex-col">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="scroll-thin relative flex-1 overflow-y-auto overscroll-contain"
+            className="scroll-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end px-3 pb-6 pt-5 sm:px-6 lg:px-10 xl:max-w-5xl">
               <div className="mb-2 self-center border-2 border-ink bg-surface px-4 py-1 text-center font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
@@ -659,7 +685,10 @@ export function ChatRoomPage() {
           </AnimatePresence>
 
           {/* composer */}
-          <div className="border-t-2 border-ink bg-surface pb-[env(safe-area-inset-bottom)]">
+          <div
+            className="shrink-0 border-t-2 border-ink bg-surface"
+            style={composerPaddingStyle}
+          >
             <form
               onSubmit={submit}
               className="mx-auto w-full max-w-4xl px-3 py-3 sm:px-6 lg:px-10 lg:py-4 xl:max-w-5xl"
@@ -693,9 +722,13 @@ export function ChatRoomPage() {
                     placeholder={online ? "Type a message…" : "Chat is not active"}
                     disabled={!online}
                     aria-label="Message"
-                    autoFocus
+                    autoFocus={!COARSE_POINTER}
                     autoComplete="off"
-                    className="w-full bg-transparent px-4 py-3 text-[15px] outline-none placeholder:text-muted/60 lg:px-5 lg:py-3.5 lg:text-base"
+                    enterKeyHint="send"
+                    /* text-base is load-bearing: iOS Safari zooms the page in
+                       on focus for any input under 16px, and the zoom is what
+                       makes the composer jump around mid-conversation. */
+                    className="w-full bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted/60 lg:px-5 lg:py-3.5"
                   />
                   <AnimatePresence>
                     {draft.length > MAX_LENGTH - 100 && (
@@ -881,7 +914,10 @@ export function ChatRoomPage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 flex items-center justify-center bg-ink/70 p-4 backdrop-blur-[2px]"
           >
-            {iAmSkipping || autoReturnReason ? (
+            {/* An ended room is already navigating away; this only covers the
+                frame between the socket closing and the route changing, so the
+                user never glimpses a chat they can no longer talk in. */}
+            {status === "ended" ? (
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -894,11 +930,9 @@ export function ChatRoomPage() {
                   transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
                   className="size-8 border-[3px] border-ink border-t-brand-yellow"
                 />
-                {autoReturnReason && (
-                  <p className="text-lg font-black leading-snug">{autoReturnReason}</p>
-                )}
+                {exitNotice && <p className="text-lg font-black leading-snug">{exitNotice}</p>}
                 <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted">
-                  Searching for another student…
+                  {exitNotice ? "Searching for another student…" : "Ending chat…"}
                 </p>
               </motion.div>
             ) : (
@@ -918,17 +952,11 @@ export function ChatRoomPage() {
                 </motion.div>
                 <div>
                   <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
-                    {endInfo?.kind === "skipped" ? "Chat skipped" : "Chat over"}
+                    Can't connect
                   </p>
-                  <h2 className="text-2xl font-black leading-tight">
-                    {status === "error"
-                      ? "Couldn't join this room"
-                      : endInfo?.kind === "skipped"
-                        ? "They moved on"
-                        : "This chat has ended"}
-                  </h2>
-                  {status === "error" && (lastError ?? endInfo?.message) && (
-                    <p className="mt-2 text-sm text-muted">{lastError ?? endInfo?.message}</p>
+                  <h2 className="text-2xl font-black leading-tight">Couldn't join this room</h2>
+                  {endInfo?.message && (
+                    <p className="mt-2 text-sm text-muted">{endInfo.message}</p>
                   )}
                 </div>
                 <div className="flex flex-col gap-2.5">

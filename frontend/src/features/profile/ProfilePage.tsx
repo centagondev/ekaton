@@ -10,6 +10,7 @@ import { setTokens } from "@/lib/storage";
 import { parseApiError } from "@/lib/errors";
 import { PageTransition, staggerContainer, staggerItem } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Field, Input } from "@/components/ui/Field";
@@ -40,6 +41,7 @@ export function ProfilePage() {
 
   return (
     <PageTransition className="mx-auto max-w-2xl">
+      <BackButton fallback="/home" label="Back" className="mb-6" />
       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-8">
         <motion.section
           variants={staggerItem}
