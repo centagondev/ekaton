@@ -1,0 +1,75 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+
+  /* Ekaton — brutalist palette (from Figma) */
+  --color-canvas: #fbf9f5;
+  --color-surface: #ffffff;
+  --color-raised: #f5f3ef;
+  --color-ink: #0a0a0a;
+  --color-muted: #6b675f;
+  --color-line: #0a0a0a;
+  --color-brand-yellow: #ffd600;
+  --color-brand-lime: #ccff00;
+  --color-brand-lavender: #e8ebff;
+  --color-danger: #e11d1d;
+  --color-online: #10b981;
+
+  /* Hard offset shadows — never soft, never blurred. */
+  --shadow-brutal-sm: 3px 3px 0px 0px #0a0a0a;
+  --shadow-brutal: 5px 5px 0px 0px #0a0a0a;
+  --shadow-brutal-lg: 8px 8px 0px 0px #0a0a0a;
+
+  --animate-marquee: marquee 32s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+html {
+  scrollbar-color: #d6d2ca var(--color-canvas);
+}
+
+body {
+  @apply bg-canvas text-ink font-sans antialiased;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+::selection {
+  background: var(--color-brand-yellow);
+  color: var(--color-ink);
+}
+
+/* Brutalist focus ring — square, high contrast, always visible. */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #d6d2ca;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -61,6 +61,15 @@ class PrivateChatRoom(BaseModel):
             models.Index(fields=["user_two"]),
             models.Index(fields=["status"]),
         ]
+        constraints = [
+            # Matchmaking already refuses to pair someone with themselves; this
+            # makes it impossible at the storage layer, so no future change to
+            # the queue logic can reintroduce a self-chat.
+            models.CheckConstraint(
+                condition=~models.Q(user_one=models.F("user_two")),
+                name="private_chat_room_distinct_participants",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user_one.email} ↔ {self.user_two.email}"

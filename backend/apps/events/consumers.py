@@ -8,8 +8,25 @@ from rest_framework.exceptions import ValidationError
 from apps.presence.services import EventPresenceService
 
 from .models import MAX_MESSAGE_LENGTH, EventMessage, EventParticipant, EventStatus
-from .serializers import EventMessageSerializer
+from .serializers import ANONYMOUS_FALLBACK_NAME, EventMessageSerializer
 from .services import event_group_name, event_member_group_name, send_event_message
+
+
+def participant_display_name(participant):
+    """Return the name a participant is known by in their event.
+
+    Anonymous events use the assigned alias; public events use the real name.
+    Mirrors EventParticipantSerializer.get_display_name so presence payloads
+    label people the same way messages do.
+    """
+    if participant.event.is_anonymous_chat:
+        if participant.anonymous_name is None:
+            return ANONYMOUS_FALLBACK_NAME
+
+        return participant.anonymous_name.display_name
+
+    return participant.user.full_name
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +84,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             return
 
         self.anonymous_display_name = await self.get_anonymous_display_name()
+        self.display_name = await self.get_display_name()
 
         # Join the Redis channel group.
         await self.join_event_group()
@@ -324,6 +342,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         )
 
     @database_sync_to_async
+    def get_display_name(self):
+        """Return this participant's display name, read once at connect."""
+        return participant_display_name(self.participant)
+
+    @database_sync_to_async
     def get_anonymous_display_name(self):
         """
         Return the participant's anonymous display name, or None.
@@ -402,6 +425,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "participant": {
                     "id": str(self.participant.id),
                     "anonymous_name": self.anonymous_display_name,
+                    "display_name": self.display_name,
                     "sender_channel": self.channel_name,
                 },
             },
@@ -418,6 +442,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "participant": {
                     "id": str(self.participant.id),
                     "anonymous_name": self.anonymous_display_name,
+                    "display_name": self.display_name,
                     "sender_channel": self.channel_name,
                 },
             },
@@ -525,7 +550,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             event_id=self.participant.event_id,
             user_id__in=user_ids,
             is_active=True,
-        ).select_related("anonymous_name")
+        ).select_related("anonymous_name", "user", "event")
 
         return [
             {
@@ -535,6 +560,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                     if participant.anonymous_name
                     else None
                 ),
+                "display_name": participant_display_name(participant),
             }
             for participant in participants
         ]

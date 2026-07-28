@@ -12,6 +12,22 @@ WAITING_QUEUE_KEY = "waiting_users"
 # Redis key for the membership SET enabling O(1) presence checks.
 WAITING_USERS_SET_KEY = "waiting_users_set"
 
+# Per-user liveness marker, refreshed every time a user (re)enters the queue.
+# A client that keeps searching keeps renewing it; one that closed its tab
+# stops, and its entry is then skipped as stale instead of being matched into
+# a room nobody is sitting in.
+WAITING_ALIVE_PREFIX = "waiting_alive"
+
+# How long a queue entry stays claimable without being renewed. Comfortably
+# longer than the client's re-check interval, short enough that an abandoned
+# entry cannot linger.
+WAITING_ALIVE_TTL_SECONDS = 60
+
+
+def waiting_alive_key(user_id):
+    """Return the liveness key for a queued user id."""
+    return f"{WAITING_ALIVE_PREFIX}:{user_id}"
+
 
 def add_user_to_queue(user):
     """Add a user to the anonymous chat waiting queue.
@@ -27,7 +43,85 @@ def add_user_to_queue(user):
     pipe = redis_client.pipeline()
     pipe.rpush(WAITING_QUEUE_KEY, user_id)
     pipe.sadd(WAITING_USERS_SET_KEY, user_id)
+    # Refresh liveness alongside the enqueue, in the same round trip.
+    pipe.set(waiting_alive_key(user_id), 1, ex=WAITING_ALIVE_TTL_SECONDS)
     pipe.execute()
+
+
+# Claims a partner in ONE atomic step. Redis executes Lua single-threaded, so
+# no other user can interleave between the removal of the caller and the pop
+# of a partner — which is exactly the window that let two simultaneous
+# searchers remove themselves, both observe an empty queue, and both requeue
+# without matching (a livelock that left users stuck "searching" forever).
+#
+# KEYS[1] waiting list, KEYS[2] waiting set, ARGV[1] caller id,
+# ARGV[2] liveness key prefix.
+# Returns the claimed partner's id, or false when nobody is available.
+_CLAIM_PARTNER_LUA = """
+local me = ARGV[1]
+local prefix = ARGV[2]
+local ttl = tonumber(ARGV[3])
+
+-- Leave the queue first: the caller must never claim themselves, and a
+-- duplicate entry for them must not survive this call.
+redis.call('lrem', KEYS[1], 0, me)
+redis.call('srem', KEYS[2], me)
+redis.call('del', prefix .. ':' .. me)
+
+while true do
+    local candidate = redis.call('lpop', KEYS[1])
+
+    if not candidate then
+        -- Nobody to claim, so join the queue in this SAME atomic step.
+        -- Enqueuing from a second command would reopen the race: another
+        -- searcher could observe the queue while it is momentarily empty
+        -- and give up too, leaving both of them waiting on each other.
+        redis.call('rpush', KEYS[1], me)
+        redis.call('sadd', KEYS[2], me)
+        redis.call('set', prefix .. ':' .. me, 1, 'EX', ttl)
+        return false
+    end
+
+    redis.call('srem', KEYS[2], candidate)
+
+    if candidate ~= me then
+        -- Only hand back entries whose owner is still actively searching.
+        if redis.call('exists', prefix .. ':' .. candidate) == 1 then
+            redis.call('del', prefix .. ':' .. candidate)
+            return candidate
+        end
+    end
+end
+"""
+
+_claim_partner_script = redis_client.register_script(_CLAIM_PARTNER_LUA)
+
+
+def claim_waiting_partner(user):
+    """Atomically claim one other waiting user, or join the queue.
+
+    Either the caller walks away with a partner, or the caller is left
+    enqueued — never neither, and never both.
+
+    Args:
+        user: The User instance looking for a partner.
+
+    Returns:
+        The claimed partner's id as a string, or None when nobody was
+        available (in which case the caller is now queued).
+    """
+    claimed = _claim_partner_script(
+        keys=[WAITING_QUEUE_KEY, WAITING_USERS_SET_KEY],
+        args=[str(user.id), WAITING_ALIVE_PREFIX, WAITING_ALIVE_TTL_SECONDS],
+    )
+
+    if not claimed:
+        return None
+
+    if isinstance(claimed, bytes):
+        claimed = claimed.decode("utf-8")
+
+    return claimed
 
 
 def get_waiting_user():
@@ -98,6 +192,7 @@ def remove_user_from_queue(user):
     pipe = redis_client.pipeline()
     pipe.lrem(WAITING_QUEUE_KEY, 0, user_id)
     pipe.srem(WAITING_USERS_SET_KEY, user_id)
+    pipe.delete(waiting_alive_key(user_id))
     pipe.execute()
 
 
@@ -142,13 +237,6 @@ def is_user_in_active_chat(user):
 
 
 def start_chat(user):
-    print("=" * 40)
-    print("User:", user.id, user.email)
-    print("Current user:", user.id)
-    print("Is waiting:", is_user_waiting(user))
-    print("Queue size:", queue_size())
-    print("Waiting set:", redis_client.smembers(WAITING_USERS_SET_KEY))
-    print("Waiting list:", redis_client.lrange(WAITING_QUEUE_KEY, 0, -1))
     """Run the matchmaking flow for a user attempting to start an anonymous chat.
 
     Acquires a per-user Redis distributed lock to prevent duplicate concurrent
@@ -190,46 +278,37 @@ def start_chat(user):
                     "room_id": str(active_room.id),
                 }
 
-            # Check if the user is already waiting in the queue.
-            if is_user_waiting(user):
-                return {
-                    "status": "waiting",
-                    "message": "You are already waiting for a match.",
-                }
-            # Attempt to pop the next waiting user from the queue atomically.
-            max_attempts = queue_size()
-            attempts = 0
+            # Leave the queue and claim a partner in a single atomic step.
+            # Doing both in one Lua script closes the window in which two
+            # simultaneous searchers could each remove themselves, both see an
+            # empty queue, and both requeue without matching.
             waiting_user = None
 
-            while attempts < max_attempts:
-                waiting_user = get_waiting_user()
-                print("Popped user:", waiting_user)
+            while True:
+                partner_id = claim_waiting_partner(user)
 
-                if waiting_user is None:
-                    print("No waiting user found")
+                if partner_id is None:
                     break
-                attempts += 1
 
-                print("Current:", user.id)
-                print("Waiting:", waiting_user.id)
+                partner = User.objects.filter(id=partner_id).first()
 
-                # Ignore yourself if your own ID is found in the queue.
-                print("Before self check")
-                if waiting_user.id == user.id:
-                    add_user_to_queue(user)
+                # The claimed id no longer resolves to a user — drop it and
+                # keep looking.
+                if partner is None:
                     continue
 
-                # Found a valid match.
-                print("Breaking loop")
-                break
-            print("Exited loop")
-            print("waiting_user =", waiting_user)
-            print("attempts =", attempts)
-            print("max_attempts =", max_attempts)
+                # Never pair someone who is already talking to somebody else;
+                # their queue entry is stale.
+                if is_user_in_active_chat(partner):
+                    continue
 
-            # No suitable user found.
+                waiting_user = partner
+                break
+
+            # No suitable user found. The claim script has already put the
+            # caller back in the queue as part of the same atomic step, so
+            # there is deliberately no enqueue here.
             if waiting_user is None:
-                add_user_to_queue(user)
                 return {
                     "status": "waiting",
                     "message": "Waiting for another user...",

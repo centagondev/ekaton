@@ -3,8 +3,7 @@ from django.db.models import Count
 from django.http import Http404
 
 from .models import Complaint, ComplaintComment, ComplaintUpvote
-from rest_framework.exceptions import ValidationError, PermissionDenied
-from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 from django.utils import timezone
 from datetime import timedelta
 
@@ -22,7 +21,7 @@ def create_complaint(user, title, description, category, is_anonymous):
     return complaint
 
 
-from django.db.models import Count, Subquery, OuterRef
+from django.db.models import Subquery, OuterRef
 from django.db.models.functions import Coalesce
 
 
