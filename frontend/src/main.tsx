@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "framer-motion";
 import { Toaster } from "sonner";
 import App from "./App";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
@@ -26,11 +27,16 @@ if (!container) throw new Error("Root element #root not found");
  */
 createRoot(container).render(
   <QueryClientProvider client={queryClient}>
-    <ErrorBoundary area="root">
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </ErrorBoundary>
+    {/* The CSS media query in index.css cannot reach Framer's JS-driven
+        animations; reducedMotion="user" is what actually honours the OS
+        setting for the transitions, bubbles and looping indicators. */}
+    <MotionConfig reducedMotion="user">
+      <ErrorBoundary area="root">
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
+    </MotionConfig>
     <Toaster
       position="top-center"
       theme="light"

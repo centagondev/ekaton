@@ -19,7 +19,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "baseUrl": ".",
+    /* No "baseUrl": it is deprecated in TypeScript 6 and removed in 7. Since
+       TS 4.1 "paths" resolves relative to the config file that declares it, so
+       "./src/*" already means <project root>/src/*. Must stay in step with
+       resolve.alias in vite.config.ts, which does the runtime half. */
     "paths": {
       "@/*": ["./src/*"]
     }

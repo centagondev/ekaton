@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import {
   useInfiniteQuery,
@@ -9,12 +9,13 @@ import {
 } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { ArrowLeft, MessageSquare, Pencil, Send, Timer, Trash2 } from "lucide-react";
+import { MessageSquare, Pencil, Send, Timer, Trash2 } from "lucide-react";
 import { complaintsApi, COMPLAINT_MAX_BODY } from "@/lib/api/complaints";
 import { parseApiError } from "@/lib/errors";
 import { cn, cursorFromUrl, editWindowLeft, timeAgo } from "@/lib/utils";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Textarea } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -93,12 +94,7 @@ export function ComplaintDetailPage() {
 
   return (
     <PageTransition className="mx-auto max-w-3xl">
-      <Link
-        to="/complaints"
-        className="mb-6 inline-flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted hover:text-ink"
-      >
-        <ArrowLeft className="size-4" /> Complaint box
-      </Link>
+      <BackButton fallback="/complaints" label="Complaint box" className="mb-6" />
 
       <article className="border-2 border-ink bg-surface p-6 shadow-brutal sm:p-8">
         <div className="mb-3 flex flex-wrap items-center gap-2">

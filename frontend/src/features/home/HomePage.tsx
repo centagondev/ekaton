@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
 import { X } from "lucide-react";
 import { useMatchmaking } from "@/features/chat/useMatchmaking";
 import { Button } from "@/components/ui/Button";
@@ -132,18 +133,24 @@ export function HomePage() {
   const autoStarted = useRef(false);
 
   // Returning from a skip / timeout / ended chat resumes the search at once.
+  // The chat page hands over why it ended so the explanation arrives as a
+  // toast over the already-running search, rather than delaying it.
   useEffect(() => {
-    const state = location.state as { autostart?: boolean } | null;
+    const state = location.state as { autostart?: boolean; notice?: string } | null;
     if (state?.autostart && !autoStarted.current) {
       autoStarted.current = true;
       window.history.replaceState({}, "");
+      if (state.notice) toast(state.notice);
       void start(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <PageTransition className="-my-8 flex min-h-[calc(100dvh-4rem)] items-center justify-center">
+    /* flex-1 rather than a 100dvh calc: the hero now has to share the screen
+       with the mobile bottom bar as well as the navbar, and letting it fill
+       whatever is left keeps it centred without a chain of magic offsets. */
+    <PageTransition className="flex flex-1 items-center justify-center">
       <AnimatePresence mode="wait">
         {searching ? (
           <Searching key="searching" onCancel={cancel} />

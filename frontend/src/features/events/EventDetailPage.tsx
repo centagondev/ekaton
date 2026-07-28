@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   CalendarX2,
   LogIn,
   MapPin,
@@ -17,6 +16,7 @@ import { parseApiError } from "@/lib/errors";
 import { cursorFromUrl, formatDateTime, timeUntil } from "@/lib/utils";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -155,12 +155,7 @@ export function EventDetailPage() {
 
   return (
     <PageTransition>
-      <Link
-        to="/events"
-        className="mb-6 inline-flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted hover:text-ink"
-      >
-        <ArrowLeft className="size-4" /> All events
-      </Link>
+      <BackButton fallback="/events" label="All events" className="mb-6" />
 
       <div className="mx-auto max-w-3xl">
         <div className="border-2 border-ink bg-surface shadow-brutal">
