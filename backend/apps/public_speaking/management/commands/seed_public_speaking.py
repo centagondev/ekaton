@@ -13,7 +13,7 @@ class Command(BaseCommand):
         parser.add_argument("--title", default="Public Speaking")
         parser.add_argument(
             "--topic",
-            default="What is the worst friendship experience you have ever had?",
+            default="What’s the most messed-up thing a friend did that you can laugh about today?",
         )
 
     def handle(self, *args, **options):
