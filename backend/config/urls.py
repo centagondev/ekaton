@@ -16,6 +16,21 @@ urlpatterns = [
 
 
 # ---------------------------------------------------------------------------
+# Temporary public speaking mode.
+#
+# These are the project's only unauthenticated endpoints, so they are added
+# here rather than inside the app: with PUBLIC_SPEAKING_MODE off the include
+# never runs, the routes are not in the URLconf at all, and every demo path
+# returns 404. Turning the flag off is therefore a complete removal of the
+# public surface, not a permission check that could be got around.
+# ---------------------------------------------------------------------------
+if settings.PUBLIC_SPEAKING_MODE:
+    urlpatterns += [
+        path("api/v1/public-speaking/", include("apps.public_speaking.urls")),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Development-only URL patterns — ONLY loaded when DEBUG = True.
 #
 # In production (DEBUG = False):

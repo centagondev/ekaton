@@ -1,7 +1,8 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { CalendarDays, Home, UserRound } from "lucide-react";
+import { CalendarDays, Home, Megaphone, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PUBLIC_SPEAKING_MODE } from "@/lib/config";
 
 /**
  * Complaint Box is deliberately absent — it is not part of the MVP, and the
@@ -10,6 +11,17 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { to: "/home", label: "Home", Icon: Home },
   { to: "/events", label: "Events", Icon: CalendarDays },
+  { to: "/profile", label: "Profile", Icon: UserRound },
+] as const;
+
+/**
+ * Marketing mode: the full product nav, with Public Speaking as a first-class
+ * tab rather than a replacement for anything.
+ */
+const DEMO_TABS = [
+  { to: "/home", label: "Home", Icon: Home },
+  { to: "/events", label: "Events", Icon: CalendarDays },
+  { to: "/public-speaking", label: "Speaking", Icon: Megaphone },
   { to: "/profile", label: "Profile", Icon: UserRound },
 ] as const;
 
@@ -38,7 +50,7 @@ export function BottomNav() {
       }}
     >
       <ul className="flex h-[4.25rem] items-stretch">
-        {TABS.map(({ to, label, Icon }) => (
+        {(PUBLIC_SPEAKING_MODE ? DEMO_TABS : TABS).map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
             {/* `end` on /home only: /events must not stay lit while the user is
                 on /events/:id, but /home has no children to match. */}

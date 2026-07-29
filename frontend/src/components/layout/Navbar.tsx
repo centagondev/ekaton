@@ -11,6 +11,17 @@ const LINKS = [
   { to: "/events", label: "Events" },
 ] as const;
 
+/**
+ * Marketing mode. Every product area stays visible so visitors can see what
+ * Ekaton offers; only Public Speaking is interactive. No login button — demo
+ * visitors have no account to sign in to.
+ */
+const DEMO_LINKS = [
+  { to: "/home", label: "Home" },
+  { to: "/events", label: "Events" },
+  { to: "/public-speaking", label: "Public Speaking" },
+] as const;
+
 /* --------------------------------- desktop -------------------------------- */
 
 /**
@@ -111,6 +122,38 @@ export function Navbar() {
         </div>
       </header>
     </>
+  );
+}
+
+/**
+ * Marketing mode top bar: branding plus the product nav. No avatar, no logout,
+ * no login — nobody is signed in.
+ */
+export function DemoNavbar() {
+  return (
+    <header
+      className="sticky top-0 z-40 border-b-2 border-ink bg-surface"
+      style={{
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
+      <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6">
+        <Link to="/home" aria-label="Ekaton home" className="shrink-0">
+          <Logo />
+        </Link>
+
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+          {DEMO_LINKS.map((link) => (
+            <NavItem key={link.to} {...link} />
+          ))}
+        </nav>
+
+        <div className="ml-auto">
+          <NavItem to="/profile" label="Profile" />
+        </div>
+      </div>
+    </header>
   );
 }
 

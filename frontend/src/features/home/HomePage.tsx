@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { StackGame } from "./StackGame";
 import { Hero } from "./Hero";
 import { usePlatformPresence } from "./usePlatformPresence";
+import { PUBLIC_SPEAKING_MODE } from "@/lib/config";
 
 interface FloatingShape {
   className: string;
@@ -137,6 +138,7 @@ export function HomePage() {
   // toast over the already-running search, rather than delaying it.
   useEffect(() => {
     const state = location.state as { autostart?: boolean; notice?: string } | null;
+    if (PUBLIC_SPEAKING_MODE) return;
     if (state?.autostart && !autoStarted.current) {
       autoStarted.current = true;
       window.history.replaceState({}, "");
@@ -163,8 +165,12 @@ export function HomePage() {
             className="w-full"
           >
             <Hero
-              onStart={() => void start()}
+              /* Demo mode is read-only: the button never calls the API. */
+              onStart={() => {
+                if (!PUBLIC_SPEAKING_MODE) void start();
+              }}
               loading={starting}
+              disabled={PUBLIC_SPEAKING_MODE}
               onlineCount={onlineCount}
             />
           </motion.div>

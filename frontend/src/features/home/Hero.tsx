@@ -16,10 +16,13 @@ const POINTS = [
 export function Hero({
   onStart,
   loading = false,
+  disabled = false,
   onlineCount = null,
 }: {
   onStart: () => void;
   loading?: boolean;
+  /** Public speaking mode makes the whole app look-but-don't-touch. */
+  disabled?: boolean;
   /** Live count from platform presence; null hides the indicator entirely. */
   onlineCount?: number | null;
 }) {
@@ -55,10 +58,10 @@ export function Hero({
       <motion.div variants={staggerItem} className="mt-10">
         <button
           onClick={onStart}
-          disabled={loading}
+          disabled={loading || disabled}
           className="group inline-flex items-center gap-2 border-2 border-ink bg-brand-yellow px-10 py-4 text-base font-extrabold uppercase tracking-wide text-ink shadow-brutal transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm active:translate-x-[5px] active:translate-y-[5px] active:shadow-none disabled:opacity-60"
         >
-          {loading ? "Starting…" : "Start chat"}
+          {disabled ? "Coming Soon" : loading ? "Starting…" : "Start chat"}
           <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
         </button>
       </motion.div>

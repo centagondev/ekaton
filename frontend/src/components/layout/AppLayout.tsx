@@ -1,13 +1,14 @@
 import { Outlet } from "react-router-dom";
-import { Navbar } from "./Navbar";
+import { Navbar, DemoNavbar } from "./Navbar";
 import { BottomNav } from "./BottomNav";
+import { PUBLIC_SPEAKING_MODE } from "@/lib/config";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 /** Shell for authenticated routes. Full-bleed screens (chat) opt out of this. */
 export function AppLayout() {
   return (
     <div className="flex min-h-dvh flex-col">
-      <Navbar />
+      {PUBLIC_SPEAKING_MODE ? <DemoNavbar /> : <Navbar />}
       {/*
         viewport-fit=cover lets the page run under the notch and the home
         indicator, so the gutters take whichever is larger: the design's
