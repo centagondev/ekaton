@@ -81,12 +81,6 @@ export default function App() {
             <Route path="/set-password" element={<PasswordSetupPage mode="set" />} />
             <Route path="/reset-password" element={<PasswordSetupPage mode="reset" />} />
 
-            {/* Moderation. Available in both modes and gated server-side by
-                IsAdminUser — the pages themselves react to a 401/403 rather
-                than trusting anything the client claims about itself. */}
-            <Route path="/admin" element={<AdminLoginPage />} />
-            <Route path="/admin/public-speaking" element={<AdminModerationPage />} />
-
             {/*
               Marketing mode — one demo session only.
 
@@ -115,6 +109,16 @@ export default function App() {
 
                 {/* Full-bleed, outside the shell — same as the real chat pages. */}
                 <Route path="/public-speaking" element={<PublicSpeakingPage />} />
+
+                {/* Moderation, gated server-side by IsAdminUser. Registered only
+                    in this arm because the backend registers its endpoints only
+                    while the flag is on — shipping the routes to production
+                    would give a page whose API returns 404. */}
+                <Route path="/admin" element={<AdminLoginPage />} />
+                <Route
+                  path="/admin/public-speaking"
+                  element={<AdminModerationPage />}
+                />
               </>
             ) : (
               <>

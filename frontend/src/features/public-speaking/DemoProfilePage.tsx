@@ -3,7 +3,7 @@ import { VenetianMask } from "lucide-react";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { BackButton } from "@/components/ui/BackButton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { publicSpeakingApi, getSessionToken } from "./api";
+import { publicSpeakingApi } from "./api";
 
 /**
  * Read-only identity card for demo mode.
@@ -14,14 +14,15 @@ import { publicSpeakingApi, getSessionToken } from "./api";
  * fields, no logout, no account data.
  */
 export function DemoProfilePage() {
-  const hasSession = Boolean(getSessionToken());
-
-  // join() is idempotent for a token that already exists, so this reads the
-  // current identity back rather than allocating a second one.
+  /**
+   * Read-only: /state/ resolves identity from the stored token OR the HttpOnly
+   * cookie and creates nothing. The old version gated on localStorage and
+   * re-POSTed /join/, so a cookie-only visitor was wrongly told they had no
+   * identity — and merely opening Profile could mint one.
+   */
   const identity = useQuery({
-    queryKey: ["public-speaking", "identity"],
-    queryFn: publicSpeakingApi.join,
-    enabled: hasSession,
+    queryKey: ["public-speaking", "state"],
+    queryFn: publicSpeakingApi.state,
     retry: false,
   });
 
@@ -29,7 +30,7 @@ export function DemoProfilePage() {
     <PageTransition className="mx-auto w-full max-w-2xl">
       <BackButton fallback="/public-speaking" label="Back" className="mb-6" />
 
-      {!hasSession ? (
+      {!identity.isLoading && !identity.data?.joined ? (
         <EmptyState
           title="No identity yet"
           description="Join the discussion and you'll be given an anonymous name for this session."

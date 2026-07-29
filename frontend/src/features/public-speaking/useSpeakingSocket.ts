@@ -48,73 +48,101 @@ export function useSpeakingSocket({
   useEffect(() => {
     if (!enabled) return;
 
-    // Identity may live only in the HttpOnly cookie, which the browser
-    // attaches to the handshake automatically. Gating the socket on a stored
-    // token would leave such a browser silently disconnected.
-    const token = getSessionToken();
-    const socket = new WebSocket(
-      token
-        ? `${WS_URL}/ws/public-speaking/?session=${encodeURIComponent(token)}`
-        : `${WS_URL}/ws/public-speaking/`,
-    );
-    socketRef.current = socket;
+    // Torn down by the cleanup below; a reconnect scheduled just before that
+    // must not fire against an unmounted component.
+    let disposed = false;
+    let heartbeat = 0;
+    let retry = 0;
+    let attempt = 0;
 
-    // Some proxies drop an idle socket; the consumer answers "ping" with
-    // "pong" purely to keep it warm.
-    const heartbeat = window.setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "ping" }));
-      }
-    }, 25_000);
+    const connect = () => {
+      if (disposed) return;
 
-    socket.onopen = () => setStatus("connected");
+      // Identity may live only in the HttpOnly cookie, which the browser
+      // attaches to the handshake automatically. Gating the socket on a stored
+      // token would leave such a browser silently disconnected.
+      const token = getSessionToken();
+      const socket = new WebSocket(
+        token
+          ? `${WS_URL}/ws/public-speaking/?session=${encodeURIComponent(token)}`
+          : `${WS_URL}/ws/public-speaking/`,
+      );
+      socketRef.current = socket;
 
-    socket.onmessage = (raw) => {
-      const data = JSON.parse(raw.data as string);
+      // Some proxies drop an idle socket; the consumer answers "ping" with
+      // "pong" purely to keep it warm.
+      heartbeat = window.setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 25_000);
 
-      switch (data.type) {
-        case "message":
-          handlers.current.onMessage(data.message as SpeakingMessage);
-          break;
-        case "upvote":
-          handlers.current.onUpvote(data.message_id, data.upvote_count);
-          break;
-        case "upvote_ack":
-          handlers.current.onUpvote(data.message_id, data.upvote_count, data.has_upvoted);
-          break;
-        case "posted":
-          handlers.current.onPosted(data.message_id);
-          break;
-        case "upvote_error":
-          handlers.current.onVoteError(
-            data.message_id,
-            data.upvote_count,
-            data.has_upvoted,
-            data.message,
-          );
-          break;
-        case "error":
-          handlers.current.onError(data.message, Boolean(data.has_posted));
-          break;
-        case "typing":
-          setTypingNames((current) => {
-            const others = current.filter((name) => name !== data.display_name);
-            return data.is_typing ? [...others, data.display_name] : others;
-          });
-          break;
-        default:
-          break;
-      }
+      socket.onopen = () => {
+        attempt = 0;
+        setStatus("connected");
+      };
+
+      socket.onmessage = (raw) => {
+        const data = JSON.parse(raw.data as string);
+
+        switch (data.type) {
+          case "message":
+            handlers.current.onMessage(data.message as SpeakingMessage);
+            break;
+          case "upvote":
+            handlers.current.onUpvote(data.message_id, data.upvote_count);
+            break;
+          case "upvote_ack":
+            handlers.current.onUpvote(data.message_id, data.upvote_count, data.has_upvoted);
+            break;
+          case "posted":
+            handlers.current.onPosted(data.message_id);
+            break;
+          case "upvote_error":
+            handlers.current.onVoteError(
+              data.message_id,
+              data.upvote_count,
+              data.has_upvoted,
+              data.message,
+            );
+            break;
+          case "error":
+            handlers.current.onError(data.message, Boolean(data.has_posted));
+            break;
+          case "typing":
+            setTypingNames((current) => {
+              const others = current.filter((name) => name !== data.display_name);
+              return data.is_typing ? [...others, data.display_name] : others;
+            });
+            break;
+          default:
+            break;
+        }
+      };
+
+      socket.onclose = () => {
+        socketRef.current = null;
+        window.clearInterval(heartbeat);
+        // A dropped socket used to be permanent: posting and voting stayed
+        // dead until the visitor thought to refresh. During a live talk that
+        // is the whole room going silent, so reconnect with a capped backoff.
+        setTypingNames([]);
+        if (disposed) return;
+        setStatus("connecting");
+        attempt += 1;
+        retry = window.setTimeout(connect, Math.min(1000 * 2 ** (attempt - 1), 10_000));
+      };
     };
 
-    socket.onclose = () => {
-      socketRef.current = null;
-      setStatus("closed");
-    };
+    connect();
 
     return () => {
+      disposed = true;
+      window.clearTimeout(retry);
       window.clearInterval(heartbeat);
-      socket.close();
+      // onclose fires during teardown; `disposed` stops it rescheduling.
+      socketRef.current?.close();
+      socketRef.current = null;
     };
   }, [enabled]);
 

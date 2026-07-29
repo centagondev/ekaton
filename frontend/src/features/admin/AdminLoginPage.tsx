@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
-import { setTokens } from "@/lib/storage";
 import { parseApiError } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
@@ -31,13 +30,14 @@ export function AdminLoginPage() {
 
   const submit = form.handleSubmit(async (values) => {
     try {
-      const result = await adminApi.login(values);
-      setTokens({ access: result.access, refresh: result.refresh });
+      await adminApi.login(values);
       navigate("/admin/public-speaking", { replace: true });
     } catch (error) {
-      // Always the server's single message, never a per-field error: telling
-      // one attempt from another is how staff emails get enumerated.
-      toast.error(parseApiError(error).message);
+      const { status, message } = parseApiError(error);
+      // The backend distinguishes "wrong password" from "not a staff account",
+      // and echoing that verbatim would let anyone enumerate which addresses
+      // are admins. Every 401 gets one fixed sentence.
+      toast.error(status === 401 ? "Invalid email or password." : message);
     }
   });
 

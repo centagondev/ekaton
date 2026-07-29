@@ -131,8 +131,17 @@ export const publicSpeakingApi = {
     };
   },
 
+  /**
+   * The whole wall, not one page.
+   *
+   * The endpoint paginates at 10 by default, which silently hid every response
+   * past the tenth — including the un-upvoted ones a visitor had just posted.
+   * 100 is the backend's max_page_size.
+   */
   async messages(): Promise<SpeakingMessage[]> {
-    const { data } = await client.get<ApiEnvelope<Page<SpeakingMessage>>>("/messages/");
+    const { data } = await client.get<ApiEnvelope<Page<SpeakingMessage>>>("/messages/", {
+      params: { page_size: 100 },
+    });
     return data.data.results;
   },
 };
