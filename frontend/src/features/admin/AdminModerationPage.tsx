@@ -4,7 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { Heart, LogOut, MessagesSquare, Search, Trash2 } from "lucide-react";
-import { clearSession } from "@/lib/storage";
+import { clearAdminSession } from "./api";
 import { parseApiError } from "@/lib/errors";
 import { cn, formatDateTime, timeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -119,7 +119,7 @@ export function AdminModerationPage() {
           size="sm"
           className="min-h-9"
           onClick={() => {
-            clearSession();
+            clearAdminSession();
             navigate("/admin", { replace: true });
           }}
         >

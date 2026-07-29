@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
@@ -535,6 +536,13 @@ export function PublicSpeakingPage() {
       // Own responses are the one dead end the server would reject anyway.
       if (!target || target.is_own) return;
 
+      // send() drops frames on a closed socket, so an optimistic vote here
+      // would stick on screen and never reach the server.
+      if (status !== "connected") {
+        toast.error("Reconnecting — try again in a moment.");
+        return;
+      }
+
       // Toggle, Reddit-style: painted optimistically in whichever direction,
       // reconciled by upvote_ack, rolled back by upvote_error.
       navigator.vibrate?.(target.has_upvoted ? 8 : 15);
@@ -553,15 +561,19 @@ export function PublicSpeakingPage() {
       );
       sendUpvote(messageId);
     },
-    [sendUpvote],
+    [sendUpvote, status],
   );
 
   useChatViewport();
 
-  // Ranking means a new message can land anywhere; only jump for the top.
+  // Ranking means a new message can land anywhere, so jumping to the top on
+  // every arrival yanks a reader off what they were reading to show them
+  // nothing. Only follow when the top card actually changed.
+  const headId = messages[0]?.id;
   useEffect(() => {
+    if (!headId) return;
     listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [messages.length]);
+  }, [headId]);
 
   /* -------------------------------- actions -------------------------------- */
 
@@ -645,7 +657,11 @@ export function PublicSpeakingPage() {
       >
         {/* Top row: brand left, identity + leaderboard right. */}
         <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-2.5 sm:px-6">
-          <Logo className="shrink-0" />
+          {/* This page sits outside AppLayout, so BottomNav is not mounted —
+              without this the only interactive page has no way back. */}
+          <Link to="/home" aria-label="Back to Ekaton home" className="shrink-0">
+            <Logo />
+          </Link>
           <div className="ml-auto flex min-w-0 items-center gap-2">
             {joined && (
               <span className="flex min-w-0 items-center gap-1.5 border-2 border-ink bg-brand-lavender px-2 py-1">
