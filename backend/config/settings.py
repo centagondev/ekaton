@@ -39,6 +39,17 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost"])
 
+# ---------------------------------------------------------------------------
+# Temporary public speaking mode — one demo session only.
+#
+# OFF (the default) is today's production behaviour: the public speaking REST
+# URLs are never registered and its WebSocket route is never added, so every
+# demo path 404s and nothing in the normal product changes. The app stays in
+# INSTALLED_APPS so its tables survive the flag flipping back and forth and no
+# migration ever has to be rolled back.
+# ---------------------------------------------------------------------------
+PUBLIC_SPEAKING_MODE = env.bool("PUBLIC_SPEAKING_MODE", default=False)
+
 ACCOUNT_SETUP_TOKEN_LIFETIME = timedelta(minutes=30)
 
 PASSWORD_RESET_TOKEN_LIFETIME = timedelta(minutes=30)
@@ -68,6 +79,8 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.administration",
     "apps.presence",
+    # Temporary; gated at the URL/routing layer by PUBLIC_SPEAKING_MODE.
+    "apps.public_speaking",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -99,6 +112,12 @@ REST_FRAMEWORK = {
         "admin_dashboard": "5/m",
         "comment_create": "20/hour",
         "upvote_toggle": "60/hour",
+        # Public speaking demo (unauthenticated, so scoped by IP).
+        # Scoped by IP, and an audience in one hall shares one IP, so these
+        # are deliberately generous. Real abuse protection is per-participant:
+        # a 2s message cooldown and one message each, both enforced server-side.
+        "public_speaking_join": "600/hour",
+        "public_speaking": "6000/hour",
     },
 }
 
@@ -125,6 +144,11 @@ LOGGING = {
             "propagate": False,
         },
         "chat": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "public_speaking": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
@@ -249,6 +273,16 @@ CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS", default=["http://localhost:5173", "http://127.0.0.1:5173"]
 )
 CORS_ALLOW_CREDENTIALS = True
+
+# Public speaking mode identifies its anonymous visitors with a custom request
+# header. Any header outside django-cors-headers' small default allowlist makes
+# the browser send a CORS preflight, and the preflight is refused unless the
+# header is named here — the request then never reaches Django at all. Appended
+# only while the flag is on, so production CORS is unchanged.
+if PUBLIC_SPEAKING_MODE:
+    from corsheaders.defaults import default_headers
+
+    CORS_ALLOW_HEADERS = (*default_headers, "x-speaking-session")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Ekaton API",

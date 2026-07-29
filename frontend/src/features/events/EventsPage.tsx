@@ -9,15 +9,35 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ComingSoon } from "@/components/ui/ComingSoon";
+import { PUBLIC_SPEAKING_MODE } from "@/lib/config";
 import { formatDateTime, timeUntil } from "@/lib/utils";
 import { EventBannerArt, EventFormModal } from "./event-shared";
 
 export function EventsPage() {
   const [createOpen, setCreateOpen] = useState(false);
-  const query = useQuery({ queryKey: ["events"], queryFn: eventsApi.list });
+  // Demo visitors have no JWT, so this request would 401 — and real campus
+  // events must not be shown publicly. Hook stays unconditional.
+  const query = useQuery({
+    queryKey: ["events"],
+    queryFn: eventsApi.list,
+    enabled: !PUBLIC_SPEAKING_MODE,
+  });
 
   const events = query.data ?? [];
   const [featured, ...rest] = events;
+
+  if (PUBLIC_SPEAKING_MODE) {
+    return (
+      <PageTransition>
+        <ComingSoon
+          icon={<CalendarDays className="size-7" />}
+          title="Campus Events"
+          description="Soon you'll be able to create events, drop into anonymous group chats around them, and meet the people sitting three rows behind you. Launching soon."
+        />
+      </PageTransition>
+    );
+  }
 
   return (
     <PageTransition>
