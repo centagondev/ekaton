@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   CheckCircle2,
+  Gift,
   Heart,
+  MessageCircle,
   MessagesSquare,
   SendHorizonal,
+  ThumbsUp,
   Trophy,
   VenetianMask,
 } from "lucide-react";
@@ -195,6 +198,92 @@ function VoteButton({
         </AnimatePresence>
       </span>
     </motion.button>
+  );
+}
+
+/* ---------------------------- onam banner art ------------------------------ */
+
+/**
+ * Decorative snake-boat (vallam kali) sketch for the Onam banner. Hand-drawn
+ * flat-style SVG rather than a raster image — nothing here fetches or embeds
+ * an external asset. Purely presentational: aria-hidden, no semantic content.
+ */
+function OnamBoatArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 220 110" fill="none" aria-hidden="true" className={className}>
+      <path
+        d="M6 82 C 36 98, 82 102, 126 94 C 168 87, 198 68, 214 36 C 184 44, 158 49, 124 52 C 82 55, 38 62, 6 82 Z"
+        fill="#3a2415"
+      />
+      <path
+        d="M214 36 C 204 16, 192 4, 180 0"
+        stroke="#3a2415"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      {Array.from({ length: 6 }, (_, i) => (
+        <circle key={i} cx={38 + i * 22} cy={76 - i * 1.4} r="6.5" fill="#8a5a2b" />
+      ))}
+      <line x1="86" y1="70" x2="86" y2="26" stroke="#3a2415" strokeWidth="3" />
+      <path
+        d="M62 30 Q86 14 110 30"
+        stroke="#c0392b"
+        strokeWidth="4"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Decorative Onam sadhya (banana-leaf feast), nilavilakku lamp and umbrella.
+ * Same rationale as OnamBoatArt: hand-drawn, decorative, aria-hidden.
+ */
+function OnamSadhyaArt({ className }: { className?: string }) {
+  const dishColors = ["#f4d35e", "#e07a5f", "#f2f2f2", "#e07a5f", "#f4d35e"];
+  return (
+    <svg viewBox="0 0 220 120" fill="none" aria-hidden="true" className={className}>
+      <ellipse cx="76" cy="97" rx="62" ry="17" fill="#2f6b32" />
+      {dishColors.map((fill, i) => (
+        <circle key={i} cx={40 + i * 18} cy={90 - (i % 2) * 4} r="7" fill={fill} />
+      ))}
+      <rect x="152" y="66" width="4" height="36" fill="#8a5a2b" />
+      <ellipse cx="154" cy="62" rx="14" ry="5" fill="#c99a3f" />
+      <path d="M154 57 Q157 47 154 41" stroke="#e07a1f" strokeWidth="3" strokeLinecap="round" />
+      <path
+        d="M128 22 Q170 -4 206 20"
+        stroke="#8a5a2b"
+        strokeWidth="4"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path d="M128 22 Q168 6 206 20 Q168 32 128 22 Z" fill="#c0392b" opacity="0.9" />
+      <line x1="167" y1="20" x2="167" y2="66" stroke="#8a5a2b" strokeWidth="3" />
+    </svg>
+  );
+}
+
+/** One "how it works" step inside the white pill bar under the banner. */
+function BannerStep({
+  icon,
+  label,
+  divider = true,
+}: {
+  icon: ReactNode;
+  label: string;
+  divider?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-ink",
+        divider && "sm:border-l-2 sm:border-ink/10",
+      )}
+    >
+      {icon}
+      {label}
+    </div>
   );
 }
 
@@ -682,18 +771,47 @@ export function PublicSpeakingPage() {
           </div>
         </div>
 
-        {/* The question is the event. Large, centred, never scrolled away. */}
-        <div className="border-t-2 border-ink bg-brand-yellow">
-          <div className="mx-auto w-full max-w-3xl px-4 py-4 text-center sm:px-6 sm:py-5">
-            <span className="inline-block border-2 border-ink bg-surface px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-[0.25em]">
-              {discussion.title}
+        {/* The question is the event. Large, centred, never scrolled away.
+            Festive one-off treatment for the Onam run — rounded pills and the
+            boat/sadhya art depart from the app's usual sharp-cornered style on
+            purpose, matching the banner this was designed against. */}
+        <div className="relative overflow-hidden border-t-2 border-ink bg-brand-yellow">
+          <OnamBoatArt className="pointer-events-none absolute -left-3 bottom-0 hidden h-24 w-auto opacity-90 lg:block xl:h-28" />
+          <OnamSadhyaArt className="pointer-events-none absolute -right-3 bottom-0 hidden h-24 w-auto opacity-90 lg:block xl:h-28" />
+
+          <div className="relative mx-auto w-full max-w-3xl px-4 py-5 text-center sm:px-6 sm:py-7">
+            <span className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-surface px-4 py-1 font-mono text-[10px] font-black uppercase tracking-[0.2em]">
+              <span aria-hidden="true">🌼</span>
+              {discussion.title} Celebration
+              <span aria-hidden="true">🌼</span>
             </span>
-            <h1 className="mx-auto mt-2 max-w-2xl text-xl font-black leading-tight tracking-tight sm:text-2xl lg:text-3xl">
+
+            <h1 className="mx-auto mt-3 max-w-2xl text-2xl font-black leading-tight tracking-tight sm:text-3xl lg:text-4xl">
               {discussion.topic}
             </h1>
-            <p className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink/60">
-              Anonymous public discussion · vote for the most relatable experience
+
+            <p className="mt-2 font-bold text-ink/70">
+              <span aria-hidden="true">🌿</span> Suggest{" "}
+              <span aria-hidden="true">·</span> Vote{" "}
+              <span aria-hidden="true">·</span> Celebrate Together{" "}
+              <span aria-hidden="true">🌿</span>
             </p>
+
+            <div className="mt-4 inline-flex flex-col items-stretch rounded-2xl bg-surface/95 shadow-brutal-sm sm:flex-row sm:items-center">
+              <BannerStep
+                icon={<MessageCircle className="size-4 shrink-0" aria-hidden="true" />}
+                label="Suggest Your Ideas"
+                divider={false}
+              />
+              <BannerStep
+                icon={<ThumbsUp className="size-4 shrink-0" aria-hidden="true" />}
+                label="Vote for Your Favorite"
+              />
+              <BannerStep
+                icon={<Gift className="size-4 shrink-0" aria-hidden="true" />}
+                label="Let's Celebrate Onam Together!"
+              />
+            </div>
           </div>
         </div>
       </header>
