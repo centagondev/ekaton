@@ -6,6 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.responses import success_response
+from core.throttles import (
+    ContentUpdateRateThrottle,
+    EventCreateRateThrottle,
+    EventMembershipRateThrottle,
+    EventMessageCreateRateThrottle,
+)
 
 from .docs import (
     cancel_event_doc,
@@ -52,6 +58,7 @@ class CreateEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventCreateRateThrottle]
 
     @create_event_doc
     def post(self, request):
@@ -129,6 +136,7 @@ class UpdateEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ContentUpdateRateThrottle]
 
     @update_event_doc
     def patch(self, request, pk):
@@ -191,6 +199,7 @@ class JoinEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventMembershipRateThrottle]
 
     @join_event_doc
     def post(self, request, pk):
@@ -232,6 +241,7 @@ class LeaveEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventMembershipRateThrottle]
 
     @leave_event_doc
     def post(self, request, pk):
@@ -275,6 +285,11 @@ class EventMessageAPIView(GenericAPIView):
 
     permission_classes = [IsAuthenticated]
     pagination_class = EventMessageCursorPagination
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            return [EventMessageCreateRateThrottle()]
+        return super().get_throttles()
 
     def get_serializer_class(self):
         """

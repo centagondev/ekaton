@@ -25,6 +25,11 @@ CONNECTION_KEY_PREFIX = "chat_conn"
 # beyond any real conversation, which releases the slot the moment it ends.
 CONNECTION_TTL_SECONDS = 60 * 60 * 12
 
+# At most one real chat message per participant per cooldown window. Applied
+# before any DB work so a flooding socket costs one Redis round trip, not an
+# encrypt + insert + broadcast. Typing and system events are unaffected.
+MESSAGE_COOLDOWN_SECONDS = 1
+
 from .services import (
     create_private_message,
     create_reveal_request,
@@ -327,6 +332,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     {
                         "type": "error",
                         "message": "Message exceeds the maximum length.",
+                    }
+                )
+            )
+            return
+
+        # SET NX is atomic, so two frames arriving together cannot both pass.
+        allowed = await sync_to_async(redis_client.set)(
+            f"chat_msg_cooldown:{self.room_id}:{self.scope['user'].id}",
+            1,
+            nx=True,
+            ex=MESSAGE_COOLDOWN_SECONDS,
+        )
+
+        if not allowed:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "error",
+                        "message": "You're sending messages too quickly.",
                     }
                 )
             )

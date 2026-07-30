@@ -1,11 +1,13 @@
 import logging
 
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.presence.services import EventPresenceService
+from core.redis import redis_client
 
 from .models import MAX_MESSAGE_LENGTH, EventMessage, EventParticipant, EventStatus
 from .serializers import ANONYMOUS_FALLBACK_NAME, EventMessageSerializer
@@ -37,6 +39,12 @@ EVENT_CLOSED_CODE = 4004
 # reject() rather than a bare close() so the client can actually read them.
 UNAUTHENTICATED_CODE = 4001
 NOT_A_PARTICIPANT_CODE = 4003
+
+# At most one message per participant per cooldown window. Event messages
+# broadcast to the whole room, so this is checked before any DB work — a
+# flooding socket costs one Redis round trip, not an insert + group send.
+# Typing indicators and pings are unaffected.
+MESSAGE_COOLDOWN_SECONDS = 2
 
 
 class EventConsumer(AsyncJsonWebsocketConsumer):
@@ -203,6 +211,22 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json(
                 {
                     "error": f"Message cannot exceed {MAX_MESSAGE_LENGTH} characters.",
+                }
+            )
+            return
+
+        # SET NX is atomic, so two frames arriving together cannot both pass.
+        allowed = await sync_to_async(redis_client.set)(
+            f"event_msg_cooldown:{self.participant.id}",
+            1,
+            nx=True,
+            ex=MESSAGE_COOLDOWN_SECONDS,
+        )
+
+        if not allowed:
+            await self.send_json(
+                {
+                    "error": "You're sending messages too quickly.",
                 }
             )
             return
