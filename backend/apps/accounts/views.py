@@ -2,6 +2,7 @@
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
@@ -14,6 +15,7 @@ from core.throttles import (
     ResendPasswordResetRateThrottle,
     ResetPasswordRateThrottle,
     SetPasswordRateThrottle,
+    TokenRefreshRateThrottle,
 )
 
 from .docs import (
@@ -182,6 +184,12 @@ class MeAPIView(APIView):
             message="Profile retrieved successfully.",
             data=UserSerializer(request.user).data,
         )
+
+
+class TokenRefreshAPIView(TokenRefreshView):
+    """API endpoint to refresh an access token, with a dedicated rate limit."""
+
+    throttle_classes = [TokenRefreshRateThrottle]
 
 
 class ForgetPasswordAPIView(APIView):

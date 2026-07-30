@@ -97,3 +97,39 @@ class UpvoteToggleRateThrottle(UserRateThrottle):
     """Rate limiter for upvote toggling. Scoped to authenticated users."""
 
     scope = "upvote_toggle"
+
+
+class TokenRefreshRateThrottle(AnonRateThrottle):
+    """Rate limiter for the token refresh endpoint. Scoped to anonymous users by IP."""
+
+    scope = "token_refresh"
+
+
+class EventCreateRateThrottle(UserRateThrottle):
+    """Rate limiter for event creation. Scoped to authenticated users."""
+
+    scope = "event_create"
+
+
+class EventMessageCreateRateThrottle(UserRateThrottle):
+    """Rate limiter for sending event chat messages. Scoped to authenticated users."""
+
+    scope = "event_message_create"
+
+
+class EventMembershipRateThrottle(UserRateThrottle):
+    """Rate limiter for joining and leaving events. Scoped to authenticated users."""
+
+    scope = "event_membership"
+
+
+class ChatEndRateThrottle(UserRateThrottle):
+    """Rate limiter for the end chat endpoint. Scoped to authenticated users."""
+
+    scope = "chat_end"
+
+
+class ContentUpdateRateThrottle(UserRateThrottle):
+    """Rate limiter for editing and deleting own content. Scoped to authenticated users."""
+
+    scope = "content_update"

@@ -11,6 +11,10 @@ from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken
+)
 
 from apps.users.models import User
 from core.email import EmailService
@@ -321,7 +325,16 @@ def reset_password(password_reset_token, password):
     user.set_password(password)
 
     user.save(update_fields=["password"])
+    
+    # Invalidate all active refresh tokens for security.
+    # Since a password reset often implies a compromised account, 
+    # this forces all devices (including potential attackers) to re-authenticate.
+    
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=outstanding)
+        
     password_reset_token.used = True
+        
     password_reset_token.save(update_fields=["used"])
 
     PasswordResetToken.objects.filter(
@@ -386,6 +399,12 @@ def change_password(user, current_password, new_password):
     user.set_password(new_password)
     user.save(update_fields=["password"])
 
+    # Revoke all active refresh tokens for the user across all devices.
+    # MUST run prior to token creation to prevent revoking the newly issued token.
+    
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=outstanding)
+        
     refresh = RefreshToken.for_user(user)
 
     logger.info(
