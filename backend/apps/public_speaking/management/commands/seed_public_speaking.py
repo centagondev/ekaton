@@ -10,10 +10,10 @@ class Command(BaseCommand):
     help = "Create (or replace) the single live public speaking discussion."
 
     def add_arguments(self, parser):
-        parser.add_argument("--title", default="Public Speaking")
+        parser.add_argument("--title", default="Onam")
         parser.add_argument(
             "--topic",
-            default="What’s the most messed-up thing a friend did that you can laugh about today?",
+            default="🌼 Help Us Choose Our Brototype Onam Celebration Name! 🌼",
         )
 
     def handle(self, *args, **options):

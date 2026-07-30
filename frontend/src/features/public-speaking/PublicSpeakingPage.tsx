@@ -26,6 +26,7 @@ import {
 } from "@/lib/useChatViewport";
 import { publicSpeakingApi, type SpeakingMessage } from "./api";
 import { useSpeakingSocket } from "./useSpeakingSocket";
+import onamBanner from "./assets/onam-banner.png";
 
 const MAX_LENGTH = 1000;
 const LEADERBOARD_SIZE = 10;
@@ -682,19 +683,25 @@ export function PublicSpeakingPage() {
           </div>
         </div>
 
-        {/* The question is the event. Large, centred, never scrolled away. */}
-        <div className="border-t-2 border-ink bg-brand-yellow">
-          <div className="mx-auto w-full max-w-3xl px-4 py-4 text-center sm:px-6 sm:py-5">
-            <span className="inline-block border-2 border-ink bg-surface px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-[0.25em]">
-              {discussion.title}
-            </span>
-            <h1 className="mx-auto mt-2 max-w-2xl text-xl font-black leading-tight tracking-tight sm:text-2xl lg:text-3xl">
-              {discussion.topic}
-            </h1>
-            <p className="mt-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink/60">
-              Anonymous public discussion · vote for the most relatable experience
-            </p>
-          </div>
+        {/* The question is the event, never scrolled away. The real banner
+            artwork replaces the hand-built version — it already bakes in the
+            title/topic/how-it-works copy, so none of that is rendered as text
+            here. That does mean this banner is static: it won't reflect a
+            future discussion.title/topic change the way the old JSX version
+            did, since the words are pixels now, not props. */}
+        <div className="overflow-hidden border-t-2 border-ink bg-brand-yellow">
+          <img
+            src={onamBanner}
+            alt={`${discussion.title}: ${discussion.topic}`}
+            /* The banner is a fixed ~6.7:1 strip — squeezed to a phone's full
+               width at its natural ratio, the text shrinks to ~50px tall and
+               becomes unreadable. Below `sm`, crop to a shorter box instead:
+               object-cover zooms into the centred text/badge/pill band and
+               lets the boat and sadhya art at the edges run off-canvas, which
+               reads far better on a phone than the whole strip shrunk down.
+               From `sm` up there's enough width to show the full artwork. */
+            className="block h-24 w-full object-cover object-center sm:h-auto sm:object-fill"
+          />
         </div>
       </header>
 
