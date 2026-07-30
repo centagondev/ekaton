@@ -223,6 +223,11 @@ class EventMessage(BaseModel):
         max_length=MAX_MESSAGE_LENGTH,
         help_text="Text content of the message.",
     )
+    
+    reply_to =models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL
+,null=True,blank=True,related_name="replies", help_text="The message this one is replying to.", )
 
     class Meta:
         db_table = "event_messages"
@@ -240,6 +245,7 @@ class EventMessage(BaseModel):
                 fields=("participant",),
                 name="participant_message_idx",
             ),
+            models.Index(fields=("reply_to",), name="reply_to_message_idx"),
         ]
 
     def __str__(self) -> str:

@@ -130,10 +130,10 @@ export type EventStatus = "active" | "ended" | "cancelled";
 export interface CampusEvent {
   id: string;
   /**
-   * Owner's real full_name — sent even for anonymous events, so the UI must
-   * decide whether showing it is appropriate.
+   * Owner's full_name, or null for anonymous events — the backend never
+   * sends the host's real name when the event is anonymous.
    */
-  owner: string;
+  owner: string | null;
   /** Authoritative ownership flag; never infer this from `owner`. */
   is_owner: boolean;
   banner: EventBanner;

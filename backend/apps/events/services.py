@@ -3,6 +3,7 @@ import secrets
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from click.utils import R
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
@@ -10,6 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.presence.services import EventPresenceService
+from apps.users.models import User
 
 from .models import (
     MAX_MESSAGE_LENGTH,
@@ -21,6 +23,10 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+#only 2 event can create by user dalily allowed 
+
+MAX_EVENTS_PER_DAY = 2
 
 
 def event_group_name(event_id) -> str:
@@ -127,15 +133,51 @@ def close_participant_connections(*, event, user, reason):
     )
 
 
+def count_events_created_today(user):
+    """
+    Return how many events the user has created since midnight.
+
+    The day starts at local midnight (settings.TIME_ZONE), not UTC. Using UTC
+    here would reset everyone's limit at 5:30 AM local time instead.
+    """
+    start_of_day = timezone.localtime().replace(
+        hour=0,
+        minute=0,
+        second=0
+    )
+
+    return Event.objects.filter(
+        owner=user,
+        created_at__gte=start_of_day,
+    ).count()
+
+
 @transaction.atomic
 def create_event(*, user, validated_data):
     """
     Create a new event owned by the authenticated user.
 
+    Users may only create MAX_EVENTS_PER_DAY events a day; the limit resets
+    at midnight.
+
     If anonymous chat is enabled, a unique anonymous seed is
     generated for the event. This seed is later used to assign
     deterministic anonymous identities to participants.
     """
+    # Lock the user's row so two requests at the same time cannot both pass
+    # the check below and both create. Without it, 5 fast clicks made 4 events.
+    User.objects.select_for_update().get(pk=user.pk)
+
+    if count_events_created_today(user) >= MAX_EVENTS_PER_DAY:
+        logger.warning(
+            "Daily event limit reached by user '%s'.",
+            user.email,
+        )
+        raise ValidationError(
+            f"You can only create {MAX_EVENTS_PER_DAY} events per day. "
+            "You can create again after midnight."
+        )
+
     event_data = {
         "owner": user,
         **validated_data,
@@ -534,7 +576,7 @@ def leave_event(*, event, user):
 
 
 @transaction.atomic
-def send_event_message(*, content: str, participant: EventParticipant):
+def send_event_message(*, content: str, participant: EventParticipant,reply_to_id=None):
     """
     Create a new event message.
 
@@ -575,10 +617,20 @@ def send_event_message(*, content: str, participant: EventParticipant):
     if len(content) > MAX_MESSAGE_LENGTH:
         raise ValidationError(f"Message cannot exceed {MAX_MESSAGE_LENGTH} characters.")
 
+    reply_to=None
+    
+    if reply_to_id is not None:
+    # replying to a message from a DIFFERENT event, which would pull that
+    # event's private content into this chat as a quote.
+        reply_to = EventMessage.objects.filter(id=reply_to_id,event=participant.event,).first()
+        
+        if reply_to is None :
+            raise ValidationError("The message you are replying to was not found.")
     message = EventMessage.objects.create(
         event=participant.event,
         participant=participant,
         content=content,
+        reply_to=reply_to,
     )
 
     return message

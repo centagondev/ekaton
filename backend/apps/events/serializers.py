@@ -190,7 +190,7 @@ class EventSerializer(serializers.ModelSerializer):
     Serializer used to represent an event.
     """
 
-    owner = serializers.ReadOnlyField(source="owner.full_name")
+    owner = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     participant_count = serializers.SerializerMethodField()
 
@@ -218,6 +218,19 @@ class EventSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         )
+
+    def get_owner(self, obj):
+        """
+        Return the event owner's display name.
+
+        - Anonymous events → None, so the host's real name never leaves
+          the backend. The frontend shows its own "Anonymous host" label.
+        - Normal events → owner's full name.
+        """
+        if obj.is_anonymous_chat:
+            return None
+
+        return obj.owner.full_name
 
     def get_is_owner(self, obj) -> bool:
         """
