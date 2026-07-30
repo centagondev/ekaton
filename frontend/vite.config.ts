@@ -16,6 +16,14 @@ export default defineConfig({
     // a drifted port is not in the backend's CORS allowlist and surfaces as a
     // confusing "No 'Access-Control-Allow-Origin' header" error.
     strictPort: true,
+    watch: {
+      // Docker Desktop bind mounts don't forward host filesystem events into
+      // the Linux container, so the watcher never fires and HMR looks dead.
+      // Polling is the only thing that works there — but it burns CPU, so it
+      // stays off for normal host-side `npm run dev` (compose sets the flag).
+      usePolling: process.env.VITE_USE_POLLING === "true",
+      interval: 300,
+    },
   },
   build: {
     rollupOptions: {

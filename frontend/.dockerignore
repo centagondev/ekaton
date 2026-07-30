@@ -1,0 +1,30 @@
+# ── 1. Heavy & Incompatible ──────────────────────────────────────────────────
+# Windows-installed node_modules — rolldown ships win32-x64-msvc native
+# bindings that are unusable on Linux. Docker will npm ci fresh in the image.
+node_modules/
+
+# Build output — regenerated inside the container
+dist/
+dist-ssr/
+.vite/
+
+# ── 2. Top Secret ─────────────────────────────────────────────────────────────
+# Never burn secrets into the image — Docker reads them at runtime via env_file
+.env
+.env.*.local
+
+# ── 3. Junk / Auto-Generated ──────────────────────────────────────────────────
+*.log
+*.local
+
+# ── 4. Personal Editor Files ──────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore

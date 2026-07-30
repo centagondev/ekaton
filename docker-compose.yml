@@ -5,8 +5,17 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
+    environment:
+      # Host file-change events don't cross the Windows bind mount into the
+      # Linux container, so Vite's watcher never fires without polling.
+      - VITE_USE_POLLING=true
     volumes:
       - ./frontend:/app
+      # A bind mount ignores .dockerignore, so the host's Windows node_modules
+      # (rolldown ships win32-x64-msvc native bindings) would otherwise shadow
+      # the Linux packages installed at build time. Compose reuses this
+      # anonymous volume across recreates, so after any package.json change
+      # run `docker compose down -v` — a rebuild alone will not refresh it.
       - /app/node_modules
     depends_on:
       - web
