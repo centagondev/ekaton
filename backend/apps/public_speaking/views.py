@@ -1,84 +1,26 @@
-from django.conf import settings
-from rest_framework.permissions import AllowAny
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
 
 from . import services
-from .serializers import (
-    JoinDiscussionSerializer,
-    PublicSpeakingMessageSerializer,
-    PublicSpeakingSerializer,
-)
-
-# The header a joined browser sends back on every request.
-SESSION_HEADER = "HTTP_X_SPEAKING_SESSION"
-
-# Persistent identity cookie, set by the backend on join. HttpOnly (JS cannot
-# read it) and long-lived, so the same browser is the same participant across
-# refreshes, new tabs and restarts. The client-held header remains the primary
-# channel — Safari refuses third-party cookies entirely, so a deployment with
-# the frontend and backend on different domains still works through the header
-# while the cookie covers everything else.
-PARTICIPANT_COOKIE = "anonymous_participant_id"
-
-PARTICIPANT_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # one week — outlives the event
+from .serializers import PublicSpeakingMessageSerializer, PublicSpeakingSerializer
 
 
-def _session_token(request):
-    """Header first (explicit), cookie second (persistent). Never the IP."""
-    return (
-        request.META.get(SESSION_HEADER, "").strip()
-        or request.COOKIES.get(PARTICIPANT_COOKIE, "").strip()
-    )
-
-
-def _attach_participant_cookie(response, token):
-    """
-    Pin this browser to its participant identity.
-
-    SameSite must be "None" in production: the frontend and the API are served
-    from different domains there, and a Lax cookie is simply NOT sent on
-    cross-site XHR — the browser would arrive with no identity and be handed a
-    brand new participant, which is exactly the duplicate-vote/duplicate-post
-    bug. "None" requires Secure, so local http development keeps Lax (where
-    localhost:5173 -> localhost:8000 is same-site anyway).
-    """
-    cross_site = not settings.DEBUG
-
-    response.set_cookie(
-        PARTICIPANT_COOKIE,
-        token,
-        max_age=PARTICIPANT_COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="None" if cross_site else "Lax",
-        secure=cross_site,
-    )
-    return response
-
-
-class JoinThrottle(AnonRateThrottle):
+class JoinThrottle(UserRateThrottle):
     scope = "public_speaking_join"
 
 
-class ReadThrottle(AnonRateThrottle):
+class ReadThrottle(UserRateThrottle):
     scope = "public_speaking"
 
 
 class PublicSpeakingDetailAPIView(APIView):
-    """
-    The live discussion and its topic.
+    """The live discussion and its topic."""
 
-    AllowAny is deliberate and is the only unauthenticated read surface in the
-    project. It exposes a title, a topic string and a flag — no user data, no
-    events, no complaints. These URLs are not registered at all unless
-    PUBLIC_SPEAKING_MODE is on.
-    """
-
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
     throttle_classes = [ReadThrottle]
 
     def get(self, request):
@@ -94,14 +36,14 @@ class PublicSpeakingDetailAPIView(APIView):
 
 class JoinDiscussionAPIView(APIView):
     """
-    Hand this browser an anonymous identity.
+    Hand this account its anonymous identity for the discussion.
 
-    Sending back a token you already hold returns the same identity, which is
-    what makes refreshing and rejoining keep your name.
+    Identity is the authenticated account (`request.user`), not anything the
+    browser holds — joining again, from any browser, tab or incognito window,
+    returns the same identity rather than minting a new one.
     """
 
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
     throttle_classes = [JoinThrottle]
 
     def post(self, request):
@@ -112,44 +54,31 @@ class JoinDiscussionAPIView(APIView):
                 message="No discussion is running right now.", status_code=404
             )
 
-        serializer = JoinDiscussionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        participant = services.join_discussion(discussion=discussion, user=request.user)
 
-        participant, token = services.join_discussion(
-            discussion=discussion,
-            # Body token from the client's own storage, else the identity the
-            # cookie already pins this browser to.
-            session_token=serializer.validated_data.get("session_token")
-            or _session_token(request)
-            or None,
-        )
-
-        response = success_response(
+        return success_response(
             data={
-                "session_token": token,
                 "display_name": participant.display_name,
-                # The server decides whether this participant may still post.
-                # A refresh re-reads this, so the composer's disabled state
+                # The server decides whether this account may still post. A
+                # refresh re-reads this, so the composer's disabled state
                 # survives reloads instead of living in client memory.
                 "has_posted": services.has_posted(participant=participant),
             },
             message="Joined the discussion.",
         )
-        return _attach_participant_cookie(response, token)
 
 
 class PublicSpeakingStateAPIView(APIView):
     """
-    This browser's participation state, resolved on page load.
+    This account's participation state, resolved on page load.
 
-    The frontend renders the composer from this, so a participant who has
-    already posted never sees an input they cannot use. Deliberately does NOT
+    The frontend renders the composer from this, so an account that has
+    already posted never sees an input it cannot use. Deliberately does NOT
     create a participant — merely opening the page must not consume an
-    anonymous name — so `joined` is false until the visitor actually joins.
+    anonymous name — so `joined` is false until the account actually joins.
     """
 
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
     throttle_classes = [ReadThrottle]
 
     def get(self, request):
@@ -160,9 +89,7 @@ class PublicSpeakingStateAPIView(APIView):
                 message="No discussion is running right now.", status_code=404
             )
 
-        participant = services.get_participant(
-            discussion=discussion, session_token=_session_token(request)
-        )
+        participant = services.get_participant(discussion=discussion, user=request.user)
 
         if participant is None:
             return success_response(
@@ -183,15 +110,9 @@ class PublicSpeakingStateAPIView(APIView):
 
 
 class PublicSpeakingMessagesAPIView(APIView):
-    """
-    Message history, ranked most-upvoted first.
+    """Message history, ranked most-upvoted first."""
 
-    Works without a session token — the room is readable before you join, you
-    just get no `has_upvoted` flags.
-    """
-
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
     throttle_classes = [ReadThrottle]
 
     def get(self, request):
@@ -202,9 +123,7 @@ class PublicSpeakingMessagesAPIView(APIView):
                 message="No discussion is running right now.", status_code=404
             )
 
-        participant = services.get_participant(
-            discussion=discussion, session_token=_session_token(request)
-        )
+        participant = services.get_participant(discussion=discussion, user=request.user)
 
         queryset = services.messages_queryset(
             discussion=discussion, participant=participant

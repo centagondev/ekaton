@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.events.models import MAX_MESSAGE_LENGTH, AnonymousName
@@ -54,12 +55,22 @@ class PublicSpeaking(BaseModel):
 
 class PublicSpeakingParticipant(BaseModel):
     """
-    One anonymous browser session inside the discussion.
+    One authenticated account's anonymous identity inside the discussion.
 
-    There is no user FK on purpose. Participants are identified by an opaque
-    session token the browser holds for the length of its session, so the same
-    tab keeps its identity across refreshes and rejoins, and no account, email
-    or IP is involved.
+    Public Speaking now requires login, so identity is the account behind
+    `user` — the one-message and one-vote rules are enforced against that
+    real, durable identity rather than anything the browser holds. This is
+    what makes them survive a different browser, incognito mode, or clearing
+    cookies: none of those change who `request.user` resolves to.
+
+    `anonymous_name` is what every OTHER participant sees, so the account
+    itself is never exposed publicly — only to staff, the same as any other
+    server-side user reference.
+
+    `session_token` is legacy: participants created before login became
+    mandatory were identified by an opaque browser-held token instead of an
+    account. The column stays (dropping it would rewrite historical rows for
+    no benefit) but nothing here reads or writes it going forward.
     """
 
     discussion = models.ForeignKey(
@@ -68,9 +79,19 @@ class PublicSpeakingParticipant(BaseModel):
         related_name="participants",
     )
 
-    # Opaque, unguessable, generated server-side. Never rendered to any client
-    # other than the one it belongs to.
-    session_token = models.CharField(max_length=64, db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="public_speaking_participations",
+        help_text="The authenticated account this identity belongs to. Null "
+        "only on participants created before login was required.",
+    )
+
+    # Legacy identity channel — see the class docstring. Nullable because new
+    # participants no longer get one.
+    session_token = models.CharField(max_length=64, db_index=True, null=True, blank=True)
 
     anonymous_name = models.ForeignKey(
         AnonymousName,
@@ -89,6 +110,17 @@ class PublicSpeakingParticipant(BaseModel):
             models.UniqueConstraint(
                 fields=["discussion", "session_token"],
                 name="unique_public_speaking_session",
+            ),
+            # The core of the posting restriction: one account can never hold
+            # two identities in the same discussion, so the existing
+            # one-message-per-participant rule on PublicSpeakingMessage
+            # automatically becomes one-message-per-account. NULLs (legacy
+            # rows with no user) are never considered equal by Postgres, so
+            # this does not collide with itself or with the constraint above.
+            models.UniqueConstraint(
+                fields=["discussion", "user"],
+                condition=models.Q(user__isnull=False),
+                name="unique_public_speaking_user_identity",
             ),
             # One identity per participant per room: the pool allocator must
             # never be able to hand the same name to two live sessions.
