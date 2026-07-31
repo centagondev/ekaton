@@ -70,15 +70,27 @@ export function EventBannerArt({
 
 /* ------------------------- local identity memory ------------------------- */
 
-interface StoredIdentity {
+export interface StoredIdentity {
   participantId: string;
   displayName: string;
 }
 
-/** Remember the anonymous identity handed back by join/ for this event. */
-export function rememberEventIdentity(eventId: string, participant: EventParticipant): void {
+/**
+ * Remember the identity handed back by join/ for this event.
+ *
+ * Only a cache. The event detail endpoint carries `my_participant`, which is
+ * what the chat actually trusts; this just spares the first render from
+ * waiting for it, and is meaningless on a device that has never joined here.
+ */
+export function rememberEventIdentity(
+  eventId: string,
+  participant: EventParticipant | StoredIdentity,
+): void {
   const map = storage.get<Record<string, StoredIdentity>>(STORAGE_KEYS.EVENT_IDENTITIES) ?? {};
-  map[eventId] = { participantId: participant.id, displayName: participant.display_name };
+  map[eventId] =
+    "participantId" in participant
+      ? participant
+      : { participantId: participant.id, displayName: participant.display_name };
   storage.set(STORAGE_KEYS.EVENT_IDENTITIES, map);
 }
 

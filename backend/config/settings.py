@@ -197,21 +197,6 @@ CACHES = {
     }
 }
 
-# Where the rate limits keep their counts, e.g. "this user has tried to log in
-# 4 times in the last minute".
-
-# Database 1, not 0: clearing the cache wipes its whole database, and database
-# 0 is where the chat WebSockets and the Celery task queue keep their data.
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": env(
-            "REDIS_CACHE_URL",
-            default=f"{REDIS_URL.rsplit('/', 1)[0]}/1",
-        ),
-    }
-}
-
 # The origin prepended to every password-reset / account-setup link (see
 # apps.accounts.services.send_account_setup_email / send_password_reset_email,
 # both unchanged). An explicit FRONTEND_URL env var always wins; when one

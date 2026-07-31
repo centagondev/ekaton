@@ -333,7 +333,14 @@ def get_event(*, event_id):
     return get_object_or_404(
         Event.objects.select_related("owner").prefetch_related(
             Prefetch(
-                "participants", queryset=EventParticipant.objects.filter(is_active=True)
+                "participants",
+                # select_related covers the foreign keys the detail serializer
+                # follows to resolve the caller's own display name, so reading
+                # it off the prefetch stays free.
+                queryset=EventParticipant.objects.filter(is_active=True).select_related(
+                    "user",
+                    "anonymous_name",
+                ),
             )
         ),
         pk=event_id,

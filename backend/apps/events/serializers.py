@@ -317,8 +317,39 @@ class EventDetailSerializer(EventSerializer):
     fields the list endpoint should not have to pay for.
     """
 
+    my_participant = serializers.SerializerMethodField()
+
     class Meta(EventSerializer.Meta):
-        pass
+        fields = EventSerializer.Meta.fields + ("my_participant",)
+
+    def get_my_participant(self, obj):
+        """
+        Return the requesting user's own participation, or None.
+
+        The chat client needs this to tell its own messages apart from
+        everyone else's. It used to remember the participant handed back by
+        join/ in the browser, which is wrong for anyone who is already a
+        member: rejoining from another device, or after clearing site data,
+        never goes through join/ again, so the client had no idea which
+        messages were its own and rendered them all as somebody else's.
+
+        Read from the ``participants`` prefetch attached by ``get_event()``,
+        which is already filtered to active members, so this costs no query.
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        if user is None or not user.is_authenticated:
+            return None
+
+        for participant in obj.participants.all():
+            if participant.user_id == user.id:
+                return {
+                    "id": str(participant.id),
+                    "display_name": sender_display_name(obj, participant),
+                }
+
+        return None
 
 
 class JoinEventSerializer(serializers.Serializer):
