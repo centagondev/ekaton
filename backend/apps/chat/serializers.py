@@ -41,6 +41,11 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
 
     message = serializers.SerializerMethodField()
 
+    reply_tp = serializers.UUIDField(
+        required = False,
+        allow_null = True,
+    )
+
     def get_message(self, obj):
         """Decrypt the stored ciphertext and return the plaintext message.
 

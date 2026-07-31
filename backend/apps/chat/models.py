@@ -110,6 +110,14 @@ class PrivateMessage(BaseModel):
 
     message = models.TextField()
 
+    reply_to = models.ForeignKey(
+    "self",
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name="replies",
+)
+
     message_type = models.CharField(
         max_length=20,
         choices=MessageType.choices,
@@ -125,6 +133,7 @@ class PrivateMessage(BaseModel):
             models.Index(fields=["room"]),
             models.Index(fields=["sender"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["reply_to"]),
         ]
 
     def __str__(self):

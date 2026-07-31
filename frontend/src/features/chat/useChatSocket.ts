@@ -32,7 +32,7 @@ export interface EndInfo {
  * Important backend behaviour: ANY disconnect permanently ends the room, so
  * there is deliberately no reconnect logic here — reconnecting would be a lie.
  */
-export function useChatSocket(roomId: string | undefined, myEmail: string | undefined) {
+export function useChatSocket(roomId: string | undefined) {
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimer = useRef<number | undefined>(undefined);
 
@@ -100,7 +100,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
 
       switch (data.type) {
         case "chat_message":
-          if (data.sender !== myEmail) notePartnerPresent();
+          if (!data.is_own) notePartnerPresent();
           setPartnerTyping(false);
           setMessages((prev) =>
             prev.some((message) => message.id === data.id)
@@ -110,7 +110,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
                   {
                     id: data.id,
                     text: data.message,
-                    isOwn: data.sender === myEmail,
+                    isOwn: data.is_own,
                     createdAt: data.created_at,
                   },
                 ],
@@ -119,7 +119,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
 
         case "typing":
           // The server echoes typing back to the sender — ignore our own.
-          if (data.sender !== myEmail) {
+          if (!data.is_own) {
             notePartnerPresent();
             setPartnerTyping(data.is_typing);
             window.clearTimeout(typingTimer.current);
@@ -197,7 +197,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
       // Closing ends the room server-side — intentional on unmount.
       socket.close();
     };
-  }, [roomId, myEmail]);
+  }, [roomId]);
 
   const send = useCallback((payload: ChatClientEvent) => {
     const socket = socketRef.current;

@@ -393,7 +393,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             {
                 "type": "chat_message",
                 "id": str(private_message.id),
-                "sender": private_message.sender.email,
+                "sender_id": str(private_message.sender.id),
                 "message": plaintext,
                 "created_at": private_message.created_at.isoformat(),
             },
@@ -412,7 +412,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             {
                 "type": "typing",
-                "sender": self.scope["user"].email,
+                "sender_id": str(self.scope["user"].id),
                 "is_typing": is_typing,
             },
         )
@@ -430,7 +430,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 {
                     "type": event["type"],
                     "id": event["id"],
-                    "sender": event["sender"],
+                    "is_own": event["sender_id"] == str(self.scope["user"].id),
                     "message": event["message"],
                     "created_at": event["created_at"],
                 }
@@ -444,8 +444,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps(
                 {
                     "type": "typing",
-                    "sender": event["sender"],
                     "is_typing": event["is_typing"],
+                    "is_own": event["sender_id"] == str(self.scope["user"].id),
                 }
             )
         )
@@ -584,7 +584,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "user": {
                         "id": str(other_user.id),
                         "full_name": other_user.full_name,
-                        "email": other_user.email,
                         "batch": other_user.batch,
                         "profile_photo": (
                             other_user.profile_photo

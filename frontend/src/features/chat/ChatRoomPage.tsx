@@ -14,7 +14,6 @@ import {
   VenetianMask,
   X,
 } from "lucide-react";
-import { useAuthStore } from "@/stores/auth.store";
 import { chatApi, REPORT_REASONS } from "@/lib/api/chat";
 import { parseApiError } from "@/lib/errors";
 import { useChatSocket, type ChatMessage } from "./useChatSocket";
@@ -156,7 +155,6 @@ function EmptyConversation({ onPick }: { onPick: (text: string) => void }) {
 
 export function ChatRoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
-  const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
 
   const {
@@ -174,7 +172,7 @@ export function ChatRoomPage() {
     requestReveal,
     respondReveal,
     skipChat,
-  } = useChatSocket(roomId, user?.email);
+  } = useChatSocket(roomId);
 
   const [draft, setDraft] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
@@ -589,7 +587,7 @@ export function ChatRoomPage() {
                 </p>
               </div>
             </div>
-            {/* Reveal shows name + batch only — never the email. */}
+            {/* Reveal payload carries only name + batch + photo — no email. */}
             {reveal.user?.batch && (
               <p className="mt-3 inline-block bg-brand-yellow px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                 Batch {reveal.user.batch}
@@ -787,7 +785,7 @@ export function ChatRoomPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
           >
-            {/* Name and batch only — the email in the payload is never shown. */}
+            {/* Reveal payload carries only name + batch + photo — no email. */}
             <p className="text-2xl font-black">{reveal.user?.full_name}</p>
             {reveal.user?.batch && (
               <p className="mt-2 inline-block bg-brand-yellow px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.2em]">

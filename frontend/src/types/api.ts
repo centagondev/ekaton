@@ -87,18 +87,17 @@ export interface ReportPayload {
 
 /* -------------------------- chat websocket wire -------------------------- */
 
-/** Profile broadcast on a successful reveal. Email is sent but NOT displayed. */
+/** Profile broadcast on a successful reveal. */
 export interface RevealedUser {
   id: string;
   full_name: string;
-  email: string;
   batch: string;
   profile_photo: string | null;
 }
 
 export type ChatServerEvent =
-  | { type: "chat_message"; id: string; sender: string; message: string; created_at: string }
-  | { type: "typing"; sender: string; is_typing: boolean }
+  | { type: "chat_message"; id: string; is_own: boolean; message: string; created_at: string }
+  | { type: "typing"; is_typing: boolean; is_own: boolean }
   | { type: "reveal_request_sent"; message: string }
   | { type: "reveal_request_received"; message: string }
   | { type: "reveal_success"; message: string; user: RevealedUser }
