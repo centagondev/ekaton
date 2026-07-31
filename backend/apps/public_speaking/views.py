@@ -1,9 +1,8 @@
+from core.pagination import DefaultPagination
+from core.responses import error_response, success_response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
-
-from core.pagination import DefaultPagination
-from core.responses import error_response, success_response
 
 from . import services
 from .serializers import PublicSpeakingMessageSerializer, PublicSpeakingSerializer

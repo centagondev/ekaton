@@ -45,9 +45,30 @@ const PublicSpeakingPage = lazy(() =>
 const AdminLoginPage = lazy(() =>
   import("@/features/admin/AdminLoginPage").then((m) => ({ default: m.AdminLoginPage })),
 );
-const AdminModerationPage = lazy(() =>
-  import("@/features/admin/AdminModerationPage").then((m) => ({
-    default: m.AdminModerationPage,
+const AdminLayout = lazy(() =>
+  import("@/features/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })),
+);
+const AdminDashboardPage = lazy(() =>
+  import("@/features/admin/DashboardPage").then((m) => ({
+    default: m.AdminDashboardPage,
+  })),
+);
+const AdminUsersPage = lazy(() =>
+  import("@/features/admin/UsersPage").then((m) => ({ default: m.AdminUsersPage })),
+);
+const AdminReportsPage = lazy(() =>
+  import("@/features/admin/ReportsPage").then((m) => ({
+    default: m.AdminReportsPage,
+  })),
+);
+const AdminEventsPage = lazy(() =>
+  import("@/features/admin/EventsPage").then((m) => ({
+    default: m.AdminEventsPage,
+  })),
+);
+const AdminPublicSpeakingPage = lazy(() =>
+  import("@/features/admin/PublicSpeakingPage").then((m) => ({
+    default: m.AdminPublicSpeakingPage,
   })),
 );
 const NotFoundPage = lazy(() =>
@@ -71,11 +92,21 @@ export default function App() {
             <Route path="/set-password" element={<PasswordSetupPage mode="set" />} />
             <Route path="/reset-password" element={<PasswordSetupPage mode="reset" />} />
 
-            {/* Moderation has its own admin JWT (features/admin/api.ts), entirely
-                separate from the end-user session below — reachable regardless
-                of whether a visitor is logged into an Ekaton account. */}
+            {/* The admin portal has its own admin JWT (features/admin/api.ts),
+                entirely separate from the end-user session below — reachable
+                regardless of whether a visitor is logged into an Ekaton
+                account. AdminLayout guards every page inside it. */}
             <Route path="/admin" element={<AdminLoginPage />} />
-            <Route path="/admin/public-speaking" element={<AdminModerationPage />} />
+            <Route element={<AdminLayout />}>
+              <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/reports" element={<AdminReportsPage />} />
+              <Route path="/admin/events" element={<AdminEventsPage />} />
+              <Route
+                path="/admin/public-speaking"
+                element={<AdminPublicSpeakingPage />}
+              />
+            </Route>
 
             <Route element={<GuestRoute />}>
               <Route path="/" element={<LandingPage />} />

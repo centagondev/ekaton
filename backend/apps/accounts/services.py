@@ -2,25 +2,24 @@ import logging
 from datetime import timedelta
 from secrets import token_urlsafe
 
+from apps.users.models import User
+from core.email import EmailService
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import (
     BlacklistedToken,
     OutstandingToken,
 )
-
-from apps.users.models import User
-from core.email import EmailService
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AccountSetupToken, PasswordResetToken
-from django.core.exceptions import ValidationError as DjangoValidationError
 
 logger = logging.getLogger("authentication")
 
@@ -143,7 +142,9 @@ def login_user(request, email, password):
 
     if not user.is_active:
         logger.warning("Failed login attempt: Inactive account for user_id=%s", user.id)
-        raise AuthenticationFailed("This account is currently inactive.")
+        raise AuthenticationFailed(
+            "Your account has been suspended by an administrator."
+        )
 
     if not user.is_verified:
         logger.warning(

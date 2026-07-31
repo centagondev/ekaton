@@ -5,10 +5,9 @@ import time
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from rest_framework.exceptions import ValidationError
-
 from core.encryption import decrypt_message
 from core.redis import redis_client
+from rest_framework.exceptions import ValidationError
 
 logger = logging.getLogger("chat")
 

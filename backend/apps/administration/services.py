@@ -1,6 +1,10 @@
 import logging
 import secrets
 
+from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
+from apps.events.models import Event, EventParticipant, EventStatus
+from apps.presence.services import PlatformPresenceService
+from apps.users.models import User
 from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
@@ -8,13 +12,8 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from redis.exceptions import RedisError
-from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.exceptions import AuthenticationFailed, NotFound, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
-
-from apps.chat.models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
-from apps.events.models import Event, EventParticipant, EventStatus
-from apps.presence.services import PlatformPresenceService
-from apps.users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,9 @@ def admin_login(email, password):
 
     if not (user.is_superuser or user.is_staff):
         raise AuthenticationFailed("Only administrators can log in.")
+
+    if not user.is_active:
+        raise AuthenticationFailed("This account has been suspended.")
 
     refresh = RefreshToken.for_user(user)
 
@@ -220,6 +222,21 @@ def admin_create_user(full_name, email, batch, gender):
         )
     except IntegrityError:
         raise ValidationError({"email": "A user with this email already exists."})
+
+
+def admin_delete_user(user_id, current_user):
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        raise NotFound("User not found.")
+
+    if user == current_user:
+        raise ValidationError("You cannot delete your own account.")
+
+    if user.is_superuser:
+        raise ValidationError("Superuser accounts cannot be deleted.")
+
+    user.delete()
 
 
 def get_reports(

@@ -1,9 +1,8 @@
 import secrets
 
-from django.core.management.base import BaseCommand
-
 from apps.events.models import AnonymousName
 from apps.public_speaking.models import PublicSpeaking
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):

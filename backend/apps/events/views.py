@@ -1,10 +1,5 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.shortcuts import get_object_or_404
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-
 from core.responses import success_response
 from core.throttles import (
     ContentUpdateRateThrottle,
@@ -15,6 +10,10 @@ from core.throttles import (
     EventMessageCreateRateThrottle,
     EventReadRateThrottle,
 )
+from django.shortcuts import get_object_or_404
+from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from .docs import (
     cancel_event_doc,

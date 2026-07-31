@@ -1,10 +1,9 @@
+from core.encryption import encrypt_message
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-
-from core.encryption import encrypt_message
 
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 

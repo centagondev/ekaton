@@ -1,5 +1,9 @@
 import logging
 
+from apps.users.serializers import UserSerializer
+from core.pagination import DefaultPagination
+from core.responses import error_response, success_response
+from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -7,16 +11,12 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
 
-from apps.users.serializers import UserSerializer
-from core.pagination import DefaultPagination
-from core.responses import error_response, success_response
-from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
-
 from .docs import (
     admin_cancel_event_doc,
     admin_create_event_doc,
     admin_create_user_doc,
     admin_dashboard_doc,
+    admin_delete_user_doc,
     admin_event_detail_doc,
     admin_event_list_doc,
     admin_login_doc,
@@ -40,6 +40,7 @@ from .serializers import (
 )
 from .services import (
     admin_create_user,
+    admin_delete_user,
     admin_login,
     cancel_event,
     create_event,
@@ -219,6 +220,26 @@ class AdminUpdateUserAPIView(APIView):
         return success_response(
             message="User updated successfully", data=UserSerializer(user).data
         )
+
+    @admin_delete_user_doc
+    def delete(self, request, user_id):
+        """Permanently delete a user account.
+
+        Deletion cascades to everything tied to the account (chats, messages,
+        reports, owned events). For a reversible block, PATCH is_active=false.
+
+        Args:
+            request: The incoming HTTP request. No body required.
+            user_id (UUID): The primary key of the user to delete.
+
+        Returns:
+            A success response confirming the deletion.
+        """
+        admin_delete_user(user_id, request.user)
+
+        logger.info(f"Admin {request.user.id} deleted user {user_id}.")
+
+        return success_response(message="User delete successfully")
 
 
 class AdminReportAPIView(APIView):

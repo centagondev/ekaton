@@ -1,6 +1,8 @@
 import logging
 import secrets
 
+from apps.presence.services import EventPresenceService
+from apps.users.models import User
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -10,10 +12,6 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.presence.services import EventPresenceService
-from apps.users.models import User
-
-from .moderation import moderate
 from .models import (
     MAX_MESSAGE_LENGTH,
     AnonymousName,
@@ -22,6 +20,7 @@ from .models import (
     EventParticipant,
     EventStatus,
 )
+from .moderation import moderate
 
 logger = logging.getLogger(__name__)
 
