@@ -241,6 +241,27 @@ export function EventChatPage() {
   const isActive =
     event?.status === "active" && new Date(event.end_time).getTime() > Date.now();
 
+  /**
+   * Adopt the identity the server reports, and cache it.
+   *
+   * `my_participant` is the only reliable answer to "which of these messages
+   * are mine". The remembered copy is written by join/, so it is missing for
+   * anyone who was already a member — another device, a cleared browser, or
+   * an "already joined" bounce straight into the room — and without it every
+   * message the user sent rendered as somebody else's, on the wrong side,
+   * with the optimistic draft stuck beside it.
+   */
+  useEffect(() => {
+    const mine = event?.my_participant;
+    if (!mine) return;
+    if (identity?.participantId === mine.id && identity.displayName === mine.display_name) {
+      return;
+    }
+    const next = { participantId: mine.id, displayName: mine.display_name };
+    rememberEventIdentity(id, next);
+    setIdentity(next);
+  }, [event?.my_participant, id, identity]);
+
   /** The messages endpoint 404s unless you are an active participant. */
   const messagesQuery = useInfiniteQuery({
     queryKey: ["events", id, "messages"],

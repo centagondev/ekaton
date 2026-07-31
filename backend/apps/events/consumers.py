@@ -511,6 +511,11 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "participant": {
                     "id": event["participant"]["id"],
                     "anonymous_name": event["participant"]["anonymous_name"],
+                    # Forwarded so an arrival is labelled the same way the
+                    # online list is. Dropping it left everyone who joined
+                    # after you showing as "Participant" on a public event,
+                    # where anonymous_name is null by design.
+                    "display_name": event["participant"].get("display_name"),
                 },
             }
         )
@@ -531,6 +536,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "participant": {
                     "id": event["participant"]["id"],
                     "anonymous_name": event["participant"]["anonymous_name"],
+                    "display_name": event["participant"].get("display_name"),
                 },
             }
         )
@@ -550,6 +556,9 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "participant": {
                     "id": event["participant"]["id"],
                     "anonymous_name": event["participant"]["anonymous_name"],
+                    # Without this a public event says "Someone typing"
+                    # instead of naming them: anonymous_name is null there.
+                    "display_name": event["participant"].get("display_name"),
                 },
             }
         )

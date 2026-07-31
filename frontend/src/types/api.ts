@@ -148,6 +148,14 @@ export interface CampusEvent {
 
 export interface CampusEventDetail extends CampusEvent {
   participant_count: number;
+  /**
+   * The caller's own active participation, or null when they have not joined.
+   *
+   * Authoritative: this is how the chat tells its own messages apart from
+   * everyone else's. Never rely on the browser's memory of a past join for
+   * that — it is empty on a second device or after site data is cleared.
+   */
+  my_participant: { id: string; display_name: string } | null;
 }
 
 export interface EventParticipant {
