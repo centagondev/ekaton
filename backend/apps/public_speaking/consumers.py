@@ -1,5 +1,4 @@
 import logging
-from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -20,23 +19,20 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
     Live socket for the single public speaking discussion.
 
     Modelled on apps.events.consumers.EventConsumer — same group-broadcast
-    shape, same typing and message frame names — but identity comes from an
-    opaque session token instead of an EventParticipant, because participants
-    here have no account. EventConsumer could not be reused directly: every one
-    of its database helpers resolves an EventParticipant, whose `user` column
-    is non-null.
+    shape, same typing and message frame names. Identity comes from
+    `scope["user"]`, populated by the same JwtAuthMiddleware that authenticates
+    the chat and event sockets — Public Speaking now requires login, so there
+    is no longer a separate anonymous auth path here.
 
     Nothing here touches Event, EventParticipant or EventMessage.
     """
 
     async def connect(self):
-        query = parse_qs(self.scope["query_string"].decode())
-        # Same resolution order as the REST layer: explicit token first, the
-        # persistent identity cookie second. Browsers attach cookies to the
-        # WebSocket handshake automatically.
-        token = query.get("session", [""])[0] or self.scope.get("cookies", {}).get(
-            "anonymous_participant_id", ""
-        )
+        user = self.scope["user"]
+
+        if user.is_anonymous:
+            await self.close(code=CLOSE_NOT_JOINED)
+            return
 
         self.discussion = await self.get_discussion()
 
@@ -44,11 +40,12 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=CLOSE_NO_DISCUSSION)
             return
 
-        self.participant = await self.get_participant(token)
+        self.participant = await self.get_participant(user)
 
         if self.participant is None:
-            # Joining is an explicit HTTP call, so an unknown token means the
-            # tab never joined (or the room was reset).
+            # Joining is an explicit HTTP call first, so an authenticated user
+            # with no participant yet means the tab skipped straight to the
+            # socket (or the room was reset).
             await self.close(code=CLOSE_NOT_JOINED)
             return
 
@@ -200,8 +197,8 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
         return services.get_active_discussion()
 
     @database_sync_to_async
-    def get_participant(self, token):
-        return services.get_participant(discussion=self.discussion, session_token=token)
+    def get_participant(self, user):
+        return services.get_participant(discussion=self.discussion, user=user)
 
     @database_sync_to_async
     def check_rate_limit(self):

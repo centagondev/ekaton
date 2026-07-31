@@ -18,6 +18,7 @@ click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
 constantly==23.10.4
+coverage==7.15.2
 cron-descriptor==1.4.5
 cryptography==49.0.0
 daphne==4.2.2
@@ -31,6 +32,7 @@ djangorestframework==3.17.1
 djangorestframework_simplejwt==5.5.1
 drf-spectacular==0.30.0
 drf-spectacular-sidecar==2026.7.1
+fakeredis==2.36.2
 hyperlink==21.0.0
 idna==3.18
 Incremental==24.11.0
@@ -62,7 +64,9 @@ resend==2.32.2
 rpds-py==2026.6.3
 ruff==0.15.21
 service-identity==26.1.0
+sib-api-v3-sdk==7.6.0
 six==1.17.0
+sortedcontainers==2.4.0
 sqlparse==0.5.5
 Twisted==26.4.0
 txaio==26.6.1

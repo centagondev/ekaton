@@ -5,12 +5,10 @@ import { motion } from "framer-motion";
 import { Megaphone, MessageSquare, Plus } from "lucide-react";
 import { complaintsApi } from "@/lib/api/complaints";
 import { pageFromUrl, timeAgo } from "@/lib/utils";
-import { PUBLIC_SPEAKING_MODE } from "@/lib/config";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ComingSoon } from "@/components/ui/ComingSoon";
 import { Spinner } from "@/components/ui/Spinner";
 import {
   CategoryBadge,
@@ -23,14 +21,11 @@ export function ComplaintsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Demo visitors have no JWT, so this request would 401 — and real complaints
-  // must not be shown publicly. Hook stays unconditional.
   const query = useInfiniteQuery({
     queryKey: ["complaints", "feed"],
     queryFn: ({ pageParam }) => complaintsApi.list(pageParam, 10),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => pageFromUrl(lastPage.next),
-    enabled: !PUBLIC_SPEAKING_MODE,
   });
 
   const complaints = query.data?.pages.flatMap((page) => page.results) ?? [];
@@ -51,18 +46,6 @@ export function ComplaintsPage() {
     observer.observe(element);
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  if (PUBLIC_SPEAKING_MODE) {
-    return (
-      <PageTransition>
-        <ComingSoon
-          icon={<Megaphone className="size-7" />}
-          title="Complaint Box"
-          description="Soon you'll be able to post complaints anonymously, upvote the ones that matter, and discuss them in the comments — no name attached, ever. Launching soon."
-        />
-      </PageTransition>
-    );
-  }
 
   return (
     <PageTransition>
