@@ -14,9 +14,10 @@ class PublicSpeakingAdmin(admin.ModelAdmin):
 
 @admin.register(PublicSpeakingParticipant)
 class PublicSpeakingParticipantAdmin(admin.ModelAdmin):
-    list_display = ("display_name", "discussion", "created_at")
-    # session_token is deliberately absent: it is a live credential.
-    fields = ("discussion", "anonymous_name")
+    list_display = ("display_name", "user", "discussion", "created_at")
+    # session_token is deliberately absent: legacy participants only, and even
+    # then it was a live credential rather than useful reference data.
+    fields = ("discussion", "user", "anonymous_name")
     readonly_fields = fields
 
 

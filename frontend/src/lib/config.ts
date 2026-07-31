@@ -5,16 +5,6 @@ export const API_URL: string =
 export const WS_URL: string =
   import.meta.env.VITE_WS_URL ?? new URL(API_URL).origin.replace(/^http/, "ws");
 
-/**
- * Temporary public speaking mode — one demo session only.
- *
- * Must match PUBLIC_SPEAKING_MODE on the backend. With it off, every branch
- * guarded by this constant is dead code that Vite drops at build time, and the
- * app behaves exactly as it does in production today.
- */
-export const PUBLIC_SPEAKING_MODE: boolean =
-  import.meta.env.VITE_PUBLIC_SPEAKING_MODE === "true";
-
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: "access",
   REFRESH_TOKEN: "refresh",

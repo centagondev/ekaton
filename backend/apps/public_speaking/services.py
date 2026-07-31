@@ -1,5 +1,4 @@
 import logging
-import secrets
 
 from django.db import IntegrityError, transaction
 from django.db.models import BooleanField, Case, Count, Exists, OuterRef, Value, When
@@ -21,16 +20,6 @@ logger = logging.getLogger("public_speaking")
 # DRF's throttle classes because the send path is a WebSocket frame, which
 # never passes through the REST throttle layer.
 MESSAGE_COOLDOWN_SECONDS = 2
-
-# Session tokens are meaningless to anyone but their owner and are never
-# broadcast; 32 bytes of urandom is the same strength the account-setup tokens
-# in apps.accounts use.
-SESSION_TOKEN_BYTES = 32
-
-
-def new_session_token():
-    """Return a fresh opaque participant token."""
-    return secrets.token_urlsafe(SESSION_TOKEN_BYTES)[:64]
 
 
 def get_active_discussion():
@@ -91,29 +80,34 @@ def _assign_anonymous_name(*, discussion):
 
 
 @transaction.atomic
-def join_discussion(*, discussion, session_token=None):
+def join_discussion(*, discussion, user):
     """
-    Return the participant for this browser session, creating one if needed.
+    Return this account's participant in the discussion, creating one if needed.
 
-    Rejoining with the same token returns the same identity — that is what
-    makes a refresh, or leaving and coming back, keep the same anonymous name.
-
-    Returns:
-        (participant, token) — token is echoed back so a first-time caller can
-        store it for the rest of its browser session.
+    Rejoining returns the same identity — that is what makes a refresh, a new
+    tab, another browser or an incognito window all keep the same anonymous
+    name and the same one-message allowance. The identity is the account, so
+    none of those change who this resolves to.
     """
-    if session_token:
-        existing = PublicSpeakingParticipant.objects.filter(
-            discussion=discussion, session_token=session_token
-        ).first()
-        if existing:
-            return existing, session_token
+    existing = PublicSpeakingParticipant.objects.filter(
+        discussion=discussion, user=user
+    ).first()
+    if existing:
+        return existing
 
     # Lock the discussion so two simultaneous joins cannot read the same
     # counter and race for the same name.
     locked = PublicSpeaking.objects.select_for_update().get(id=discussion.id)
 
-    token = session_token or new_session_token()
+    # Re-check under the lock: a concurrent request for this same account
+    # (e.g. two tabs opened together) may have already created it while this
+    # request was waiting for the lock.
+    existing = PublicSpeakingParticipant.objects.filter(
+        discussion=locked, user=user
+    ).first()
+    if existing:
+        return existing
+
     anonymous_name = _assign_anonymous_name(discussion=locked)
 
     if anonymous_name is None:
@@ -122,24 +116,29 @@ def join_discussion(*, discussion, session_token=None):
     try:
         participant = PublicSpeakingParticipant.objects.create(
             discussion=locked,
-            session_token=token,
+            user=user,
             anonymous_name=anonymous_name,
         )
     except IntegrityError:
-        # Lost a race for this identity; the loser retries against a pool that
-        # now has one fewer free name.
+        # Lost a race for the identity slot; re-fetch in case it was this same
+        # account's own concurrent request that won it.
+        existing = PublicSpeakingParticipant.objects.filter(
+            discussion=discussion, user=user
+        ).first()
+        if existing:
+            return existing
         raise ValidationError("Could not allocate an identity, please retry.")
 
-    return participant, token
+    return participant
 
 
-def get_participant(*, discussion, session_token):
-    """Resolve a session token to its participant, or None."""
-    if not session_token:
+def get_participant(*, discussion, user):
+    """Resolve the authenticated account to its participant, or None."""
+    if user is None or not user.is_authenticated:
         return None
     return (
         PublicSpeakingParticipant.objects.select_related("anonymous_name")
-        .filter(discussion=discussion, session_token=session_token)
+        .filter(discussion=discussion, user=user)
         .first()
     )
 

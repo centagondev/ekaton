@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_URL } from "@/lib/config";
-import { getSessionToken, type SpeakingMessage } from "./api";
+import { getAccessToken } from "@/lib/storage";
+import type { SpeakingMessage } from "./api";
 
 type Status = "connecting" | "connected" | "closed";
 
@@ -24,9 +25,9 @@ interface Options {
 /**
  * Live socket for the discussion.
  *
- * Same shape as features/events/useEventSocket: one socket, a heartbeat, and
- * typed frames. Auth differs — the query parameter carries the anonymous
- * session token rather than a JWT, because demo visitors have no account.
+ * Same shape as features/chat/useChatSocket and features/events/useEventSocket
+ * — one socket, a heartbeat, typed frames, and now the same `?token=` JWT
+ * handshake, since Public Speaking requires login like everything else.
  */
 export function useSpeakingSocket({
   enabled,
@@ -58,15 +59,8 @@ export function useSpeakingSocket({
     const connect = () => {
       if (disposed) return;
 
-      // Identity may live only in the HttpOnly cookie, which the browser
-      // attaches to the handshake automatically. Gating the socket on a stored
-      // token would leave such a browser silently disconnected.
-      const token = getSessionToken();
-      const socket = new WebSocket(
-        token
-          ? `${WS_URL}/ws/public-speaking/?session=${encodeURIComponent(token)}`
-          : `${WS_URL}/ws/public-speaking/`,
-      );
+      const token = getAccessToken();
+      const socket = new WebSocket(`${WS_URL}/ws/public-speaking/?token=${token}`);
       socketRef.current = socket;
 
       // Some proxies drop an idle socket; the consumer answers "ping" with

@@ -43,11 +43,3 @@ class PublicSpeakingMessageSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
-
-
-class JoinDiscussionSerializer(serializers.Serializer):
-    """Optional token so a returning tab keeps the identity it already has."""
-
-    session_token = serializers.CharField(
-        required=False, allow_blank=True, max_length=64
-    )
