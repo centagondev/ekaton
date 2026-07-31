@@ -4,7 +4,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.responses import error_response, success_response
-from core.throttles import ReportRateThrottle, StartChatRateThrottle
+from core.throttles import (
+    ChatEndRateThrottle,
+    ReportRateThrottle,
+    StartChatRateThrottle,
+)
 
 from .docs import end_chat_doc, report_doc, start_chat_doc
 from .matchmaking import start_chat
@@ -53,6 +57,7 @@ class EndChatAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ChatEndRateThrottle]
 
     @end_chat_doc
     def post(self, request):

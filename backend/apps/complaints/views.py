@@ -7,6 +7,7 @@ from core.responses import success_response
 from core.throttles import (
     ComplaintCreateRateThrottle,
     CommentCreateRateThrottle,
+    ContentUpdateRateThrottle,
     UpvoteToggleRateThrottle,
 )
 
@@ -102,6 +103,11 @@ class ComplaintAPIView(APIView):
 
 class ComplaintDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get_throttles(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [ContentUpdateRateThrottle()]
+        return super().get_throttles()
 
     @complaint_detail_doc
     def get(self, request, complaint_id):

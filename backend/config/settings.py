@@ -112,6 +112,17 @@ REST_FRAMEWORK = {
         "admin_dashboard": "5/m",
         "comment_create": "20/hour",
         "upvote_toggle": "60/hour",
+        # Clients with a 30-minute access token need ~2 refreshes an hour;
+        # 60 leaves room for many tabs without opening a token-grinding lane.
+        "token_refresh": "60/hour",
+        "event_create": "10/hour",
+        # Event messages broadcast to every participant in the room, so this
+        # is the strictest write limit: fast enough for a lively chat, slow
+        # enough that one user cannot flood a whole event.
+        "event_message_create": "20/min",
+        "event_membership": "60/hour",
+        "chat_end": "30/min",
+        "content_update": "60/hour",
         # Public speaking demo (unauthenticated, so scoped by IP).
         # Scoped by IP, and an audience in one hall shares one IP, so these
         # are deliberately generous. Real abuse protection is per-participant:
@@ -159,6 +170,13 @@ LOGGING = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    # A stolen refresh token becomes single-use: each refresh call returns a
+    # new refresh token and blacklists the old one.
+    "ROTATE_REFRESH_TOKENS":True,
+    "BLACKLIST_AFTER_ROTATION":True,
+    # Embeds a fingerprint of the password in every token; when the password
+    # changes, all previously issued tokens are rejected instantly.
+    "CHECK_REVOKE_TOKEN": True,
 }
 
 
