@@ -170,18 +170,23 @@ export function PasswordSetupPage({ mode }: Props) {
               error={form.formState.errors.password?.message ?? null}
             >
               {(id) => (
-                <PasswordInput
-                  id={id}
-                  autoComplete="new-password"
-                  autoFocus
-                  {...form.register("password", {
-                    required: "Password is required.",
-                    minLength: { value: 8, message: "Must be at least 8 characters." },
-                    validate: (value) =>
-                      !/^\d+$/.test(value) || "Password cannot be entirely numeric.",
-                  })}
-                />
-                 {/*
+                <>
+                  <PasswordInput
+                    id={id}
+                    autoComplete="new-password"
+                    autoFocus
+                    {...form.register("password", {
+                      required: "Password is required.",
+                      minLength: { value: 8, message: "Must be at least 8 characters." },
+                      validate: (value) =>
+                        !/^\d+$/.test(value) || "Password cannot be entirely numeric.",
+                    })}
+                    // Reveals the rules the moment the field is focused, so
+                    // they can be read before typing rather than after.
+                    onFocus={() => setPasswordFocused(true)}
+                  />
+
+                  {/*
                     Live feedback only — never a submit gate. The rules mirror
                     backend/core/validators.py exactly, but the backend still
                     has the final word: its message (wired above via
@@ -192,7 +197,7 @@ export function PasswordSetupPage({ mode }: Props) {
                     password={passwordValue}
                     visible={passwordFocused || passwordValue.length > 0}
                   />
-                
+                </>
               )}
             </Field>
 
