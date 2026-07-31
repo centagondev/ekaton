@@ -1,5 +1,6 @@
 # pyrefly: ignore [missing-import]
 from rest_framework.exceptions import AuthenticationFailed
+from django.core.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -229,10 +230,18 @@ class ResetPasswordAPIView(APIView):
         password_reset_token = get_valid_password_reset_token(
             token=serializer.validated_data["token"],
         )
-        reset_password(
-            password_reset_token=password_reset_token,
-            password=serializer.validated_data["password"],
-        )
+        try:
+            reset_password(
+                password_reset_token=password_reset_token,
+                password=serializer.validated_data["password"],
+                )
+        except ValidationError as e:
+            return error_response(
+                message={
+            "password": e.messages,
+        },
+        status_code=400,
+    )
 
         return success_response(message="Your password has been reset successfully.")
 

@@ -1,13 +1,11 @@
 import logging
 
-import resend
 from django.conf import settings
 
 from core.tasks import send_email_task
 
 logger = logging.getLogger("email")
 
-resend.api_key = settings.RESEND_API_KEY
 
 
 class EmailService:
