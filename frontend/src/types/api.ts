@@ -95,8 +95,23 @@ export interface RevealedUser {
   profile_photo: string | null;
 }
 
+/** The short quote carried by a reply. Truncated server-side. */
+export interface PrivateMessageQuote {
+  id: string;
+  is_own: boolean;
+  message: string;
+}
+
 export type ChatServerEvent =
-  | { type: "chat_message"; id: string; is_own: boolean; message: string; created_at: string }
+  | {
+      type: "chat_message";
+      id: string;
+      is_own: boolean;
+      message: string;
+      created_at: string;
+      /** Null when the message is not a reply, or the original is gone. */
+      reply_to: PrivateMessageQuote | null;
+    }
   | { type: "typing"; is_typing: boolean; is_own: boolean }
   | { type: "reveal_request_sent"; message: string }
   | { type: "reveal_request_received"; message: string }
@@ -108,7 +123,7 @@ export type ChatServerEvent =
   | { type: "error"; message: string };
 
 export type ChatClientEvent =
-  | { type: "chat_message"; message: string }
+  | { type: "chat_message"; message: string; reply_to: string | null }
   | { type: "typing"; is_typing: boolean }
   | { type: "reveal_request" }
   | { type: "reveal_response"; status: "accepted" | "rejected" }

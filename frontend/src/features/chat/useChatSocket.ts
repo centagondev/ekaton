@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_URL } from "@/lib/config";
 import { getAccessToken } from "@/lib/storage";
-import type { ChatClientEvent, ChatServerEvent, RevealedUser } from "@/types/api";
+import type {
+  ChatClientEvent,
+  ChatServerEvent,
+  PrivateMessageQuote,
+  RevealedUser,
+} from "@/types/api";
 
 export interface ChatMessage {
   id: string;
   text: string;
   isOwn: boolean;
   createdAt: string;
+  /** Null when the message is not a reply, or the original is gone. */
+  replyTo: PrivateMessageQuote | null;
 }
 
 export type ChatStatus = "connecting" | "connected" | "ended" | "error";
@@ -112,6 +119,7 @@ export function useChatSocket(roomId: string | undefined) {
                     text: data.message,
                     isOwn: data.is_own,
                     createdAt: data.created_at,
+                    replyTo: data.reply_to,
                   },
                 ],
           );
@@ -207,7 +215,8 @@ export function useChatSocket(roomId: string | undefined) {
   }, []);
 
   const sendMessage = useCallback(
-    (message: string) => send({ type: "chat_message", message }),
+    (message: string, replyTo: string | null = null) =>
+      send({ type: "chat_message", message, reply_to: replyTo }),
     [send],
   );
   const sendTyping = useCallback(

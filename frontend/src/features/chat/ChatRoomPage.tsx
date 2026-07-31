@@ -9,6 +9,7 @@ import {
   Eye,
   Flag,
   Hand,
+  Reply,
   SendHorizonal,
   SkipForward,
   VenetianMask,
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Textarea } from "@/components/ui/Field";
 import { Avatar } from "@/components/ui/Avatar";
+import { SwipeToReply } from "@/components/ui/SwipeToReply";
 import { cn, formatTime } from "@/lib/utils";
 import {
   COARSE_POINTER,
@@ -32,6 +34,9 @@ import type { ReportReason } from "@/types/api";
 
 const MAX_LENGTH = 500;
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
+
+/** How long a jumped-to message stays highlighted. */
+const JUMP_FLASH_MS = 1400;
 
 /* --------------------------------- pieces --------------------------------- */
 
@@ -80,33 +85,93 @@ const Bubble = memo(function Bubble({
   message,
   isFirst,
   isLast,
+  canReply,
+  onReply,
+  onJumpToReply,
+  partnerName,
+  flashed,
 }: {
   message: ChatMessage;
   isFirst: boolean;
   isLast: boolean;
+  canReply: boolean;
+  onReply: (message: ChatMessage) => void;
+  onJumpToReply: (id: string) => void;
+  partnerName: string;
+  flashed: boolean;
 }) {
   return (
     <motion.div
+      id={`chat-message-${message.id}`}
       layout="position"
       initial={{ opacity: 0, y: 14, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 480, damping: 34 }}
       className={cn(
-        "flex flex-col",
+        "group flex scroll-mt-24 flex-col",
         message.isOwn ? "origin-bottom-right items-end" : "origin-bottom-left items-start",
         isFirst ? "mt-4 lg:mt-5" : "mt-1",
       )}
     >
-      <div
-        className={cn(
-          "max-w-[min(88%,26rem)] break-words border-2 border-ink px-4 py-2.5 text-[15px] leading-relaxed",
-          "sm:max-w-[min(80%,32rem)] lg:max-w-[min(70%,42rem)] lg:px-5 lg:py-3 lg:text-base",
-          message.isOwn ? "bg-brand-yellow" : "bg-surface",
-          isLast && "shadow-brutal-sm",
-        )}
+      <SwipeToReply
+        enabled={canReply}
+        onReply={() => onReply(message)}
+        className="max-w-[min(88%,26rem)] sm:max-w-[min(80%,32rem)] lg:max-w-[min(70%,42rem)]"
       >
-        {message.text}
-      </div>
+        <div
+          className={cn("flex items-end gap-2", message.isOwn ? "flex-row-reverse" : "flex-row")}
+        >
+          <div
+            className={cn(
+              "min-w-0 break-words border-2 border-ink px-4 py-2.5 text-[15px] leading-relaxed",
+              "lg:px-5 lg:py-3 lg:text-base",
+              "transition-[opacity,box-shadow] duration-200 ease-out",
+              message.isOwn ? "bg-brand-yellow" : "bg-surface",
+              isLast && "shadow-brutal-sm",
+              flashed && "ring-4 ring-brand-lime",
+            )}
+          >
+            {message.replyTo && (
+              <button
+                type="button"
+                onClick={() => onJumpToReply(message.replyTo!.id)}
+                aria-label={`Go to the message from ${
+                  message.replyTo.is_own ? "you" : partnerName
+                }`}
+                className={cn(
+                  "mb-2 flex w-full flex-col items-start gap-0 text-left",
+                  "border-l-[3px] py-1 pl-2 pr-2",
+                  "transition-colors duration-200",
+                  message.isOwn
+                    ? "border-ink/70 bg-ink/[0.06] hover:bg-ink/[0.11]"
+                    : "border-ink/50 bg-ink/[0.04] hover:bg-ink/[0.08]",
+                )}
+              >
+                <span className="font-mono text-[10px] font-bold uppercase leading-[1.5] tracking-[0.12em]">
+                  {message.replyTo.is_own ? "You" : partnerName}
+                </span>
+                <span className="line-clamp-1 w-full text-[12.5px] leading-[1.5] opacity-60">
+                  {message.replyTo.message}
+                </span>
+              </button>
+            )}
+            {message.text}
+          </div>
+
+          {/* Pointer users get a button; touch users swipe. */}
+          {canReply && (
+            <button
+              type="button"
+              onClick={() => onReply(message)}
+              aria-label={`Reply to ${message.isOwn ? "your message" : `${partnerName}'s message`}`}
+              className="mb-1 hidden shrink-0 border-2 border-ink bg-surface p-2 opacity-0 transition-opacity hover:bg-brand-lime focus-visible:opacity-100 group-hover:opacity-100 sm:block"
+            >
+              <Reply className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </SwipeToReply>
+
       {isLast && (
         <p className="mt-1.5 px-1 font-mono text-[9px] uppercase tracking-wider text-muted">
           {formatTime(message.createdAt)}
@@ -182,6 +247,10 @@ export function ChatRoomPage() {
   const [revealClicking, setRevealClicking] = useState(false);
   const [respondLoading, setRespondLoading] = useState<"accept" | "reject" | null>(null);
   const [unseen, setUnseen] = useState(0);
+  /** The message being replied to, or null for a plain send. */
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  /** Briefly highlights a message after jumping to it from a quote. */
+  const [flashId, setFlashId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -221,6 +290,33 @@ export function ChatRoomPage() {
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior, block: "end" });
   }, []);
+
+  /**
+   * Jump to a quoted message and flash it.
+   *
+   * There is no message history here — everything the socket has delivered
+   * this session is already rendered — so a missing node means the original
+   * is genuinely gone, not just unloaded.
+   */
+  const jumpToMessage = useCallback((messageId: string) => {
+    const node = document.getElementById(`chat-message-${messageId}`);
+    if (!node) {
+      toast.info("That message is no longer available.");
+      return;
+    }
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFlashId(messageId);
+    window.setTimeout(() => setFlashId(null), JUMP_FLASH_MS);
+  }, []);
+
+  /** Start replying and put the cursor back in the composer. */
+  const startReply = useCallback((message: ChatMessage) => {
+    setReplyTo(message);
+    inputRef.current?.focus();
+  }, []);
+
+  /** Replying is only possible where sending is. */
+  const canReply = online;
 
   const handleScroll = useCallback(() => {
     const element = scrollRef.current;
@@ -335,7 +431,9 @@ export function ChatRoomPage() {
     event?.preventDefault();
     const text = draft.trim();
     if (!text || !online) return;
-    sendMessage(text);
+    const target = replyTo;
+    sendMessage(text, target?.id ?? null);
+    setReplyTo(null);
     setDraft("");
     inputRef.current?.focus();
     window.clearTimeout(typingStopRef.current);
@@ -655,7 +753,17 @@ export function ChatRoomPage() {
 
               <div aria-live="polite">
                 {grouped.map(({ message, isFirst, isLast }) => (
-                  <Bubble key={message.id} message={message} isFirst={isFirst} isLast={isLast} />
+                  <Bubble
+                    key={message.id}
+                    message={message}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    canReply={canReply}
+                    onReply={startReply}
+                    onJumpToReply={jumpToMessage}
+                    partnerName={partnerName}
+                    flashed={flashId === message.id}
+                  />
                 ))}
               </div>
 
@@ -687,11 +795,59 @@ export function ChatRoomPage() {
             className="shrink-0 border-t-2 border-ink bg-surface"
             style={composerPaddingStyle}
           >
-            <form
-              onSubmit={submit}
-              className="mx-auto w-full max-w-4xl px-3 py-3 sm:px-6 lg:px-10 lg:py-4 xl:max-w-5xl"
-            >
-              <div className="flex items-end gap-2 lg:gap-3">
+            <div className="mx-auto w-full max-w-4xl px-3 py-3 sm:px-6 lg:px-10 lg:py-4 xl:max-w-5xl">
+              <AnimatePresence initial={false}>
+                {replyTo && (
+                  <motion.div
+                    key="reply-strip"
+                    initial={{ height: 0, opacity: 0, y: -4 }}
+                    animate={{ height: "auto", opacity: 1, y: 0 }}
+                    exit={{ height: 0, opacity: 0, y: -4 }}
+                    // A short tween rather than a spring: the strip should
+                    // settle, not bounce, next to an input the user is typing in.
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mb-2 flex items-stretch border-2 border-ink bg-raised">
+                      {/* The full-height accent bar is the cue that reads first
+                          — before any text — that a reply is being composed. */}
+                      <span aria-hidden className="w-1 shrink-0 bg-brand-yellow" />
+
+                      <button
+                        type="button"
+                        onClick={() => jumpToMessage(replyTo.id)}
+                        aria-label={`Go to the message from ${
+                          replyTo.isOwn ? "you" : partnerName
+                        }`}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-200 hover:bg-ink/5"
+                      >
+                        <Reply className="size-3.5 shrink-0 opacity-70" />
+                        {/* Stacked, matching the in-bubble quote, so the two
+                            reply surfaces read as the same idea. */}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="font-mono text-[10px] font-bold uppercase leading-[1.5] tracking-[0.12em]">
+                            Replying to {replyTo.isOwn ? "You" : partnerName}
+                          </span>
+                          <span className="min-w-0 truncate text-[12.5px] leading-[1.5] text-muted">
+                            {replyTo.text}
+                          </span>
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setReplyTo(null)}
+                        aria-label="Cancel reply"
+                        className="shrink-0 border-l-2 border-ink px-3 transition-colors hover:bg-danger/10"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form onSubmit={submit} className="flex items-end gap-2 lg:gap-3">
                 <Button
                   type="button"
                   variant="secondary"
@@ -716,6 +872,11 @@ export function ChatRoomPage() {
                     onChange={(event) => handleDraft(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) submit(event);
+                      // Escape drops the reply before it drops focus.
+                      if (event.key === "Escape" && replyTo) {
+                        event.preventDefault();
+                        setReplyTo(null);
+                      }
                     }}
                     placeholder={online ? "Type a message…" : "Chat is not active"}
                     disabled={!online}
@@ -756,8 +917,8 @@ export function ChatRoomPage() {
                     <span className="hidden sm:inline">Send</span>
                   </Button>
                 </motion.div>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </main>
       </div>
