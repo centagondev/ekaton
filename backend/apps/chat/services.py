@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -68,7 +69,7 @@ def get_private_chat_room(room_id, user):
 
 
 @transaction.atomic
-def create_private_message(room, sender, message):
+def create_private_message(room, sender, message, reply_to_id=None):
     """Create and return a new private message in an active chat room.
 
     Validates that the room is still active and that the message content is
@@ -79,12 +80,16 @@ def create_private_message(room, sender, message):
         room: The PrivateChatRoom instance in which to send the message.
         sender: The User instance sending the message.
         message: The raw text content of the message.
+        reply_to_id: Optional id of the message being replied to. Must belong
+            to this same room; anything else is treated as not found.
 
     Returns:
         The newly created PrivateMessage instance.
 
     Raises:
-        ValidationError: If the room is not active or the message is empty.
+        ValidationError: If the room is not active, the message is empty, or
+            reply_to_id was given but does not resolve to a message in this
+            room.
     """
 
     room.refresh_from_db(fields=["status", "reveal_completed"])
@@ -96,10 +101,25 @@ def create_private_message(room, sender, message):
     if not message:
         raise ValidationError("Message content cannot be empty.")
 
+    reply_to = None
+
+    if reply_to_id is not None:
+        # reply_to_id comes straight from the client frame, so it may be
+        # anything at all; scoping to this room is what stops a reply from
+        # pulling in a message the sender was never part of.
+        try:
+            reply_to = PrivateMessage.objects.filter(id=reply_to_id, room=room).first()
+        except (DjangoValidationError, ValueError):
+            reply_to = None
+
+        if reply_to is None:
+            raise ValidationError("The message you are replying to was not found.")
+
     return PrivateMessage.objects.create(
         room=room,
         sender=sender,
         message=encrypt_message(message),
+        reply_to=reply_to,
     )
 
 
