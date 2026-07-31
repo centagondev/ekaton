@@ -1,10 +1,4 @@
 # pyrefly: ignore [missing-import]
-from rest_framework.exceptions import AuthenticationFailed
-from django.core.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenRefreshView
-
 from apps.users.serializers import UserSerializer
 from core.responses import error_response, success_response
 from core.throttles import (
@@ -18,6 +12,11 @@ from core.throttles import (
     SetPasswordRateThrottle,
     TokenRefreshRateThrottle,
 )
+from django.core.exceptions import ValidationError
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .docs import (
     change_password_doc,
@@ -234,14 +233,14 @@ class ResetPasswordAPIView(APIView):
             reset_password(
                 password_reset_token=password_reset_token,
                 password=serializer.validated_data["password"],
-                )
+            )
         except ValidationError as e:
             return error_response(
                 message={
-            "password": e.messages,
-        },
-        status_code=400,
-    )
+                    "password": e.messages,
+                },
+                status_code=400,
+            )
 
         return success_response(message="Your password has been reset successfully.")
 

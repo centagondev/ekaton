@@ -1,12 +1,10 @@
 import logging
 
-from django.db.models import Q
-
-from rest_framework.permissions import IsAdminUser
-from rest_framework.views import APIView
-
 from core.pagination import DefaultPagination
 from core.responses import error_response, success_response
+from django.db.models import Q
+from rest_framework.permissions import IsAdminUser
+from rest_framework.views import APIView
 
 from . import services
 from .models import PublicSpeakingMessage

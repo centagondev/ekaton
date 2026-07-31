@@ -1,13 +1,12 @@
 from unittest.mock import patch
 
+from apps.complaints.models import Complaint
+from core.throttles import ComplaintCreateRateThrottle
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-
-from apps.complaints.models import Complaint
-from core.throttles import ComplaintCreateRateThrottle
 
 
 class ComplaintAPITests(APITestCase):
@@ -232,6 +231,7 @@ class ComplaintAPITests(APITestCase):
 
     def test_update_complaint_after_5_minutes_fails(self):
         from datetime import timedelta
+
         from django.utils import timezone
 
         self.authenticate()
@@ -265,6 +265,7 @@ class ComplaintAPITests(APITestCase):
 
     def test_delete_complaint_after_5_minutes_fails(self):
         from datetime import timedelta
+
         from django.utils import timezone
 
         self.authenticate()

@@ -1,8 +1,7 @@
 import logging
 
-from rest_framework import serializers
-
 from core.encryption import decrypt_message
+from rest_framework import serializers
 
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
 
@@ -42,8 +41,8 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
     message = serializers.SerializerMethodField()
 
     reply_tp = serializers.UUIDField(
-        required = False,
-        allow_null = True,
+        required=False,
+        allow_null=True,
     )
 
     def get_message(self, obj):

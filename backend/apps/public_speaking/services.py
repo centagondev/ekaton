@@ -1,11 +1,10 @@
 import logging
 
+from apps.events.models import AnonymousName
+from core.redis import redis_client
 from django.db import IntegrityError, transaction
 from django.db.models import BooleanField, Case, Count, Exists, OuterRef, Value, When
 from rest_framework.exceptions import ValidationError
-
-from apps.events.models import AnonymousName
-from core.redis import redis_client
 
 from .models import (
     PublicSpeaking,

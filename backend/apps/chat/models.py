@@ -1,7 +1,6 @@
-from django.db import models
-
 from apps.users.models import User
 from core.base_model import BaseModel
+from django.db import models
 
 
 class PrivateChatRoom(BaseModel):
@@ -111,12 +110,12 @@ class PrivateMessage(BaseModel):
     message = models.TextField()
 
     reply_to = models.ForeignKey(
-    "self",
-    on_delete=models.SET_NULL,
-    null=True,
-    blank=True,
-    related_name="replies",
-)
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
 
     message_type = models.CharField(
         max_length=20,

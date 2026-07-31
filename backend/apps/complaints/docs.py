@@ -5,11 +5,7 @@ This module contains all drf-spectacular ``extend_schema`` decorator instances
 for the ``apps/complaints`` API endpoints.
 """
 
-from drf_spectacular.utils import (
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as rf_serializers
 
 from .serializers import (

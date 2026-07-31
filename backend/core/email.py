@@ -9,7 +9,9 @@ logger = logging.getLogger("email")
 configuration = sib_api_v3_sdk.Configuration()
 configuration.api_key["api-key"] = settings.BREVO_API_KEY
 
-_api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+_api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+    sib_api_v3_sdk.ApiClient(configuration)
+)
 
 
 class EmailService:

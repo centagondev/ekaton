@@ -1,7 +1,6 @@
+from core.base_model import BaseModel
 from django.conf import settings
 from django.db import models
-
-from core.base_model import BaseModel
 
 
 class Complaint(BaseModel):

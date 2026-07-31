@@ -5,6 +5,7 @@ This module contains all drf-spectacular ``extend_schema`` decorator instances
 for the ``apps/administration`` API endpoints.
 """
 
+from apps.users.serializers import UserSerializer
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiResponse,
@@ -12,8 +13,6 @@ from drf_spectacular.utils import (
     inline_serializer,
 )
 from rest_framework import serializers as rf_serializers
-
-from apps.users.serializers import UserSerializer
 
 from .serializers import (
     AdminCreateUserSerializer,

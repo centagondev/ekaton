@@ -1,13 +1,12 @@
 import logging
 
+from apps.presence.services import EventPresenceService
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from core.redis import redis_client
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-
-from apps.presence.services import EventPresenceService
-from core.redis import redis_client
 
 from .models import MAX_MESSAGE_LENGTH, EventMessage, EventParticipant, EventStatus
 from .serializers import ANONYMOUS_FALLBACK_NAME, EventMessageSerializer

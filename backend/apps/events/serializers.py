@@ -1,8 +1,8 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .moderation import contains_bad_word
 from .models import MAX_MESSAGE_LENGTH, Event, EventMessage, EventParticipant
+from .moderation import contains_bad_word
 
 # Shown when an anonymous event has a participant with no anonymous identity.
 # Falling back to the real name here would de-anonymise them, so it never does.

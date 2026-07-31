@@ -1,16 +1,15 @@
 import logging
 
+from apps.users.serializers import UserSerializer
+from core.pagination import DefaultPagination
+from core.responses import error_response, success_response
+from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
-
-from apps.users.serializers import UserSerializer
-from core.pagination import DefaultPagination
-from core.responses import error_response, success_response
-from core.throttles import AdminDashboardRateThrottle, AdminLoginRateThrottle
 
 from .docs import (
     admin_cancel_event_doc,
@@ -41,6 +40,7 @@ from .serializers import (
 )
 from .services import (
     admin_create_user,
+    admin_delete_user,
     admin_login,
     cancel_event,
     create_event,
@@ -53,7 +53,6 @@ from .services import (
     update_event,
     update_report_status,
     update_user,
-    admin_delete_user,
 )
 
 logger = logging.getLogger("authentication")
@@ -236,13 +235,11 @@ class AdminUpdateUserAPIView(APIView):
         Returns:
             A success response confirming the deletion.
         """
-        admin_delete_user(user_id,request.user)
+        admin_delete_user(user_id, request.user)
 
         logger.info(f"Admin {request.user.id} deleted user {user_id}.")
 
-        return success_response(
-            message="User delete successfully"
-        )
+        return success_response(message="User delete successfully")
 
 
 class AdminReportAPIView(APIView):

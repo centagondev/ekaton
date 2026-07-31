@@ -6,9 +6,7 @@ from django.core.exceptions import ValidationError
 class StrongPasswordValidator:
     def validate(self, password, user=None):
         if len(password) < 8:
-            raise ValidationError(
-                "Password must be at least 8 characters long."
-            )
+            raise ValidationError("Password must be at least 8 characters long.")
 
         if not re.search(r"[A-Z]", password):
             raise ValidationError(
@@ -21,9 +19,7 @@ class StrongPasswordValidator:
             )
 
         if not re.search(r"\d", password):
-            raise ValidationError(
-                "Password must contain at least one number."
-            )
+            raise ValidationError("Password must contain at least one number.")
 
         if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", password):
             raise ValidationError(

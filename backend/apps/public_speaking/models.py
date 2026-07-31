@@ -1,8 +1,7 @@
-from django.conf import settings
-from django.db import models
-
 from apps.events.models import MAX_MESSAGE_LENGTH, AnonymousName
 from core.base_model import BaseModel
+from django.conf import settings
+from django.db import models
 
 # Deliberately reuses events.MAX_MESSAGE_LENGTH and events.AnonymousName rather
 # than redeclaring either. The name pool is the SAME table the anonymous event
@@ -91,7 +90,9 @@ class PublicSpeakingParticipant(BaseModel):
 
     # Legacy identity channel — see the class docstring. Nullable because new
     # participants no longer get one.
-    session_token = models.CharField(max_length=64, db_index=True, null=True, blank=True)
+    session_token = models.CharField(
+        max_length=64, db_index=True, null=True, blank=True
+    )
 
     anonymous_name = models.ForeignKey(
         AnonymousName,
