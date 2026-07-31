@@ -9,6 +9,7 @@ import { useUiStore } from "@/stores/ui.store";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { PasswordRequirements } from "./PasswordRequirements";
 
 interface FormValues {
   password: string;
@@ -32,10 +33,15 @@ export function PasswordSetupPage({ mode }: Props) {
   const token = params.get("token");
   const [done, setDone] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const form = useForm<FormValues>({
     defaultValues: { password: "", confirm_password: "" },
   });
+
+  // Drives the live requirements panel. Watching on every keystroke is the
+  // point — this is purely for instant feedback, never a submit gate.
+  const passwordValue = form.watch("password");
 
   const copy =
     mode === "set"
@@ -60,6 +66,16 @@ export function PasswordSetupPage({ mode }: Props) {
         form.setError("password", { message: parsed.fields.password });
       } else if (parsed.fields.confirm_password) {
         form.setError("confirm_password", { message: parsed.fields.confirm_password });
+      } else if (mode === "set" && parsed.status === 500) {
+        // set-password does not return a parseable error body when the
+        // password fails a security rule (too common, too similar to the
+        // account, etc.) — the request 500s with no JSON to read, so there is
+        // no real message to relay. Routing a plain-language guess to the
+        // password field still beats a raw "Something went wrong" banner.
+        form.setError("password", {
+          message:
+            "This password doesn't meet the security requirements. Try something longer, less common, and not similar to your email.",
+        });
       } else {
         setFormError(parsed.message);
       }
@@ -72,11 +88,11 @@ export function PasswordSetupPage({ mode }: Props) {
   };
 
   return (
-    <PageTransition className="flex min-h-dvh items-center justify-center px-4 py-12">
+    <PageTransition className="flex min-h-dvh items-center justify-center px-4 py-6 sm:py-12">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md border-2 border-ink bg-surface p-8 shadow-brutal-lg"
+        className="w-full max-w-md border-2 border-ink bg-surface p-5 shadow-brutal-lg sm:p-8"
       >
         {!token ? (
           <div className="space-y-5 text-center">
@@ -107,42 +123,76 @@ export function PasswordSetupPage({ mode }: Props) {
             </Button>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-5" noValidate>
-            <div className="mb-6 space-y-2">
+          <form onSubmit={submit} className="space-y-3 sm:space-y-5" noValidate>
+            <div className="mb-3 space-y-1.5 sm:mb-6 sm:space-y-2">
               <p className="inline-block border-2 border-ink bg-brand-lavender px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                 {copy.eyebrow}
               </p>
-              <h1 className="text-3xl font-black uppercase leading-tight">{copy.title}</h1>
+              <h1 className="text-2xl font-black uppercase leading-tight sm:text-3xl">
+                {copy.title}
+              </h1>
             </div>
 
             {formError && (
-              <p
-                role="alert"
-                className="border-2 border-danger bg-danger/10 px-3 py-2 text-sm font-bold text-danger"
-              >
-                {formError}
-              </p>
+              <>
+                {/*
+                  Mobile: compact, icon, wraps multi-line messages without the
+                  icon drifting, subtle entrance. Rendered as its OWN branch
+                  (sm:hidden) rather than a responsive variant of the desktop
+                  paragraph below, so the desktop markup a few lines down is
+                  untouched byte-for-byte — nothing here can affect it.
+                */}
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  role="alert"
+                  className="flex items-start gap-2 border-2 border-danger bg-danger/10 px-2.5 py-2 sm:hidden"
+                >
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-danger" />
+                  <p className="text-xs font-bold leading-snug text-danger">{formError}</p>
+                </motion.div>
+
+                {/* Desktop / tablet — unchanged from before this pass. */}
+                <p
+                  role="alert"
+                  className="hidden border-2 border-danger bg-danger/10 px-3 py-2 text-sm font-bold text-danger sm:block"
+                >
+                  {formError}
+                </p>
+              </>
             )}
 
             <Field
               label="New password"
               required
-              hint="At least 8 characters, not entirely numeric."
               error={form.formState.errors.password?.message ?? null}
             >
               {(id) => (
-                <Input
-                  id={id}
-                  type="password"
-                  autoComplete="new-password"
-                  autoFocus
-                  {...form.register("password", {
-                    required: "Password is required.",
-                    minLength: { value: 8, message: "Must be at least 8 characters." },
-                    validate: (value) =>
-                      !/^\d+$/.test(value) || "Password cannot be entirely numeric.",
-                  })}
-                />
+                <>
+                  <Input
+                    id={id}
+                    type="password"
+                    autoComplete="new-password"
+                    autoFocus
+                    onFocus={() => setPasswordFocused(true)}
+                    {...form.register("password", {
+                      required: "Password is required.",
+                      onBlur: () => setPasswordFocused(false),
+                    })}
+                  />
+                  {/*
+                    Live feedback only — never a submit gate. The rules mirror
+                    backend/core/validators.py exactly, but the backend still
+                    has the final word: its message (wired above via
+                    parsed.fields.password) overrides this if the two ever
+                    disagree.
+                  */}
+                  <PasswordRequirements
+                    password={passwordValue}
+                    visible={passwordFocused || passwordValue.length > 0}
+                  />
+                </>
               )}
             </Field>
 

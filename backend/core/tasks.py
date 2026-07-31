@@ -1,13 +1,18 @@
 import logging
-
-import resend
+import sib_api_v3_sdk
 from celery import shared_task
 from django.conf import settings
+from sib_api_v3_sdk.rest import ApiException
 
 logger = logging.getLogger(__name__)
 
 # Configure Resend exactly once
-resend.api_key = settings.RESEND_API_KEY
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key["api-key"] = settings.BREVO_API_KEY
+
+api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+    sib_api_v3_sdk.ApiClient(configuration)
+)
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=5)
@@ -15,18 +20,23 @@ def send_email_task(self, to_email: str, subject: str, html: str, from_email: st
     """
     Asynchronous Celery task to send emails via Resend.
     """
-
     try:
-        response = resend.Emails.send(
-            {
-                "from": from_email,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            }
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": to_email}],
+            sender={
+                "email":from_email,
+                "name":"Ekaton",
+            },
+            subject=subject,
+            html_content=html
         )
-        logger.info(f"Email sent successfully to {to_email}")
-        return response
-    except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {str(e)}")
+
+        response = api_instance.send_transac_email(email)
+
+        logger.info("Email send successfully to %s", to_email)
+
+        return response.to_dict()
+    
+    except ApiException as e:
+        logger.error("Failed to send email to %s: %s", to_email, str(e))
         raise
