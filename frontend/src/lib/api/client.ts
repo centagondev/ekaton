@@ -43,13 +43,16 @@ let refreshPromise: Promise<string> | null = null;
 async function refreshAccessToken(): Promise<string> {
   const refresh = getRefreshToken();
   if (!refresh) throw new Error("No refresh token");
-  // Bare axios: the refresh endpoint returns raw { access } with no envelope,
+  // Bare axios: the refresh endpoint returns raw tokens with no envelope,
   // and going through `instance` would recurse into this interceptor.
-  const { data } = await axios.post<{ access: string }>(
+  const { data } = await axios.post<{ access: string; refresh?: string }>(
     `${API_URL}/accounts/refresh/`,
     { refresh },
   );
-  setTokens({ access: data.access });
+  // ROTATE_REFRESH_TOKENS: each refresh returns a new refresh token and
+  // blacklists the one just used — losing the new one here would strand
+  // the session at the next refresh.
+  setTokens({ access: data.access, refresh: data.refresh });
   return data.access;
 }
 

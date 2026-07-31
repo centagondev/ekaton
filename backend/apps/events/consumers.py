@@ -85,7 +85,6 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         self.member_group_name = event_member_group_name(self.event_id, user.id)
 
         try:  # Verify that the authenticated user is an active participant.
-
             self.participant = await self.get_participant()
         except EventParticipant.DoesNotExist:
             await self.reject(code=NOT_A_PARTICIPANT_CODE)
@@ -188,6 +187,8 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
         message_content = content.get("content")
 
+        reply_to_id = content.get("reply_to")
+
         # Validate message content type
         if not isinstance(message_content, str):
             await self.send_json(
@@ -232,10 +233,10 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             return
 
         try:
-
             message_data = await self.save_and_serialize_message(
                 self.participant,
                 message_content,
+                reply_to_id,
             )
         except ValidationError as exc:
             # exc.detail is a list of ErrorDetail; str(exc) would send its
@@ -341,6 +342,8 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
                 "event",
                 "participant__user",
                 "participant__anonymous_name",
+                "reply_to__participant__user",
+                "reply_to__participant__anonymous_name",
             )
             .order_by("-created_at")[:150]
         )
@@ -388,14 +391,19 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         )
 
     @database_sync_to_async
-    def save_and_serialize_message(self, participant, content):
+    def save_and_serialize_message(self, participant, content, reply_to_id=None):
         """
         Create and serialize an event message in a single sync context.
+
+        reply_to_id comes straight from the client frame, so it may be
+        anything at all; the service is what checks it names a message in
+        this same event.
         """
 
         message = send_event_message(
             participant=participant,
             content=content,
+            reply_to_id=reply_to_id,
         )
 
         return EventMessageSerializer(message).data

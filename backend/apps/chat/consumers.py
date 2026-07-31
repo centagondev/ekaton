@@ -122,7 +122,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             close_code,
         )
         try:
-
             await sync_to_async(end_private_chat_room)(self.room)
 
             await self.channel_layer.group_send(

@@ -44,7 +44,6 @@ class AdminUserUpdateSerializer(serializers.Serializer):
 
 
 class AdminCreateUserSerializer(serializers.Serializer):
-
     full_name = serializers.CharField(max_length=255)
     email = serializers.EmailField()
     batch = serializers.CharField(max_length=100)
@@ -77,7 +76,6 @@ class AdminReportSerializer(serializers.ModelSerializer):
 
 
 class AdminUpdateReportStatusSerializer(serializers.Serializer):
-
     status = serializers.ChoiceField(choices=Report.Status.choices)
 
 

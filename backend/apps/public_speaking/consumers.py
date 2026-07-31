@@ -232,6 +232,4 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def get_vote_state(self, message_id):
-        return services.vote_state(
-            participant=self.participant, message_id=message_id
-        )
+        return services.vote_state(participant=self.participant, message_id=message_id)

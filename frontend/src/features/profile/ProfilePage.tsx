@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/Button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { Field, Input } from "@/components/ui/Field";
+import { Field } from "@/components/ui/Field";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export function ProfilePage() {
   const { user, logout, refreshUser } = useAuthStore();
@@ -149,9 +150,8 @@ function ChangePasswordForm() {
         error={form.formState.errors.current_password?.message ?? null}
       >
         {(id) => (
-          <Input
+          <PasswordInput
             id={id}
-            type="password"
             autoComplete="current-password"
             {...form.register("current_password", { required: "Current password is required." })}
           />
@@ -165,9 +165,8 @@ function ChangePasswordForm() {
           error={form.formState.errors.new_password?.message ?? null}
         >
           {(id) => (
-            <Input
+            <PasswordInput
               id={id}
-              type="password"
               autoComplete="new-password"
               {...form.register("new_password", {
                 required: "New password is required.",
@@ -185,9 +184,8 @@ function ChangePasswordForm() {
           error={form.formState.errors.confirm_password?.message ?? null}
         >
           {(id) => (
-            <Input
+            <PasswordInput
               id={id}
-              type="password"
               autoComplete="new-password"
               {...form.register("confirm_password", {
                 required: "Please confirm your password.",

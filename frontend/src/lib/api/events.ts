@@ -38,8 +38,16 @@ export const eventsApi = {
       cursor ? { cursor, page_size: 30 } : { page_size: 30 },
     ),
 
-  sendMessage: (id: string, content: string): Promise<EventMessage> =>
-    apiPost<EventMessage>(`/events/${id}/messages/`, { content }),
+  /** `replyTo` is the id of the message being quoted, or null for a plain send. */
+  sendMessage: (
+    id: string,
+    content: string,
+    replyTo?: string | null,
+  ): Promise<EventMessage> =>
+    apiPost<EventMessage>(`/events/${id}/messages/`, {
+      content,
+      reply_to: replyTo ?? null,
+    }),
 };
 
 export const EVENT_BANNERS: readonly EventBanner[] = [
