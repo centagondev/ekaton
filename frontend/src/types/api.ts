@@ -160,11 +160,20 @@ export interface EventParticipant {
   left_at: string | null;
 }
 
+/** The short quote carried by a reply. Truncated server-side. */
+export interface EventMessageQuote {
+  id: string;
+  sender_name: string;
+  content: string;
+}
+
 export interface EventMessage {
   id: string;
   sender_name: string;
   content: string;
   created_at: string;
+  /** Null when the message is not a reply, or the original is gone. */
+  reply_to: EventMessageQuote | null;
 }
 
 export interface EventCreatePayload {

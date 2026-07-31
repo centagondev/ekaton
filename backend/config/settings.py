@@ -100,25 +100,31 @@ REST_FRAMEWORK = {
         "login": "5/min",
         "check_email": "5/min",
         "logout": "20/hour",
-        "set_password": "10/hour",
+        "set_password": "5/hour",
         "forget_password": "5/hour",
-        "reset_password": "10/hour",
+        "reset_password": "5/hour",
         "resend_password_reset": "3/hour",
         "change_password": "5/hour",
         "start_chat": "30/min",
         "report": "5/m",
         "complaint_create": "10/hour",
         "admin_login": "5/m",
-        "admin_dashboard": "5/m",
+        # A dashboard is only reading data and gets opened and refreshed a
+        # lot, so the old 5/min ran out after a few clicks.
+        "admin_dashboard": "60/min",
         "comment_create": "20/hour",
         "upvote_toggle": "60/hour",
         # Clients with a 30-minute access token need ~2 refreshes an hour;
         # 60 leaves room for many tabs without opening a token-grinding lane.
         "token_refresh": "60/hour",
+        
+        "event_create_burst": "3/min",
         "event_create": "10/hour",
-        # Event messages broadcast to every participant in the room, so this
-        # is the strictest write limit: fast enough for a lively chat, slow
-        # enough that one user cannot flood a whole event.
+   
+        "event_read": "120/min",
+    
+        "event_cancel": "10/hour",
+
         "event_message_create": "20/min",
         "event_membership": "60/hour",
         "chat_end": "30/min",
@@ -172,13 +178,28 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     # A stolen refresh token becomes single-use: each refresh call returns a
     # new refresh token and blacklists the old one.
-    "ROTATE_REFRESH_TOKENS":True,
-    "BLACKLIST_AFTER_ROTATION":True,
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     # Embeds a fingerprint of the password in every token; when the password
     # changes, all previously issued tokens are rejected instantly.
     "CHECK_REVOKE_TOKEN": True,
 }
 
+
+# Where the rate limits keep their counts, e.g. "this user has tried to log in
+# 4 times in the last minute".
+
+# Database 1, not 0: clearing the cache wipes its whole database, and database
+# 0 is where the chat WebSockets and the Celery task queue keep their data.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env(
+            "REDIS_CACHE_URL",
+            default=f"{REDIS_URL.rsplit('/', 1)[0]}/1",
+        ),
+    }
+}
 
 FRONTEND_URL = env("FRONTEND_URL")
 CHANNEL_LAYERS = {

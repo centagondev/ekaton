@@ -34,9 +34,8 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
         # Same resolution order as the REST layer: explicit token first, the
         # persistent identity cookie second. Browsers attach cookies to the
         # WebSocket handshake automatically.
-        token = (
-            query.get("session", [""])[0]
-            or self.scope.get("cookies", {}).get("anonymous_participant_id", "")
+        token = query.get("session", [""])[0] or self.scope.get("cookies", {}).get(
+            "anonymous_participant_id", ""
         )
 
         self.discussion = await self.get_discussion()
@@ -236,6 +235,4 @@ class PublicSpeakingConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def get_vote_state(self, message_id):
-        return services.vote_state(
-            participant=self.participant, message_id=message_id
-        )
+        return services.vote_state(participant=self.participant, message_id=message_id)

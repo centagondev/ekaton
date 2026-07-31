@@ -55,6 +55,34 @@ class AnonymousName(BaseModel):
         return self.display_name
 
 
+class BadWord(BaseModel):
+    """
+    A word that is masked out of event chat messages.
+
+    Every entry is treated the same way: apps.events.moderation replaces any
+    word it matches with asterisks. The list is managed from the Django admin,
+    and clearing is_active retires a word without losing the record of it.
+    """
+
+    word = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    class Meta:
+        db_table = "bad_words"
+        ordering = ["word"]
+        verbose_name = "Bad Word"
+        verbose_name_plural = "Bad Words"
+
+    def __str__(self):
+        return self.word
+
+
 class Event(BaseModel):
     """
     Represents an event created by a user.
@@ -223,11 +251,15 @@ class EventMessage(BaseModel):
         max_length=MAX_MESSAGE_LENGTH,
         help_text="Text content of the message.",
     )
-    
-    reply_to =models.ForeignKey(
+
+    reply_to = models.ForeignKey(
         "self",
-        on_delete=models.SET_NULL
-,null=True,blank=True,related_name="replies", help_text="The message this one is replying to.", )
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+        help_text="The message this one is replying to.",
+    )
 
     class Meta:
         db_table = "event_messages"
@@ -245,7 +277,7 @@ class EventMessage(BaseModel):
                 fields=("participant",),
                 name="participant_message_idx",
             ),
-            models.Index(fields=("reply_to",), name="reply_to_message_idx"),
+           
         ]
 
     def __str__(self) -> str:

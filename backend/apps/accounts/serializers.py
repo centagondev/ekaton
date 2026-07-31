@@ -102,5 +102,5 @@ class ChangePasswordSerializer(serializers.Serializer):
                 {
                     "confirm_password": "The new password and confirmation password do not match."
                 }
-            )
+            )        
         return attrs

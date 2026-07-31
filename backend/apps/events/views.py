@@ -8,9 +8,12 @@ from rest_framework.views import APIView
 from core.responses import success_response
 from core.throttles import (
     ContentUpdateRateThrottle,
+    EventCancelRateThrottle,
+    EventCreateBurstRateThrottle,
     EventCreateRateThrottle,
     EventMembershipRateThrottle,
     EventMessageCreateRateThrottle,
+    EventReadRateThrottle,
 )
 
 from .docs import (
@@ -58,7 +61,9 @@ class CreateEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
-    throttle_classes = [EventCreateRateThrottle]
+    # Both must pass: the burst bucket blocks a rapid run, the sustained one
+    # caps the hour.
+    throttle_classes = [EventCreateBurstRateThrottle, EventCreateRateThrottle]
 
     @create_event_doc
     def post(self, request):
@@ -89,6 +94,7 @@ class EventListAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventReadRateThrottle]
 
     @list_events_doc
     def get(self, request):
@@ -116,6 +122,7 @@ class EventDetailAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventReadRateThrottle]
 
     @event_detail_doc
     def get(self, request, pk):
@@ -169,6 +176,7 @@ class CancelEventAPIView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EventCancelRateThrottle]
 
     @cancel_event_doc
     def delete(self, request, pk):
@@ -331,6 +339,8 @@ class EventMessageAPIView(GenericAPIView):
                 "event",
                 "participant__user",
                 "participant__anonymous_name",
+                "reply_to__participant__user",
+                "reply_to__participant__anonymous_name",
             )
             .order_by("-created_at")
         )
@@ -372,8 +382,11 @@ class EventMessageAPIView(GenericAPIView):
         participant = self.get_participant(event)
 
         message = send_event_message(
+            
             participant=participant,
             content=serializer.validated_data["content"],
+            reply_to_id=serializer.validated_data.get("reply_to"),
+
         )
 
         response_serializer = EventMessageSerializer(message)

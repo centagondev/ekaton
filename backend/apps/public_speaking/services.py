@@ -80,7 +80,9 @@ def _assign_anonymous_name(*, discussion):
     # DB constraint is still the real guarantee — this just avoids burning a
     # round trip on a name we already know is gone.
     for step in range(total_names):
-        index = (discussion.anonymous_seed + discussion.anonymous_counter + step) % total_names
+        index = (
+            discussion.anonymous_seed + discussion.anonymous_counter + step
+        ) % total_names
         candidate_id = pool[index]
         if candidate_id not in taken:
             discussion.anonymous_counter += step + 1
