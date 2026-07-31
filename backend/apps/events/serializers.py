@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from .moderation import contains_bad_word
 from .models import MAX_MESSAGE_LENGTH, Event, EventMessage, EventParticipant
 
 # Shown when an anonymous event has a participant with no anonymous identity.
@@ -86,6 +87,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
                 "Event name cannot exceed 100 characters."
             )
 
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
+            )
+
         return value
 
     def validate_description(self, value):
@@ -107,6 +113,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
                 "Event description cannot exceed 1000 characters."
             )
 
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
+            )
+
         return value
 
     def validate_venue(self, value):
@@ -126,6 +137,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
         if len(value) > 200:
             raise serializers.ValidationError(
                 "Event venue cannot exceed 200 characters."
+            )
+
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
             )
 
         return value

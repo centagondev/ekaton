@@ -60,8 +60,13 @@ def normalise(text):
     )
 
 
-    # Punctuation becomes a space rather than vanishing, so "f.u.c.k" turns
-    # into separate letters that SPACED_LETTERS can join back up.
+    # Punctuation sitting between two letters is someone breaking a word up,
+    # so it is removed and the halves close over it: "th.a.y.o.l.i" becomes
+    # "thayoli" and the stored "aan-vedi" becomes one word rather than two.
+    text = re.sub(r"(?<=\w)[^\w\s]+(?=\w)", "", text)
+
+    # Anywhere else it is ordinary punctuation and becomes a space, which is
+    # what keeps a trailing "!" from gluing itself onto the word before it.
     text = re.sub(r"[^\w\s]", " ", text)
     
     text = SPACED_LETTERS.sub(lambda match: match.group().replace(" ", ""), text)
@@ -195,3 +200,15 @@ def moderate(content):
         content = content[:start] + "*" * stars + content[end:]
 
     return content
+
+
+def contains_bad_word(text):
+    """
+    Whether the text holds a bad word.
+
+    Used where profanity is rejected instead of masked, such as an event name.
+    moderate() leaves clean text exactly as it was, so a difference means it
+    found something — which keeps both uses reading the same word list with
+    the same rules.
+    """
+    return moderate(text) != text
