@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -117,6 +117,12 @@ export function EventFormModal({
   const isEdit = Boolean(event);
   const queryClient = useQueryClient();
 
+  // Errors that belong to no single field — the daily creation limit, for
+  // one. Shown inside the modal instead of a toast: the modal covers the
+  // screen and stays open with everything the user typed, so a toast that
+  // fades after a few seconds is easy to miss.
+  const [formError, setFormError] = useState<string | null>(null);
+
   const form = useForm<EventFormValues>({
     defaultValues: {
       banner: "banner_1",
@@ -130,6 +136,7 @@ export function EventFormModal({
 
   useEffect(() => {
     if (open) {
+      setFormError(null);
       form.reset({
         banner: event?.banner ?? "banner_1",
         name: event?.name ?? "",
@@ -159,6 +166,7 @@ export function EventFormModal({
         ? eventsApi.update(event.id, payload)
         : eventsApi.create(payload);
     },
+    onMutate: () => setFormError(null),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       toast.success(isEdit ? "Event updated." : "Event is live!");
@@ -169,7 +177,7 @@ export function EventFormModal({
       for (const [key, message] of Object.entries(parsed.fields)) {
         form.setError(key as keyof EventFormValues, { message });
       }
-      if (Object.keys(parsed.fields).length === 0) toast.error(parsed.message);
+      if (Object.keys(parsed.fields).length === 0) setFormError(parsed.message);
     },
   });
 
@@ -180,6 +188,15 @@ export function EventFormModal({
         className="space-y-4"
         noValidate
       >
+        {formError && (
+          <p
+            role="alert"
+            className="border-2 border-danger bg-danger/10 px-3 py-2 text-sm font-bold text-danger"
+          >
+            {formError}
+          </p>
+        )}
+
         <Field label="Event banner">
           {() => (
             <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Event banner">
@@ -209,7 +226,7 @@ export function EventFormModal({
           {(id) => (
             <Input
               id={id}
-              placeholder="Freshers' meetup"
+              placeholder="Midnight Maggi & code jam"
               maxLength={150}
               {...form.register("name", {
                 required: "Name is required.",
@@ -227,7 +244,7 @@ export function EventFormModal({
           {(id) => (
             <Textarea
               id={id}
-              placeholder="What's happening?"
+              placeholder="What's the plan? Who should come, what to bring, is there food…"
               {...form.register("description", { required: "Description is required." })}
             />
           )}
@@ -237,7 +254,7 @@ export function EventFormModal({
           {(id) => (
             <Input
               id={id}
-              placeholder="Main auditorium"
+              placeholder="Canteen, back tables"
               maxLength={255}
               {...form.register("venue", { required: "Venue is required." })}
             />
@@ -247,7 +264,7 @@ export function EventFormModal({
         <Field
           label="Ends at"
           required
-          hint="Events have no start time in the backend — only an end time."
+          hint="When it wraps up. The chat closes then, so give yourself room."
           error={form.formState.errors.end_time?.message ?? null}
         >
           {(id) => (

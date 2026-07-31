@@ -16,9 +16,15 @@ export function useEventSocket(
   eventId: string | undefined,
   enabled: boolean,
   myParticipantId: string | undefined,
+  onServerError?: (message: string) => void,
 ) {
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimers = useRef<Record<string, number>>({});
+
+  // Held in a ref so a caller passing an inline handler cannot retrigger the
+  // effect below and drop the socket on every render.
+  const errorHandler = useRef(onServerError);
+  errorHandler.current = onServerError;
 
   const [status, setStatus] = useState<EventSocketStatus>("idle");
   const [liveMessages, setLiveMessages] = useState<EventMessage[]>([]);
@@ -46,8 +52,10 @@ export function useEventSocket(
         return;
       }
 
-      // Errors carry no `type` key.
+      // Errors carry no `type` key. A rejected send only ever reports itself
+      // here, so swallowing this frame would make failures invisible.
       if (!("type" in data) || data.type === undefined) {
+        if ("error" in data && data.error) errorHandler.current?.(data.error);
         return;
       }
 
@@ -165,12 +173,16 @@ export function useEventSocket(
    * every time — measured ~2x faster end-to-end against the remote database.
    * Returns false when the socket isn't open so the caller can fall back.
    */
-  const sendMessage = useCallback((content: string): boolean => {
-    const socket = socketRef.current;
-    if (socket?.readyState !== WebSocket.OPEN) return false;
-    socket.send(JSON.stringify({ content }));
-    return true;
-  }, []);
+  const sendMessage = useCallback(
+    (content: string, replyTo?: string | null): boolean => {
+      const socket = socketRef.current;
+      if (socket?.readyState !== WebSocket.OPEN) return false;
+      // A chat frame carries no `type`; reply_to rides along as an extra key.
+      socket.send(JSON.stringify({ content, reply_to: replyTo ?? null }));
+      return true;
+    },
+    [],
+  );
 
   return { status, liveMessages, online, typing, sendTyping, sendMessage };
 }

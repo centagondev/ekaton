@@ -7,7 +7,8 @@ import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/lib/errors";
 import { useUiStore } from "@/stores/ui.store";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
+import { Field } from "@/components/ui/Field";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { PasswordRequirements } from "./PasswordRequirements";
 
@@ -170,17 +171,21 @@ export function PasswordSetupPage({ mode }: Props) {
             >
               {(id) => (
                 <>
-                  <Input
+                  <PasswordInput
                     id={id}
-                    type="password"
                     autoComplete="new-password"
                     autoFocus
-                    onFocus={() => setPasswordFocused(true)}
                     {...form.register("password", {
                       required: "Password is required.",
-                      onBlur: () => setPasswordFocused(false),
+                      minLength: { value: 8, message: "Must be at least 8 characters." },
+                      validate: (value) =>
+                        !/^\d+$/.test(value) || "Password cannot be entirely numeric.",
                     })}
+                    // Reveals the rules the moment the field is focused, so
+                    // they can be read before typing rather than after.
+                    onFocus={() => setPasswordFocused(true)}
                   />
+
                   {/*
                     Live feedback only — never a submit gate. The rules mirror
                     backend/core/validators.py exactly, but the backend still
@@ -202,9 +207,8 @@ export function PasswordSetupPage({ mode }: Props) {
               error={form.formState.errors.confirm_password?.message ?? null}
             >
               {(id) => (
-                <Input
+                <PasswordInput
                   id={id}
-                  type="password"
                   autoComplete="new-password"
                   {...form.register("confirm_password", {
                     required: "Please confirm your password.",

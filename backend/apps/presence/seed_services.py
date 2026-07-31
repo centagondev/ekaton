@@ -71,7 +71,7 @@ class SeedService:
             return int(existing)
 
         logger.info(
-            "Platform seed initialized with value %d " "(range %d–%d).",
+            "Platform seed initialized with value %d (range %d–%d).",
             new_seed,
             MIN_PLATFORM_SEED,
             MAX_PLATFORM_SEED,

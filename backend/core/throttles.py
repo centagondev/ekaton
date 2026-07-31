@@ -106,9 +106,38 @@ class TokenRefreshRateThrottle(AnonRateThrottle):
 
 
 class EventCreateRateThrottle(UserRateThrottle):
-    """Rate limiter for event creation. Scoped to authenticated users."""
+    """Sustained limit for event creation. Scoped to authenticated users."""
 
     scope = "event_create"
+
+
+class EventCreateBurstRateThrottle(UserRateThrottle):
+    """
+    Stops a rush of events created within a few seconds.
+
+    Used together with EventCreateRateThrottle, and both have to pass. "10 an
+    hour" on its own would still allow all 10 in one second, so this short
+    limit sits beside it and spreads them out.
+    """
+
+    scope = "event_create_burst"
+
+
+class EventReadRateThrottle(UserRateThrottle):
+    """Rate limiter for reading events. Generous: reads are cheap and frequent."""
+
+    scope = "event_read"
+
+
+class EventCancelRateThrottle(UserRateThrottle):
+    """
+    Rate limiter for cancelling an event.
+
+    Cancelling closes the room and kicks every participant out, so it is
+    limited more tightly than simply editing an event.
+    """
+
+    scope = "event_cancel"
 
 
 class EventMessageCreateRateThrottle(UserRateThrottle):

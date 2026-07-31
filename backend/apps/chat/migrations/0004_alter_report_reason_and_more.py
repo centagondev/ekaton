@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("chat", "0003_revealrequest_reveal_requ_room_id_6a6faa_idx"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

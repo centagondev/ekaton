@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AnonymousName, Event, EventParticipant
+from .models import AnonymousName, BadWord, Event, EventParticipant
 
 
 @admin.register(AnonymousName)
@@ -21,6 +21,35 @@ class AnonymousNameAdmin(admin.ModelAdmin):
     search_fields = ("display_name",)
 
     ordering = ("display_name",)
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+
+@admin.register(BadWord)
+class BadWordAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for the BadWord model.
+
+    Holds the words masked out of event chat messages. Clearing is_active
+    retires a word without losing the record of it.
+    """
+
+    list_display = (
+        "word",
+        "is_active",
+        "created_at",
+    )
+
+    list_filter = ("is_active",)
+
+    search_fields = ("word",)
+
+    ordering = ("word",)
+
+    list_editable = ("is_active",)
 
     readonly_fields = (
         "created_at",

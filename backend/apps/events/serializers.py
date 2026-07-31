@@ -1,11 +1,36 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from .moderation import contains_bad_word
 from .models import MAX_MESSAGE_LENGTH, Event, EventMessage, EventParticipant
 
 # Shown when an anonymous event has a participant with no anonymous identity.
 # Falling back to the real name here would de-anonymise them, so it never does.
 ANONYMOUS_FALLBACK_NAME = "Anonymous Participant"
+
+# A quote shows only one line on screen, so sending the full message would
+# download text nobody sees — and history loads 150 messages at a time.
+REPLY_PREVIEW_LENGTH = 120
+
+
+def sender_display_name(event, participant):
+    """
+    Return the name a participant is shown under inside an event.
+
+    Used by both the message and the quote inside a reply. Written once so the
+    two can never disagree — a second copy could end up showing real names in
+    an anonymous event.
+
+    The event is passed in rather than read off the participant so a reply can
+    resolve its quote against the event being viewed.
+    """
+    if event.is_anonymous_chat:
+        if participant.anonymous_name is None:
+            return ANONYMOUS_FALLBACK_NAME
+
+        return participant.anonymous_name.display_name
+
+    return participant.user.full_name
 
 
 class BaseEventSerializer(serializers.ModelSerializer):
@@ -62,6 +87,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
                 "Event name cannot exceed 100 characters."
             )
 
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
+            )
+
         return value
 
     def validate_description(self, value):
@@ -83,6 +113,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
                 "Event description cannot exceed 1000 characters."
             )
 
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
+            )
+
         return value
 
     def validate_venue(self, value):
@@ -102,6 +137,11 @@ class BaseEventSerializer(serializers.ModelSerializer):
         if len(value) > 200:
             raise serializers.ValidationError(
                 "Event venue cannot exceed 200 characters."
+            )
+
+        if contains_bad_word(value):
+            raise serializers.ValidationError(
+                "This field contains inappropriate language."
             )
 
         return value
@@ -190,7 +230,7 @@ class EventSerializer(serializers.ModelSerializer):
     Serializer used to represent an event.
     """
 
-    owner = serializers.ReadOnlyField(source="owner.full_name")
+    owner = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     participant_count = serializers.SerializerMethodField()
 
@@ -218,6 +258,19 @@ class EventSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         )
+
+    def get_owner(self, obj):
+        """
+        Return the event owner's display name.
+
+        - Anonymous events → None, so the host's real name never leaves
+          the backend. The frontend shows its own "Anonymous host" label.
+        - Normal events → owner's full name.
+        """
+        if obj.is_anonymous_chat:
+            return None
+
+        return obj.owner.full_name
 
     def get_is_owner(self, obj) -> bool:
         """
@@ -298,6 +351,8 @@ class EventMessageCreateSerializer(serializers.Serializer):
         trim_whitespace=True,
     )
 
+    reply_to = serializers.UUIDField(required=False, allow_null=True)
+
     def validate_content(self, value: str):
         """
         Ensure the message is not empty after trimming whitespace.
@@ -311,6 +366,7 @@ class EventMessageCreateSerializer(serializers.Serializer):
 
 class EventMessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.SerializerMethodField()
+    reply_to = serializers.SerializerMethodField()
 
     class Meta:
         model = EventMessage
@@ -319,13 +375,35 @@ class EventMessageSerializer(serializers.ModelSerializer):
             "sender_name",
             "content",
             "created_at",
+            "reply_to",
         )
 
     def get_sender_name(self, obj):
-        if obj.event.is_anonymous_chat:
-            if obj.participant.anonymous_name is None:
-                return ANONYMOUS_FALLBACK_NAME
+        return sender_display_name(obj.event, obj.participant)
 
-            return obj.participant.anonymous_name.display_name
+    def get_reply_to(self, obj):
+        """
+        Return a short quote of the message this one replies to.
 
-        return obj.participant.user.full_name
+        None means either "not a reply" or "the original is gone".
+
+        The quote never includes its own reply_to, so a reply to a reply
+        shows only its direct parent instead of a whole chain.
+
+        The name is resolved against THIS event, not the quoted message's own
+        event. The service only ever links messages inside one event, so the
+        two are the same — but reading the local one means an anonymous event
+        can never render a real name, whatever row it is handed.
+        """
+        if obj.reply_to is None:
+            return None
+
+        # Comparing the id columns already loaded on both rows, so no query.
+        if obj.reply_to.event_id != obj.event_id:
+            return None
+
+        return {
+            "id": str(obj.reply_to.id),
+            "sender_name": sender_display_name(obj.event, obj.reply_to.participant),
+            "content": obj.reply_to.content[:REPLY_PREVIEW_LENGTH],
+        }
