@@ -30,6 +30,10 @@ CONNECTION_TTL_SECONDS = 60 * 60 * 12
 # encrypt + insert + broadcast. Typing and system events are unaffected.
 MESSAGE_COOLDOWN_SECONDS = 1
 
+# Matches the event chat quote truncation (apps/events/serializers.py) so a
+# reply preview is capped the same way everywhere in the app.
+REPLY_PREVIEW_LENGTH = 120
+
 from .services import (
     create_private_message,
     create_reveal_request,
@@ -355,6 +359,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        reply_to_id = data.get("reply_to")
+
         try:
             room = await self._ensure_active_room()
             if room is None:
@@ -364,6 +370,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 room=room,
                 sender=self.scope["user"],
                 message=message,
+                reply_to_id=reply_to_id,
             )
 
         except ValidationError as exc:
@@ -387,14 +394,35 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             plaintext = private_message.message
 
+        # reply_to is already cached on private_message from the create() call
+        # in create_private_message, so this never issues an extra query.
+        reply_to_payload = None
+        if private_message.reply_to is not None:
+            try:
+                quote_plaintext = decrypt_message(private_message.reply_to.message)
+            except Exception:
+                logger.exception(
+                    "Failed to decrypt quoted message %s for broadcast in room %s",
+                    private_message.reply_to.id,
+                    self.room_id,
+                )
+                quote_plaintext = private_message.reply_to.message
+
+            reply_to_payload = {
+                "id": str(private_message.reply_to.id),
+                "sender_id": str(private_message.reply_to.sender_id),
+                "message": quote_plaintext[:REPLY_PREVIEW_LENGTH],
+            }
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "chat_message",
                 "id": str(private_message.id),
-                "sender": private_message.sender.email,
+                "sender_id": str(private_message.sender.id),
                 "message": plaintext,
                 "created_at": private_message.created_at.isoformat(),
+                "reply_to": reply_to_payload,
             },
         )
 
@@ -411,7 +439,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             {
                 "type": "typing",
-                "sender": self.scope["user"].email,
+                "sender_id": str(self.scope["user"].id),
                 "is_typing": is_typing,
             },
         )
@@ -424,14 +452,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # pass through here and so never reset it.
         self._reset_idle_timer()
 
+        my_id = str(self.scope["user"].id)
+
+        reply_to = event.get("reply_to")
+        reply_to_payload = (
+            None
+            if reply_to is None
+            else {
+                "id": reply_to["id"],
+                "is_own": reply_to["sender_id"] == my_id,
+                "message": reply_to["message"],
+            }
+        )
+
         await self.send(
             text_data=json.dumps(
                 {
                     "type": event["type"],
                     "id": event["id"],
-                    "sender": event["sender"],
+                    "is_own": event["sender_id"] == my_id,
                     "message": event["message"],
                     "created_at": event["created_at"],
+                    "reply_to": reply_to_payload,
                 }
             )
         )
@@ -443,8 +485,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps(
                 {
                     "type": "typing",
-                    "sender": event["sender"],
                     "is_typing": event["is_typing"],
+                    "is_own": event["sender_id"] == str(self.scope["user"].id),
                 }
             )
         )
@@ -583,7 +625,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "user": {
                         "id": str(other_user.id),
                         "full_name": other_user.full_name,
-                        "email": other_user.email,
                         "batch": other_user.batch,
                         "profile_photo": (
                             other_user.profile_photo

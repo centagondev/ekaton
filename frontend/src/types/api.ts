@@ -87,18 +87,32 @@ export interface ReportPayload {
 
 /* -------------------------- chat websocket wire -------------------------- */
 
-/** Profile broadcast on a successful reveal. Email is sent but NOT displayed. */
+/** Profile broadcast on a successful reveal. */
 export interface RevealedUser {
   id: string;
   full_name: string;
-  email: string;
   batch: string;
   profile_photo: string | null;
 }
 
+/** The short quote carried by a reply. Truncated server-side. */
+export interface PrivateMessageQuote {
+  id: string;
+  is_own: boolean;
+  message: string;
+}
+
 export type ChatServerEvent =
-  | { type: "chat_message"; id: string; sender: string; message: string; created_at: string }
-  | { type: "typing"; sender: string; is_typing: boolean }
+  | {
+      type: "chat_message";
+      id: string;
+      is_own: boolean;
+      message: string;
+      created_at: string;
+      /** Null when the message is not a reply, or the original is gone. */
+      reply_to: PrivateMessageQuote | null;
+    }
+  | { type: "typing"; is_typing: boolean; is_own: boolean }
   | { type: "reveal_request_sent"; message: string }
   | { type: "reveal_request_received"; message: string }
   | { type: "reveal_success"; message: string; user: RevealedUser }
@@ -109,7 +123,7 @@ export type ChatServerEvent =
   | { type: "error"; message: string };
 
 export type ChatClientEvent =
-  | { type: "chat_message"; message: string }
+  | { type: "chat_message"; message: string; reply_to: string | null }
   | { type: "typing"; is_typing: boolean }
   | { type: "reveal_request" }
   | { type: "reveal_response"; status: "accepted" | "rejected" }

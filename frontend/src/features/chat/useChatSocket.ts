@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_URL } from "@/lib/config";
 import { getAccessToken } from "@/lib/storage";
-import type { ChatClientEvent, ChatServerEvent, RevealedUser } from "@/types/api";
+import type {
+  ChatClientEvent,
+  ChatServerEvent,
+  PrivateMessageQuote,
+  RevealedUser,
+} from "@/types/api";
 
 export interface ChatMessage {
   id: string;
   text: string;
   isOwn: boolean;
   createdAt: string;
+  /** Null when the message is not a reply, or the original is gone. */
+  replyTo: PrivateMessageQuote | null;
 }
 
 export type ChatStatus = "connecting" | "connected" | "ended" | "error";
@@ -32,7 +39,7 @@ export interface EndInfo {
  * Important backend behaviour: ANY disconnect permanently ends the room, so
  * there is deliberately no reconnect logic here — reconnecting would be a lie.
  */
-export function useChatSocket(roomId: string | undefined, myEmail: string | undefined) {
+export function useChatSocket(roomId: string | undefined) {
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimer = useRef<number | undefined>(undefined);
 
@@ -100,7 +107,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
 
       switch (data.type) {
         case "chat_message":
-          if (data.sender !== myEmail) notePartnerPresent();
+          if (!data.is_own) notePartnerPresent();
           setPartnerTyping(false);
           setMessages((prev) =>
             prev.some((message) => message.id === data.id)
@@ -110,8 +117,9 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
                   {
                     id: data.id,
                     text: data.message,
-                    isOwn: data.sender === myEmail,
+                    isOwn: data.is_own,
                     createdAt: data.created_at,
+                    replyTo: data.reply_to,
                   },
                 ],
           );
@@ -119,7 +127,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
 
         case "typing":
           // The server echoes typing back to the sender — ignore our own.
-          if (data.sender !== myEmail) {
+          if (!data.is_own) {
             notePartnerPresent();
             setPartnerTyping(data.is_typing);
             window.clearTimeout(typingTimer.current);
@@ -197,7 +205,7 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
       // Closing ends the room server-side — intentional on unmount.
       socket.close();
     };
-  }, [roomId, myEmail]);
+  }, [roomId]);
 
   const send = useCallback((payload: ChatClientEvent) => {
     const socket = socketRef.current;
@@ -207,7 +215,8 @@ export function useChatSocket(roomId: string | undefined, myEmail: string | unde
   }, []);
 
   const sendMessage = useCallback(
-    (message: string) => send({ type: "chat_message", message }),
+    (message: string, replyTo: string | null = null) =>
+      send({ type: "chat_message", message, reply_to: replyTo }),
     [send],
   );
   const sendTyping = useCallback(
