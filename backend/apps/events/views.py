@@ -304,7 +304,6 @@ class EventMessageAPIView(GenericAPIView):
         Return the serializer class based on the request method.
         """
         if self.request.method == "POST":
-
             return EventMessageCreateSerializer
 
         return EventMessageSerializer
@@ -382,11 +381,9 @@ class EventMessageAPIView(GenericAPIView):
         participant = self.get_participant(event)
 
         message = send_event_message(
-            
             participant=participant,
             content=serializer.validated_data["content"],
             reply_to_id=serializer.validated_data.get("reply_to"),
-
         )
 
         response_serializer = EventMessageSerializer(message)

@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("chat", "0004_alter_report_reason_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

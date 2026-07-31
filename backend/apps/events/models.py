@@ -277,7 +277,6 @@ class EventMessage(BaseModel):
                 fields=("participant",),
                 name="participant_message_idx",
             ),
-           
         ]
 
     def __str__(self) -> str:

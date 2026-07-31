@@ -30,7 +30,6 @@ import {
   useChatViewport,
 } from "@/lib/useChatViewport";
 import { Button } from "@/components/ui/Button";
-import { useGoBack } from "@/components/ui/BackButton";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -50,21 +49,6 @@ const JUMP_FLASH_MS = 1400;
 /** Matches the server's quote truncation so an optimistic bubble cannot
  *  show more of the quote than the confirmed one will. */
 const REPLY_PREVIEW_LENGTH = 120;
-
-/**
- * Whether a server message is the echo of a draft still on screen.
- *
- * The reply target is part of the comparison: without it, replying with text
- * you had already sent plain would match the older bubble and the quote would
- * appear to jump between messages as the echo lands.
- */
-function echoes(message: EventMessage, draft: EventMessage): boolean {
-  return (
-    message.content === draft.content &&
-    message.sender_name === draft.sender_name &&
-    (message.reply_to?.id ?? null) === (draft.reply_to?.id ?? null)
-  );
-}
 
 /**
  * Drag a bubble to the right to reply to it, the way WhatsApp does.
@@ -213,13 +197,22 @@ function TypingBubble({ names }: { names: string[] }) {
 export function EventChatPage() {
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  // Landing here from a shared link has no history behind it, so fall back to
-  // this event's own page rather than the whole events list.
-  const goBack = useGoBack(`/events/${id}`);
+  /**
+   * Leave the chat for the events list.
+   *
+   * Deliberately not a history "back": the event detail page sends a joined
+   * participant straight back here, so anything that lands on it — going back
+   * one entry included — bounces the user into the chat again and makes this
+   * button look broken.
+   */
+  const leaveChat = useCallback(() => navigate("/events"), [navigate]);
   const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<EventMessage[]>([]);
+  // Own messages already matched to a draft, so a re-render cannot retire the
+  // same draft twice.
+  const reconciledIds = useRef<Set<string>>(new Set());
   const [unseen, setUnseen] = useState(0);
   const [identity, setIdentity] = useState(() => getEventIdentity(id));
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -263,12 +256,13 @@ export function EventChatPage() {
     messagesQuery.isError && parseApiError(messagesQuery.error).status === 404;
   const historyLoading = !joined && !notJoined && Boolean(isActive);
 
-  // A rejected send is only ever reported over the socket, so the newest
-  // unconfirmed bubble is the one it belongs to — drop it rather than leave a
-  // message on screen that the server never accepted.
+  // A rejected send is only ever reported over the socket, so a draft has to
+  // be dropped or the message sits there looking sent. The server answers in
+  // the order it received them, so the rejection belongs to the oldest
+  // unconfirmed draft — the same end the echo handler retires from.
   const handleSocketError = useCallback((message: string) => {
     toast.error(message);
-    setPending((prev) => prev.slice(0, -1));
+    setPending((prev) => prev.slice(1));
   }, []);
 
   const { status, liveMessages, online, typing, sendTyping, sendMessage } = useEventSocket(
@@ -339,11 +333,11 @@ export function EventChatPage() {
     for (const message of [...fromRest, ...liveMessages]) byId.set(message.id, message);
 
     const confirmed = [...byId.values()];
-    const stillPending = pending.filter(
-      (draftMessage) => !confirmed.some((message) => echoes(message, draftMessage)),
-    );
 
-    return [...confirmed, ...stillPending].sort((a, b) => {
+    // Drafts are retired by the effect below rather than filtered here — the
+    // server can change a message on its way through, so the copy that comes
+    // back cannot be recognised by its text.
+    return [...confirmed, ...pending].sort((a, b) => {
       const delta = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       return delta !== 0 ? delta : a.id.localeCompare(b.id);
     });
@@ -448,14 +442,21 @@ export function EventChatPage() {
   );
 
   // Drop optimistic entries once the server echoes them back.
+  //
+  // Matched by arrival order, not by text. The server may change a message on
+  // the way through — profanity is masked before it is saved — so the copy
+  // that comes back is often not what was typed, and comparing content would
+  // leave the draft sitting on screen next to its own masked twin.
   useEffect(() => {
-    if (pending.length === 0) return;
-    setPending((prev) =>
-      prev.filter(
-        (draftMessage) => !liveMessages.some((message) => echoes(message, draftMessage)),
-      ),
+    const fresh = liveMessages.filter(
+      (message) => isOwn(message) && !reconciledIds.current.has(message.id),
     );
-  }, [liveMessages, pending.length]);
+
+    if (fresh.length === 0) return;
+
+    for (const message of fresh) reconciledIds.current.add(message.id);
+    setPending((prev) => prev.slice(fresh.length));
+  }, [liveMessages, isOwn]);
 
   /* -------------------------------- composer ------------------------------- */
 
@@ -642,8 +643,9 @@ export function EventChatPage() {
         <div className="mx-auto flex h-16 w-full max-w-[1800px] items-center justify-between gap-3 px-3 sm:px-4 lg:h-[4.5rem] lg:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
-              onClick={goBack}
-              aria-label="Back to event"
+              type="button"
+              onClick={leaveChat}
+              aria-label="Back to events"
               className="-ml-1 p-2 transition-all hover:-translate-x-0.5 hover:bg-raised"
             >
               <ChevronLeft className="size-5" />

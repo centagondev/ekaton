@@ -117,14 +117,10 @@ REST_FRAMEWORK = {
         # Clients with a 30-minute access token need ~2 refreshes an hour;
         # 60 leaves room for many tabs without opening a token-grinding lane.
         "token_refresh": "60/hour",
-        
         "event_create_burst": "3/min",
         "event_create": "10/hour",
-   
         "event_read": "120/min",
-    
         "event_cancel": "10/hour",
-
         "event_message_create": "20/min",
         "event_membership": "60/hour",
         "chat_end": "30/min",

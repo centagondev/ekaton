@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("events", "0002_anonymousname_alter_eventparticipant_options_and_more"),
     ]

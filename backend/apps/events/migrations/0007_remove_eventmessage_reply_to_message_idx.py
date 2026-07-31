@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("events", "0006_eventmessage_reply_to_and_more"),
     ]

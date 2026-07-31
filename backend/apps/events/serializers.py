@@ -350,9 +350,8 @@ class EventMessageCreateSerializer(serializers.Serializer):
         max_length=MAX_MESSAGE_LENGTH,
         trim_whitespace=True,
     )
-    
-    reply_to = serializers.UUIDField(required=False, allow_null=True)
 
+    reply_to = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_content(self, value: str):
         """

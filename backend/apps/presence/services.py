@@ -295,13 +295,13 @@ class PlatformPresenceService:
 
         if connection_count == 1:
             logger.info(
-                "User '%s' became online on the platform. " "Active connections: %d.",
+                "User '%s' became online on the platform. Active connections: %d.",
                 user_id,
                 connection_count,
             )
         else:
             logger.debug(
-                "User '%s' opened an additional tab. " "Active connections: %d.",
+                "User '%s' opened an additional tab. Active connections: %d.",
                 user_id,
                 connection_count,
             )
@@ -337,12 +337,12 @@ class PlatformPresenceService:
 
         if connection_count == 0:
             logger.info(
-                "User '%s' went offline from the platform. " "All connections closed.",
+                "User '%s' went offline from the platform. All connections closed.",
                 user_id,
             )
         else:
             logger.debug(
-                "User '%s' closed one tab. " "Remaining connections: %d.",
+                "User '%s' closed one tab. Remaining connections: %d.",
                 user_id,
                 connection_count,
             )

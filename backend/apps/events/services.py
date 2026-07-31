@@ -283,7 +283,6 @@ def cancel_event(*, event, user):
     # Checked before the status for the same reason as update_event: a
     # stranger gets 403 and learns nothing about the event's state.
     if event.owner != user:
-
         logger.warning(
             "User '%s' attempted to cancel event '%s' without permission.",
             user.email,
@@ -446,7 +445,6 @@ def join_event(*, event, user):
         .first()
     )
     if participant:
-
         if participant.is_active:
             raise ValidationError("You have already joined this event.")
 
@@ -488,7 +486,6 @@ def join_event(*, event, user):
         participant = EventParticipant.objects.create(**participant_data)
 
     except IntegrityError:
-
         logger.warning(
             "Concurrent join attempt detected for user '%s' on event '%s'.",
             user.email,
@@ -627,7 +624,6 @@ def send_event_message(
         # replying to a message from a DIFFERENT event, which would pull that
         # event's private content into this chat as a quote.
         try:
-
             reply_to = EventMessage.objects.filter(
                 id=reply_to_id,
                 event=participant.event,
@@ -645,5 +641,3 @@ def send_event_message(
     )
 
     return message
-
-

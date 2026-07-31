@@ -16,8 +16,8 @@ from .models import BadWord
 # instead of queried each time. A newly added word goes live within this
 # window; loading it fresh costs about half a second against the database.
 
-CACHE_KEY="event_bad_words"
-CACHE_TIMEOUT= 300
+CACHE_KEY = "event_bad_words"
+CACHE_TIMEOUT = 300
 
 # Characters people swap in to slip a word past a filter.
 CHARACTER_SUBSTITUTIONS = {
@@ -35,8 +35,8 @@ CHARACTER_SUBSTITUTIONS = {
 # into an "i" — that alone stopped "thayoli!" from being matched.
 SUBSTITUTION_PATTERN = re.compile(r"(?<=\w)([@0135$!])(?=\w)")
 
-''' Three or more of the same letter is someone stretching a word out; two is
-# usually a real one.'''
+""" Three or more of the same letter is someone stretching a word out; two is
+# usually a real one."""
 REPEATED_LETTERS = re.compile(r"(.)\1{2,}")
 # A run of single letters — "f u c k" typed to break the word apart.
 SPACED_LETTERS = re.compile(r"\b(?:\w\s+)+\w\b")
@@ -59,7 +59,6 @@ def normalise(text):
         lambda match: CHARACTER_SUBSTITUTIONS[match.group(1)], text.lower()
     )
 
-
     # Punctuation sitting between two letters is someone breaking a word up,
     # so it is removed and the halves close over it: "th.a.y.o.l.i" becomes
     # "thayoli" and the stored "aan-vedi" becomes one word rather than two.
@@ -68,10 +67,11 @@ def normalise(text):
     # Anywhere else it is ordinary punctuation and becomes a space, which is
     # what keeps a trailing "!" from gluing itself onto the word before it.
     text = re.sub(r"[^\w\s]", " ", text)
-    
+
     text = SPACED_LETTERS.sub(lambda match: match.group().replace(" ", ""), text)
     text = REPEATED_LETTERS.sub(r"\1", text)
     return re.sub(r"\s+", " ", text).strip()
+
 
 def get_bad_words():
     """
@@ -81,6 +81,7 @@ def get_bad_words():
     list is roughly half phrases, which is why they are kept separately —
     a phrase has to be matched against a window of that many words.
     """
+
     def load():
         singles = set()
         phrases = {}

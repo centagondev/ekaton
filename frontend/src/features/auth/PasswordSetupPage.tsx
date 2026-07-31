@@ -7,7 +7,8 @@ import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/lib/errors";
 import { useUiStore } from "@/stores/ui.store";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
+import { Field } from "@/components/ui/Field";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { PageTransition } from "@/components/layout/PageTransition";
 
 interface FormValues {
@@ -131,9 +132,8 @@ export function PasswordSetupPage({ mode }: Props) {
               error={form.formState.errors.password?.message ?? null}
             >
               {(id) => (
-                <Input
+                <PasswordInput
                   id={id}
-                  type="password"
                   autoComplete="new-password"
                   autoFocus
                   {...form.register("password", {
@@ -152,9 +152,8 @@ export function PasswordSetupPage({ mode }: Props) {
               error={form.formState.errors.confirm_password?.message ?? null}
             >
               {(id) => (
-                <Input
+                <PasswordInput
                   id={id}
-                  type="password"
                   autoComplete="new-password"
                   {...form.register("confirm_password", {
                     required: "Please confirm your password.",

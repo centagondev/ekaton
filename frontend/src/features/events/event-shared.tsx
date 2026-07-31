@@ -226,7 +226,7 @@ export function EventFormModal({
           {(id) => (
             <Input
               id={id}
-              placeholder="Freshers' meetup"
+              placeholder="Midnight Maggi & code jam"
               maxLength={150}
               {...form.register("name", {
                 required: "Name is required.",
@@ -244,7 +244,7 @@ export function EventFormModal({
           {(id) => (
             <Textarea
               id={id}
-              placeholder="What's happening?"
+              placeholder="What's the plan? Who should come, what to bring, is there food…"
               {...form.register("description", { required: "Description is required." })}
             />
           )}
@@ -254,7 +254,7 @@ export function EventFormModal({
           {(id) => (
             <Input
               id={id}
-              placeholder="Main auditorium"
+              placeholder="Canteen, back tables"
               maxLength={255}
               {...form.register("venue", { required: "Venue is required." })}
             />
@@ -264,7 +264,7 @@ export function EventFormModal({
         <Field
           label="Ends at"
           required
-          hint="Events have no start time in the backend — only an end time."
+          hint="When it wraps up. The chat closes then, so give yourself room."
           error={form.formState.errors.end_time?.message ?? null}
         >
           {(id) => (
