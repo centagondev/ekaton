@@ -3,18 +3,17 @@ import secrets
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from click.utils import R
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from django.core.exceptions import ValidationError as DjangoValidationError
-
 
 from apps.presence.services import EventPresenceService
 from apps.users.models import User
 
+from .moderation import moderate
 from .models import (
     MAX_MESSAGE_LENGTH,
     AnonymousName,
@@ -617,6 +616,11 @@ def send_event_message(
     if len(content) > MAX_MESSAGE_LENGTH:
         raise ValidationError(f"Message cannot exceed {MAX_MESSAGE_LENGTH} characters.")
 
+    # Masked before saving, so the original profanity never reaches the
+    # database and every reader — REST, WebSocket, history — sees the same
+    # cleaned text.
+    content = moderate(content)
+
     reply_to = None
 
     if reply_to_id is not None:
@@ -641,3 +645,5 @@ def send_event_message(
     )
 
     return message
+
+
