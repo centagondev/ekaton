@@ -241,6 +241,62 @@ admin_update_user_doc = extend_schema(
 )
 
 # ---------------------------------------------------------------------------
+# Admin Delete User
+# Endpoint : DELETE /admin/users/<uuid:user_id>/
+
+admin_delete_user_doc = extend_schema(
+    tags=["Administration"],
+    summary="Admin Delete User",
+    description="""
+    Allow an administrator to permanently delete a user account.
+
+    **Purpose**: Removes an account entirely from the platform. For a
+    reversible block, use the update endpoint's `is_active=false` (suspend)
+    instead — deletion cannot be undone.
+    **Authentication requirement**: Admin only (IsAdminUser).
+    **Security behaviour**:
+    - Deletion cascades (`on_delete=CASCADE`): the user's private chats,
+      messages, reports, event participations and owned events are removed
+      together with the account.
+    - Admins cannot delete their own account.
+    - Superuser accounts cannot be deleted through this endpoint.
+
+    ### Path Parameter
+    * `user_id` (UUID): The unique identifier of the user to delete.
+    """,
+    request=None,
+    responses={
+        # 200: The account and all related data are gone.
+        200: OpenApiResponse(
+            response=inline_serializer(
+                name="AdminDeleteUserResponse",
+                fields={
+                    "message": rf_serializers.CharField(),
+                },
+            ),
+            description="User deleted successfully.",
+            examples=[
+                OpenApiExample(
+                    "Success",
+                    value={"message": "User delete successfully"},
+                )
+            ],
+        ),
+        # 400: Refused — deleting yourself, or a superuser account.
+        400: OpenApiResponse(
+            description=(
+                "Bad Request - Attempted to delete your own account, or a "
+                "superuser account."
+            )
+        ),
+        401: OpenApiResponse(description="Unauthorized - Not authenticated."),
+        403: OpenApiResponse(description="Forbidden - User is not an admin."),
+        # 404: No user with the given id.
+        404: OpenApiResponse(description="Not Found - User does not exist."),
+    },
+)
+
+# ---------------------------------------------------------------------------
 # Admin Create User
 # Endpoint : POST /admin/users/
 

@@ -73,3 +73,17 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Admin portal overrides — scoped under [data-admin] so the product's
+   brutalist focus ring and yellow selection never leak into /admin, and the
+   portal's soft blue styling never leaks out of it. */
+[data-admin] :focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+[data-admin] ::selection {
+  background: #bfdbfe;
+  color: #111827;
+}

@@ -17,6 +17,7 @@ from .docs import (
     admin_create_event_doc,
     admin_create_user_doc,
     admin_dashboard_doc,
+    admin_delete_user_doc,
     admin_event_detail_doc,
     admin_event_list_doc,
     admin_login_doc,
@@ -52,6 +53,7 @@ from .services import (
     update_event,
     update_report_status,
     update_user,
+    admin_delete_user,
 )
 
 logger = logging.getLogger("authentication")
@@ -218,6 +220,28 @@ class AdminUpdateUserAPIView(APIView):
 
         return success_response(
             message="User updated successfully", data=UserSerializer(user).data
+        )
+
+    @admin_delete_user_doc
+    def delete(self, request, user_id):
+        """Permanently delete a user account.
+
+        Deletion cascades to everything tied to the account (chats, messages,
+        reports, owned events). For a reversible block, PATCH is_active=false.
+
+        Args:
+            request: The incoming HTTP request. No body required.
+            user_id (UUID): The primary key of the user to delete.
+
+        Returns:
+            A success response confirming the deletion.
+        """
+        admin_delete_user(user_id,request.user)
+
+        logger.info(f"Admin {request.user.id} deleted user {user_id}.")
+
+        return success_response(
+            message="User delete successfully"
         )
 
 

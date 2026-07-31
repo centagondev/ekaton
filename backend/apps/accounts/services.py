@@ -143,7 +143,7 @@ def login_user(request, email, password):
 
     if not user.is_active:
         logger.warning("Failed login attempt: Inactive account for user_id=%s", user.id)
-        raise AuthenticationFailed("This account is currently inactive.")
+        raise AuthenticationFailed("Your account has been suspended by an administrator.")
 
     if not user.is_verified:
         logger.warning(

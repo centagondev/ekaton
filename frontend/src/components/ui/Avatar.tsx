@@ -25,6 +25,11 @@ export function Avatar({
           src={src}
           alt=""
           loading="lazy"
+          // Many image hosts (googleusercontent, Instagram CDN, …) answer 403
+          // to requests carrying a foreign Referer. Admin-entered photo URLs
+          // point at exactly such hosts, so avatars request with no referrer —
+          // otherwise the load fails and the fallback silently hides the photo.
+          referrerPolicy="no-referrer"
           className="size-full object-cover"
           onError={() => setBroken(true)}
         />
