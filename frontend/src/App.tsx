@@ -75,6 +75,34 @@ const NotFoundPage = lazy(() =>
   import("@/features/NotFoundPage").then((m) => ({ default: m.NotFoundPage })),
 );
 
+/**
+ * Fallback for admin chunk loads, defined inline so it ships in the main
+ * bundle without pulling any admin code in. It honors the persisted admin
+ * theme (read directly — the admin ui module isn't loaded yet) so a dark-mode
+ * reload doesn't flash a white screen.
+ */
+function AdminChunkFallback() {
+  let dark = true;
+  try {
+    dark = localStorage.getItem("ekaton:admin-theme") !== "light";
+  } catch {
+    /* default to dark */
+  }
+  return (
+    <div
+      className="flex min-h-dvh items-center justify-center"
+      style={{ backgroundColor: dark ? "#0a101d" : "#f7f8fa" }}
+    >
+      <span
+        className="size-6 animate-spin rounded-full border-2 border-t-transparent"
+        style={{ borderColor: dark ? "#33455f" : "#cbd3de", borderTopColor: "transparent" }}
+        role="status"
+        aria-label="Loading"
+      />
+    </div>
+  );
+}
+
 export default function App() {
   const bootstrap = useAuthStore((state) => state.bootstrap);
   const location = useLocation();
@@ -95,9 +123,25 @@ export default function App() {
             {/* The admin portal has its own admin JWT (features/admin/api.ts),
                 entirely separate from the end-user session below — reachable
                 regardless of whether a visitor is logged into an Ekaton
-                account. AdminLayout guards every page inside it. */}
-            <Route path="/admin" element={<AdminLoginPage />} />
-            <Route element={<AdminLayout />}>
+                account. AdminLayout guards every page inside it. Cold loads
+                fall back to the portal's own minimal spinner instead of the
+                product's brutalist loader; once the layout is up, its internal
+                Suspense handles page chunks. */}
+            <Route
+              path="/admin"
+              element={
+                <Suspense fallback={<AdminChunkFallback />}>
+                  <AdminLoginPage />
+                </Suspense>
+              }
+            />
+            <Route
+              element={
+                <Suspense fallback={<AdminChunkFallback />}>
+                  <AdminLayout />
+                </Suspense>
+              }
+            >
               <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />

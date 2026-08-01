@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -8,7 +8,6 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { toast } from "sonner";
 import {
   CalendarDays,
   ChevronRight,
@@ -29,6 +28,7 @@ import {
   getAdminToken,
   getAdminUser,
 } from "./api";
+import { AdminPageLoader, ThemeToggle, notify, useAdminTheme } from "./ui";
 
 interface NavItem {
   to: string;
@@ -54,10 +54,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-9",
               isActive
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                ? "bg-a-accent-soft text-a-accent-text"
+                : "text-a-muted hover:bg-a-raised hover:text-a-ink",
             )
           }
         >
@@ -76,11 +76,11 @@ function SidebarBrand() {
       className="flex items-center gap-2.5 px-6 py-5"
       aria-label="Ekaton admin home"
     >
-      <span className="flex size-7 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
+      <span className="flex size-7 items-center justify-center rounded-lg bg-a-accent text-sm font-bold text-white a-elev">
         E
       </span>
-      <span className="text-[15px] font-semibold tracking-tight text-gray-900">
-        Ekaton <span className="font-normal text-gray-400">Admin</span>
+      <span className="text-[15px] font-semibold tracking-tight text-a-ink">
+        Ekaton <span className="font-normal text-a-faint">Admin</span>
       </span>
     </Link>
   );
@@ -106,7 +106,7 @@ function QuickNav() {
 
   return (
     <div className="relative hidden w-64 md:block">
-      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-a-faint" />
       <input
         type="search"
         value={term}
@@ -122,12 +122,13 @@ function QuickNav() {
         placeholder="Go to section…"
         aria-label="Go to admin section"
         className={cn(
-          "h-8 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-900",
-          "placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+          "a-search h-9 w-full rounded-lg border border-a-line bg-a-raised/70 pl-9 pr-3 text-sm text-a-ink transition-colors",
+          "placeholder:text-a-faint hover:border-a-line-strong",
+          "focus:border-a-accent focus:bg-a-surface focus:outline-none focus:ring-2 focus:ring-a-accent-soft",
         )}
       />
       {open && (
-        <div className="absolute left-0 right-0 top-10 z-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+        <div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-a-line bg-a-surface py-1 a-elev-md">
           {matches.map((item) => (
             <button
               key={item.to}
@@ -136,9 +137,9 @@ function QuickNav() {
                 navigate(item.to);
                 setTerm("");
               }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-a-text transition-colors hover:bg-a-raised"
             >
-              <item.icon className="size-4 text-gray-400" />
+              <item.icon className="size-4 text-a-faint" />
               {item.label}
             </button>
           ))}
@@ -166,9 +167,10 @@ function UserMenu() {
         onClick={() => setOpen((previous) => !previous)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-lg p-1 transition-colors hover:bg-gray-100"
+        aria-label="Account menu"
+        className="flex size-10 items-center justify-center rounded-lg transition-colors hover:bg-a-raised sm:size-9"
       >
-        <span className="flex size-7 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+        <span className="flex size-7 items-center justify-center rounded-full bg-a-accent text-xs font-semibold text-white">
           {initialsOf(name)}
         </span>
       </button>
@@ -185,14 +187,14 @@ function UserMenu() {
           />
           <div
             role="menu"
-            className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+            className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-xl border border-a-line bg-a-surface py-1 a-elev-md"
           >
-            <div className="border-b border-gray-100 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-gray-900">{name}</p>
+            <div className="border-b border-a-line px-3 py-2.5">
+              <p className="truncate text-sm font-medium text-a-ink">{name}</p>
               {admin?.email && (
-                <p className="truncate text-xs text-gray-500">{admin.email}</p>
+                <p className="truncate text-xs text-a-muted">{admin.email}</p>
               )}
-              <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-blue-600">
+              <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-a-accent-text">
                 {admin?.is_superuser ? "Superuser" : "Staff"}
               </p>
             </div>
@@ -200,9 +202,9 @@ function UserMenu() {
               type="button"
               role="menuitem"
               onClick={logout}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-sm text-a-text transition-colors hover:bg-a-raised"
             >
-              <LogOut className="size-4 text-gray-400" />
+              <LogOut className="size-4 text-a-faint" />
               Sign out
             </button>
           </div>
@@ -214,16 +216,19 @@ function UserMenu() {
 
 /**
  * The portal shell: fixed sidebar on desktop, drawer on mobile, topbar with
- * breadcrumbs / quick-nav / user menu, and the page in a soft gray canvas.
+ * breadcrumbs / quick-nav / theme toggle / user menu, and the page on the
+ * themed canvas. Lazy page chunks resolve inside the shell, so navigation
+ * shows the small spinner in place instead of blanking the chrome.
  *
- * Access control is unchanged from the old moderation page: the real check is
- * IsAdminUser on every backend call. This guard only keeps people without any
- * admin token from seeing an empty shell, and the session-expired listener
- * reacts to the server's 401/403 verdict by returning to the login screen.
+ * Access control is unchanged: the real check is IsAdminUser on every backend
+ * call. This guard only keeps people without any admin token from seeing an
+ * empty shell, and the session-expired listener reacts to the server's
+ * 401/403 verdict by returning to the login screen.
  */
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [theme, toggleTheme] = useAdminTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
   // One toast per expiry, not one per parallel failing query.
   const expiredRef = useRef(false);
@@ -232,7 +237,7 @@ export function AdminLayout() {
     const onExpired = () => {
       if (expiredRef.current) return;
       expiredRef.current = true;
-      toast.error("Admin session expired. Please sign in again.");
+      notify.error("Session expired", "Please sign in again to continue.");
       navigate("/admin", { replace: true });
     };
     window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
@@ -245,12 +250,19 @@ export function AdminLayout() {
   const current = NAV.find((item) => location.pathname.startsWith(item.to));
 
   return (
-    <div data-admin className="min-h-dvh bg-gray-50 text-gray-900">
+    <div
+      data-admin
+      data-admin-theme={theme}
+      className="min-h-dvh bg-a-canvas text-a-ink"
+    >
       {/* desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-gray-200 bg-white lg:flex">
+      <aside
+        className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-a-line bg-a-surface lg:flex"
+        style={{ paddingLeft: "env(safe-area-inset-left)" }}
+      >
         <SidebarBrand />
         <NavLinks />
-        <p className="mt-auto px-6 py-4 text-[11px] text-gray-400">
+        <p className="mt-auto px-6 py-4 text-[11px] text-a-faint">
           Ekaton moderation &amp; administration
         </p>
       </aside>
@@ -266,14 +278,18 @@ export function AdminLayout() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setDrawerOpen(false)}
-              className="absolute inset-0 bg-gray-950/40"
+              className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
             />
             <motion.aside
-              initial={{ x: -280 }}
+              initial={{ x: -288 }}
               animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "tween", duration: 0.2, ease: "easeOut" }}
-              className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-gray-200 bg-white"
+              exit={{ x: -288 }}
+              transition={{ type: "tween", duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-a-line bg-a-surface a-elev-lg"
+              style={{
+                paddingLeft: "env(safe-area-inset-left)",
+                paddingTop: "env(safe-area-inset-top)",
+              }}
             >
               <div className="flex items-center justify-between pr-3">
                 <SidebarBrand />
@@ -281,7 +297,7 @@ export function AdminLayout() {
                   type="button"
                   aria-label="Close menu"
                   onClick={() => setDrawerOpen(false)}
-                  className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  className="rounded-lg p-2.5 text-a-faint transition-colors hover:bg-a-raised hover:text-a-text"
                 >
                   <X className="size-4" />
                 </button>
@@ -294,26 +310,32 @@ export function AdminLayout() {
 
       {/* topbar + page */}
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur sm:px-6">
+        <header
+          className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-a-line bg-a-surface/85 px-3 backdrop-blur sm:gap-3 sm:px-6"
+          style={{
+            paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+            paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+          }}
+        >
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setDrawerOpen(true)}
-            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 lg:hidden"
+            className="-ml-1 rounded-lg p-2.5 text-a-muted transition-colors hover:bg-a-raised hover:text-a-ink lg:hidden"
           >
             <Menu className="size-5" />
           </button>
 
           <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
             <ol className="flex items-center gap-1.5 text-sm">
-              <li className="hidden text-gray-400 sm:block">Admin</li>
+              <li className="hidden text-a-faint sm:block">Admin</li>
               {current && (
                 <>
                   <ChevronRight
                     aria-hidden
-                    className="hidden size-3.5 text-gray-300 sm:block"
+                    className="hidden size-3.5 text-a-line-strong sm:block"
                   />
-                  <li className="truncate font-medium text-gray-900">
+                  <li className="truncate font-medium text-a-ink">
                     {current.label}
                   </li>
                 </>
@@ -322,11 +344,22 @@ export function AdminLayout() {
           </nav>
 
           <QuickNav />
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <UserMenu />
         </header>
 
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-          <Outlet />
+        <main
+          className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8"
+          style={{
+            paddingLeft: "max(1rem, env(safe-area-inset-left))",
+            paddingRight: "max(1rem, env(safe-area-inset-right))",
+            paddingBottom: "max(2rem, env(safe-area-inset-bottom))",
+          }}
+        >
+          {/* Lazy admin pages resolve here — chrome stays, content spins. */}
+          <Suspense fallback={<AdminPageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

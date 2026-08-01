@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { CheckCircle2, Clock3, ExternalLink, Flag } from "lucide-react";
 import { REPORT_REASONS } from "@/lib/api/chat";
 import { parseApiError } from "@/lib/errors";
@@ -22,6 +21,8 @@ import {
   APagination,
   ASelect,
   DataTable,
+  notify,
+  PageEnter,
   PageHeader,
   SearchBox,
   StatCard,
@@ -66,8 +67,8 @@ function reportKey(report: AdminReport): string {
 function Party({ name, email }: { name: string; email: string }) {
   return (
     <div className="min-w-0">
-      <p className="max-w-44 truncate font-medium text-gray-900">{name}</p>
-      <p className="max-w-44 truncate text-xs text-gray-500">{email}</p>
+      <p className="max-w-44 truncate font-medium text-a-ink">{name}</p>
+      <p className="max-w-44 truncate text-xs text-a-muted">{email}</p>
     </div>
   );
 }
@@ -86,10 +87,10 @@ function ReportDetailModal({
       adminApi.reports.updateStatus(id, status),
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: REPORTS_KEY });
-      toast.success(`Report marked ${updated.status}.`);
+      notify.success(`Report marked ${updated.status}.`);
       onClose();
     },
-    onError: (error) => toast.error(parseApiError(error).message),
+    onError: (error) => notify.error(parseApiError(error).message),
   });
 
   return (
@@ -104,16 +105,16 @@ function ReportDetailModal({
               {report.status}
             </ABadge>
             <span
-              className="ml-auto text-xs text-gray-500"
+              className="ml-auto text-xs text-a-muted"
               title={formatDateTime(report.created_at)}
             >
               Filed {timeAgo(report.created_at)}
             </span>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-a-line p-3">
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-a-faint">
                 Reported user
               </p>
               <Party
@@ -121,8 +122,8 @@ function ReportDetailModal({
                 email={report.reported_user.email}
               />
             </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <div className="rounded-lg border border-a-line p-3">
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-a-faint">
                 Reporter
               </p>
               <Party
@@ -133,10 +134,10 @@ function ReportDetailModal({
           </div>
 
           <div>
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-a-faint">
               Description
             </p>
-            <p className="whitespace-pre-wrap break-words rounded-lg bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-700">
+            <p className="whitespace-pre-wrap break-words rounded-lg bg-a-raised px-3 py-2.5 text-sm leading-relaxed text-a-text">
               {report.description?.trim() || "No description provided."}
             </p>
           </div>
@@ -144,22 +145,24 @@ function ReportDetailModal({
           <dl className="space-y-1.5 text-sm">
             {report.evidence_url && (
               <div className="flex items-center gap-2">
-                <dt className="text-gray-500">Evidence:</dt>
+                <dt className="shrink-0 text-a-muted">Evidence:</dt>
                 <dd>
                   <a
                     href={report.evidence_url}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 font-medium text-blue-600 hover:underline"
+                    className="inline-flex items-center gap-1 font-medium text-a-accent-text hover:underline"
                   >
                     Open link <ExternalLink className="size-3" />
                   </a>
                 </dd>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <dt className="text-gray-500">Chat room:</dt>
-              <dd className="font-mono text-xs text-gray-600">{report.room}</dd>
+            <div className="flex items-start gap-2">
+              <dt className="shrink-0 text-a-muted">Chat room:</dt>
+              <dd className="min-w-0 break-all font-mono text-xs text-a-text">
+                {report.room}
+              </dd>
             </div>
           </dl>
 
@@ -170,11 +173,11 @@ function ReportDetailModal({
             backend adds `id` to AdminReportSerializer.
           */}
           {report.id !== undefined && (
-            <div className="border-t border-gray-200 pt-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <div className="border-t border-a-line pt-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-a-faint">
                 Set status
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {STATUS_OPTIONS.map((option) => (
                   <AButton
                     key={option.value}
@@ -240,83 +243,89 @@ export function AdminReportsPage() {
   const pageData = query.data?.reports;
   const rows = pageData?.results ?? [];
 
-  const columns: Array<Column<AdminReport>> = [
-    {
-      key: "reported",
-      header: "Reported user",
-      render: (report) => (
-        <Party
-          name={report.reported_user.full_name}
-          email={report.reported_user.email}
-        />
-      ),
-    },
-    {
-      key: "reporter",
-      header: "Reporter",
-      render: (report) => (
-        <Party name={report.reporter.full_name} email={report.reporter.email} />
-      ),
-    },
-    {
-      key: "reason",
-      header: "Reason",
-      render: (report) => (
-        <ABadge tone={REASON_TONES[report.reason]}>
-          {reasonLabel(report.reason)}
-        </ABadge>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (report) => (
-        <ABadge tone={STATUS_TONES[report.status]} className="capitalize">
-          {report.status}
-        </ABadge>
-      ),
-    },
-    {
-      key: "filed",
-      header: "Filed",
-      render: (report) => (
-        <span
-          className="whitespace-nowrap text-gray-500"
-          title={formatDateTime(report.created_at)}
-        >
-          {timeAgo(report.created_at)}
-        </span>
-      ),
-    },
-  ];
+  const columns = useMemo<Array<Column<AdminReport>>>(
+    () => [
+      {
+        key: "reported",
+        header: "Reported user",
+        render: (report) => (
+          <Party
+            name={report.reported_user.full_name}
+            email={report.reported_user.email}
+          />
+        ),
+      },
+      {
+        key: "reporter",
+        header: "Reporter",
+        render: (report) => (
+          <Party
+            name={report.reporter.full_name}
+            email={report.reporter.email}
+          />
+        ),
+      },
+      {
+        key: "reason",
+        header: "Reason",
+        render: (report) => (
+          <ABadge tone={REASON_TONES[report.reason]}>
+            {reasonLabel(report.reason)}
+          </ABadge>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (report) => (
+          <ABadge tone={STATUS_TONES[report.status]} className="capitalize">
+            {report.status}
+          </ABadge>
+        ),
+      },
+      {
+        key: "filed",
+        header: "Filed",
+        render: (report) => (
+          <span
+            className="whitespace-nowrap text-a-muted"
+            title={formatDateTime(report.created_at)}
+          >
+            {timeAgo(report.created_at)}
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
-    <>
+    <PageEnter>
       <PageHeader
         title="Reports"
         description="User-filed reports from anonymous chats."
       />
 
-      <div className="mb-6 grid grid-cols-3 gap-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 min-[420px]:grid-cols-3 sm:mb-6 sm:gap-4">
         <StatCard label="Total" value={stats?.reports_count} icon={Flag} loading={query.isLoading} />
         <StatCard label="Pending" value={stats?.reports_pending_count} icon={Clock3} tone="amber" loading={query.isLoading} />
         <StatCard label="Resolved" value={stats?.reports_resolved_count} icon={CheckCircle2} tone="green" loading={query.isLoading} />
       </div>
 
       <ACard>
-        <div className="flex flex-wrap items-end gap-2 border-b border-gray-200 p-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-a-line p-3 sm:flex sm:flex-wrap sm:items-end">
           <SearchBox
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search people, reason, description…"
             busy={query.isFetching && !query.isLoading}
-            className="w-full sm:w-72"
+            className="col-span-2 w-full lg:w-72"
           />
           <ASelect
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             aria-label="Filter by status"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((option) => (
@@ -329,7 +338,7 @@ export function AdminReportsPage() {
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             aria-label="Filter by reason"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All reasons</option>
             {REPORT_REASONS.map((option) => (
@@ -338,28 +347,34 @@ export function AdminReportsPage() {
               </option>
             ))}
           </ASelect>
-          <AField label="From">
-            {(id) => (
-              <AInput
-                id={id}
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                widthClass="w-auto"
-              />
-            )}
-          </AField>
-          <AField label="To">
-            {(id) => (
-              <AInput
-                id={id}
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                widthClass="w-auto"
-              />
-            )}
-          </AField>
+          <div className="col-span-2 flex w-full gap-2 sm:w-auto">
+            <div className="min-w-0 flex-1">
+              <AField label="From">
+                {(id) => (
+                  <AInput
+                    id={id}
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    widthClass="w-full sm:w-auto"
+                  />
+                )}
+              </AField>
+            </div>
+            <div className="min-w-0 flex-1">
+              <AField label="To">
+                {(id) => (
+                  <AInput
+                    id={id}
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    widthClass="w-full sm:w-auto"
+                  />
+                )}
+              </AField>
+            </div>
+          </div>
         </div>
 
         {query.isError ? (
@@ -402,6 +417,6 @@ export function AdminReportsPage() {
       </ACard>
 
       <ReportDetailModal report={selected} onClose={() => setSelected(null)} />
-    </>
+    </PageEnter>
   );
 }

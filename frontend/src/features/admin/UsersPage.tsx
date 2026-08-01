@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -6,7 +6,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import {
   BadgeCheck,
   Pencil,
@@ -34,6 +33,8 @@ import {
   AToggle,
   ConfirmDialog,
   DataTable,
+  notify,
+  PageEnter,
   PageHeader,
   SearchBox,
   StatCard,
@@ -43,6 +44,9 @@ import {
 import { adminApi, getAdminUser, type CreateUserPayload } from "./api";
 
 const USERS_KEY = ["admin", "users"] as const;
+
+/** Shape of one cached page of the users list query. */
+type UsersPayload = Awaited<ReturnType<typeof adminApi.users.list>>;
 
 /** Route DRF's field-keyed validation errors onto the form they belong to. */
 function applyFieldErrors(
@@ -79,7 +83,7 @@ function CreateUserModal({
     mutationFn: (payload: CreateFormValues) => adminApi.users.create(payload),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      toast.success(`${user.full_name} created.`);
+      notify.success(`${user.full_name} created.`);
       form.reset();
       onClose();
     },
@@ -90,7 +94,7 @@ function CreateUserModal({
         "batch",
         "gender",
       ]);
-      if (message) toast.error(message);
+      if (message) notify.error(message);
     },
   });
 
@@ -126,7 +130,7 @@ function CreateUserModal({
             />
           )}
         </AField>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <AField label="Batch" error={form.formState.errors.batch?.message}>
             {(id) => (
               <AInput
@@ -145,16 +149,24 @@ function CreateUserModal({
             )}
           </AField>
         </div>
-        <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500">
+        <p className="rounded-lg bg-a-raised/70 px-3 py-2 text-xs leading-relaxed text-a-muted">
           The account is created unverified with no password. The user
           activates it themselves via the email check on the login screen,
           which sends them a password-setup link.
         </p>
-        <div className="flex justify-end gap-2 pt-1">
-          <AButton variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+          <AButton
+            variant="secondary"
+            onClick={onClose}
+            className="w-full sm:w-auto"
+          >
             Cancel
           </AButton>
-          <AButton type="submit" loading={mutation.isPending}>
+          <AButton
+            type="submit"
+            loading={mutation.isPending}
+            className="w-full sm:w-auto"
+          >
             Create user
           </AButton>
         </div>
@@ -205,7 +217,7 @@ function EditUserModal({
       }),
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      toast.success(`${updated.full_name} updated.`);
+      notify.success(`${updated.full_name} updated.`);
       onClose();
     },
     onError: (error) => {
@@ -215,7 +227,7 @@ function EditUserModal({
         "gender",
         "profile_photo",
       ]);
-      if (message) toast.error(message);
+      if (message) notify.error(message);
     },
   });
 
@@ -229,15 +241,15 @@ function EditUserModal({
           className="space-y-4"
           noValidate
         >
-          <div className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
-            <span className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+          <div className="flex items-center gap-3 rounded-lg bg-a-raised px-3 py-2.5">
+            <span className="flex size-8 items-center justify-center rounded-full bg-a-accent text-xs font-semibold text-white">
               {initialsOf(user.full_name)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-gray-900">
+              <p className="truncate text-sm font-medium text-a-ink">
                 {user.full_name}
               </p>
-              <p className="truncate text-xs text-gray-500">{user.email}</p>
+              <p className="truncate text-xs text-a-muted">{user.email}</p>
             </div>
           </div>
 
@@ -254,7 +266,7 @@ function EditUserModal({
               />
             )}
           </AField>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <AField label="Batch" error={form.formState.errors.batch?.message}>
               {(id) => (
                 <AInput
@@ -298,11 +310,19 @@ function EditUserModal({
             }
             label="Verified account"
           />
-          <div className="flex justify-end gap-2 pt-1">
-            <AButton variant="secondary" onClick={onClose}>
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+            <AButton
+              variant="secondary"
+              onClick={onClose}
+              className="w-full sm:w-auto"
+            >
               Cancel
             </AButton>
-            <AButton type="submit" loading={mutation.isPending}>
+            <AButton
+              type="submit"
+              loading={mutation.isPending}
+              className="w-full sm:w-auto"
+            >
               Save changes
             </AButton>
           </div>
@@ -354,14 +374,14 @@ export function AdminUsersPage() {
       adminApi.users.update(user.id, { is_active: !user.is_active }),
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      toast.success(
+      notify.success(
         updated.is_active
           ? `${updated.full_name} reactivated.`
           : `${updated.full_name} suspended.`,
       );
       setToggling(null);
     },
-    onError: (error) => toast.error(parseApiError(error).message),
+    onError: (error) => notify.error(parseApiError(error).message),
   });
 
   const stats = query.data?.stats;
@@ -370,22 +390,60 @@ export function AdminUsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (user: User) => adminApi.users.delete(user.id),
-    onSuccess: (_, user) => {
+    // Optimistic: the row vanishes the moment the admin confirms; the server
+    // result only ever corrects us (rollback on error, refetch on settle).
+    onMutate: async (user) => {
+      const queryKey = [
+        ...USERS_KEY,
+        { search, batch, isActive, isVerified, gender, page },
+      ];
+      await queryClient.cancelQueries({ queryKey: USERS_KEY });
+      const previous = queryClient.getQueryData<UsersPayload>(queryKey);
+      if (previous) {
+        queryClient.setQueryData<UsersPayload>(queryKey, {
+          ...previous,
+          users: {
+            ...previous.users,
+            count: Math.max(0, previous.users.count - 1),
+            results: previous.users.results.filter(
+              (row) => row.id !== user.id,
+            ),
+          },
+        });
+      }
       // Deleting the only row of a later page would leave the query pointed
       // at a page the backend now 404s ("Invalid page.") — step back first.
-      if (rows.length === 1 && page > 1) setPage(page - 1);
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
-      toast.success(`${user.full_name} deleted.`);
+      const fromPage =
+        previous && previous.users.results.length === 1 && page > 1
+          ? page
+          : null;
+      if (fromPage !== null) setPage(fromPage - 1);
       setDeleting(null);
+      return { previous, queryKey, fromPage };
     },
-    onError: (error) => toast.error(parseApiError(error).message),
+    onSuccess: (_, user) => {
+      notify.success(`${user.full_name} deleted.`);
+    },
+    onError: (error, _user, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+      if (context?.fromPage !== null && context?.fromPage !== undefined) {
+        setPage(context.fromPage);
+      }
+      notify.error(parseApiError(error).message);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+    },
   });
 
   // The backend has no self-delete guard, so the portal at least refuses the
   // obvious footgun: the signed-in admin deleting their own account.
   const myAdminId = getAdminUser()?.id;
 
-  const columns: Array<Column<User>> = [
+  const columns: Array<Column<User>> = useMemo(
+    () => [
     {
       key: "user",
       header: "User",
@@ -394,16 +452,16 @@ export function AdminUsersPage() {
           <span
             className={cn(
               "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white",
-              user.is_active ? "bg-blue-600" : "bg-gray-400",
+              user.is_active ? "bg-a-accent" : "bg-a-faint",
             )}
           >
             {initialsOf(user.full_name)}
           </span>
           <div className="min-w-0">
-            <p className="max-w-48 truncate font-medium text-gray-900">
+            <p className="max-w-48 truncate font-medium text-a-ink">
               {user.full_name}
             </p>
-            <p className="max-w-48 truncate text-xs text-gray-500">
+            <p className="max-w-48 truncate text-xs text-a-muted">
               {user.email}
             </p>
           </div>
@@ -413,13 +471,13 @@ export function AdminUsersPage() {
     {
       key: "batch",
       header: "Batch",
-      render: (user) => <span className="text-gray-600">{user.batch}</span>,
+      render: (user) => <span className="text-a-text">{user.batch}</span>,
     },
     {
       key: "gender",
       header: "Gender",
       render: (user) => (
-        <span className="capitalize text-gray-600">{user.gender}</span>
+        <span className="capitalize text-a-text">{user.gender}</span>
       ),
     },
     {
@@ -487,10 +545,13 @@ export function AdminUsersPage() {
         </div>
       ),
     },
-  ];
+    ],
+    // Setters are stable; myAdminId is the only closed-over value that varies.
+    [myAdminId],
+  );
 
   return (
-    <>
+    <PageEnter>
       <PageHeader
         title="Users"
         description="Every account on the platform."
@@ -501,7 +562,7 @@ export function AdminUsersPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Total" value={stats?.users_count} icon={UsersIcon} loading={query.isLoading} />
         <StatCard label="Active" value={stats?.active_users} icon={ShieldCheck} tone="green" loading={query.isLoading} />
         <StatCard label="Suspended" value={stats?.blocked_users} icon={UserX} tone="red" loading={query.isLoading} />
@@ -510,19 +571,19 @@ export function AdminUsersPage() {
       </div>
 
       <ACard>
-        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-a-line p-3 sm:flex sm:flex-wrap sm:items-center">
           <SearchBox
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search name, email or batch…"
             busy={query.isFetching && !query.isLoading}
-            className="w-full sm:w-64"
+            className="col-span-2 w-full lg:w-64"
           />
           <ASelect
             value={isActive}
             onChange={(event) => setIsActive(event.target.value)}
             aria-label="Filter by status"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All statuses</option>
             <option value="true">Active</option>
@@ -532,7 +593,7 @@ export function AdminUsersPage() {
             value={isVerified}
             onChange={(event) => setIsVerified(event.target.value)}
             aria-label="Filter by verification"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All verification</option>
             <option value="true">Verified</option>
@@ -542,7 +603,7 @@ export function AdminUsersPage() {
             value={gender}
             onChange={(event) => setGender(event.target.value)}
             aria-label="Filter by gender"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All genders</option>
             <option value="male">Male</option>
@@ -553,7 +614,7 @@ export function AdminUsersPage() {
             onChange={(event) => setBatchInput(event.target.value)}
             placeholder="Batch"
             aria-label="Filter by exact batch"
-            widthClass="w-24"
+            widthClass="w-full sm:w-24"
           />
         </div>
 
@@ -608,13 +669,13 @@ export function AdminUsersPage() {
         body={
           toggling?.is_active ? (
             <p>
-              <span className="font-medium text-gray-900">{toggling.full_name}</span>{" "}
+              <span className="font-medium text-a-ink">{toggling.full_name}</span>{" "}
               will no longer be able to sign in. Existing sessions stop working
               on their next request.
             </p>
           ) : (
             <p>
-              <span className="font-medium text-gray-900">{toggling?.full_name}</span>{" "}
+              <span className="font-medium text-a-ink">{toggling?.full_name}</span>{" "}
               will be able to sign in again.
             </p>
           )
@@ -630,19 +691,19 @@ export function AdminUsersPage() {
         body={
           <>
             <p>
-              <span className="font-medium text-gray-900">
+              <span className="font-medium text-a-ink">
                 {deleting?.full_name}
               </span>{" "}
-              <span className="text-gray-500">({deleting?.email})</span> will be
+              <span className="break-all text-a-muted">({deleting?.email})</span> will be
               permanently deleted, along with everything tied to the account —
               chats, messages, reports and any events they own.
             </p>
-            <p className="mt-2 font-medium text-red-600">
+            <p className="mt-2 font-medium text-a-danger-text">
               This cannot be undone. To just block access, use Suspend instead.
             </p>
           </>
         }
       />
-    </>
+    </PageEnter>
   );
 }

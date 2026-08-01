@@ -14,7 +14,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { parseApiError } from "@/lib/errors";
-import { AButton, ACard, AEmpty, PageHeader, StatCard } from "./ui";
+import { AButton, ACard, AEmpty, PageEnter, PageHeader, StatCard } from "./ui";
 import { adminApi } from "./api";
 
 /**
@@ -54,7 +54,7 @@ export function AdminDashboardPage() {
   ];
 
   return (
-    <>
+    <PageEnter>
       <PageHeader
         title="Dashboard"
         description="Platform overview at a glance."
@@ -83,7 +83,7 @@ export function AdminDashboardPage() {
         </ACard>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
             <StatCard
               label="Total users"
               value={stats?.users_count}
@@ -139,27 +139,27 @@ export function AdminDashboardPage() {
             />
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4 md:grid-cols-3">
             {quickLinks.map((link) => (
               <Link key={link.to} to={link.to} className="group">
-                <ACard className="flex items-center gap-3 p-4 transition-colors group-hover:border-blue-300 group-hover:bg-blue-50/40">
-                  <span className="rounded-lg bg-gray-100 p-2 text-gray-500 transition-colors group-hover:bg-blue-100 group-hover:text-blue-600">
+                <ACard className="flex items-center gap-3 p-4 transition-colors group-hover:border-a-accent/40 group-hover:bg-a-accent-soft">
+                  <span className="rounded-lg bg-a-raised p-2 text-a-muted transition-colors group-hover:bg-a-accent/15 group-hover:text-a-accent-text">
                     <link.icon className="size-4" />
                   </span>
-                  <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-a-text group-hover:text-a-ink">
                     {link.label}
                   </span>
-                  <ArrowRight className="size-4 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-500" />
+                  <ArrowRight className="size-4 shrink-0 text-a-faint transition-transform group-hover:translate-x-0.5 group-hover:text-a-accent-text" />
                 </ACard>
               </Link>
             ))}
           </div>
 
-          <ACard className="mt-6 flex items-start gap-3 p-4">
-            <span className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
+          <ACard className="mt-5 flex items-start gap-3 p-4 sm:mt-6">
+            <span className="a-chip-green rounded-lg p-2">
               <UserCheck className="size-4" />
             </span>
-            <p className="text-sm leading-relaxed text-gray-500">
+            <p className="text-sm leading-relaxed text-a-muted">
               Statistics refresh every 60 seconds. Message totals are an
               approximate count maintained by the database for performance —
               exact to within the last vacuum cycle.
@@ -167,6 +167,6 @@ export function AdminDashboardPage() {
           </ACard>
         </>
       )}
-    </>
+    </PageEnter>
   );
 }
