@@ -95,48 +95,6 @@ html {
   scrollbar-color: #d6d2ca var(--color-canvas);
 }
 
-/**
- * Iris for the Pookalam Bloom page transition.
- *
- * Lives here rather than in the Onam page's own stylesheet because the overlay
- * mounts in the app shell, before the lazy route (and its CSS) has loaded.
- *
- * A registered custom property is what makes the mask radius animatable at
- * all — `--pk-iris` would otherwise jump straight to its end value. Browsers
- * without @property support simply get the overlay's own fade instead of an
- * iris, which is a smaller effect rather than a broken one.
- */
-@property --pk-iris {
-  syntax: "<percentage>";
-  inherits: false;
-  initial-value: 0%;
-}
-
-.pk-iris {
-  --pk-iris: 0%;
-  -webkit-mask-image: radial-gradient(
-    circle at var(--pk-ox, 50%) var(--pk-oy, 50%),
-    transparent var(--pk-iris),
-    #000 calc(var(--pk-iris) + 3%)
-  );
-  mask-image: radial-gradient(
-    circle at var(--pk-ox, 50%) var(--pk-oy, 50%),
-    transparent var(--pk-iris),
-    #000 calc(var(--pk-iris) + 3%)
-  );
-  transition: --pk-iris 700ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.pk-iris[data-open="true"] {
-  --pk-iris: 145%;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pk-iris {
-    transition: none;
-  }
-}
-
 body {
   @apply bg-canvas text-ink font-sans antialiased;
   font-feature-settings: "rlig" 1, "calt" 1;
@@ -367,6 +325,46 @@ body:has([data-admin][data-admin-theme="dark"]) {
     box-shadow: none !important;
     border-radius: 12px !important;
     padding: 0 !important;
+  }
+
+  /* The dismiss ✕ (Toaster `closeButton` in main.tsx). sonner draws it as a
+     20px light-grey circle straddling the toast's top-left corner — right
+     placement, wrong language for a card built from 2px ink borders, and too
+     small for a thumb. Squared off, sized to the corner badges used elsewhere,
+     and given invisible hit-slop so the tap target is ~44px without the button
+     growing. Same layer reasoning as the block above: these !important
+     declarations must sit in `base` to outrank the Toaster's !important
+     utility classes. */
+  [data-sonner-toast] [data-close-button] {
+    height: 1.75rem !important;
+    width: 1.75rem !important;
+    border-radius: 0 !important;
+    border: 2px solid var(--color-ink, #0a0a0a) !important;
+    background: var(--color-surface, #fff) !important;
+    color: var(--color-ink, #0a0a0a) !important;
+    transition: background-color 0.15s ease !important;
+  }
+
+  [data-sonner-toast] [data-close-button]:hover {
+    background: var(--color-brand-yellow, #ffd600) !important;
+  }
+
+  [data-sonner-toast] [data-close-button]:focus-visible {
+    outline: 2px solid var(--color-ink, #0a0a0a) !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
+
+  /* Hit-slop only — no paint, so it never covers the toast's own content. */
+  [data-sonner-toast] [data-close-button]::after {
+    content: "";
+    position: absolute;
+    inset: -0.5rem;
+  }
+
+  [data-sonner-toast] [data-close-button] svg {
+    height: 0.875rem !important;
+    width: 0.875rem !important;
   }
 }
 

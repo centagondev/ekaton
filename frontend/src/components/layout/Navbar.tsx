@@ -5,12 +5,12 @@ import { useAuthStore } from "@/stores/auth.store";
 import { Avatar } from "@/components/ui/Avatar";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
-import { BLOOM_ROUTE, useBloomLink } from "./bloom.store";
 
 const LINKS = [
   { to: "/home", label: "Home" },
   { to: "/events", label: "Events" },
-  { to: "/public-speaking", label: "Public Speaking" },
+  // The route keeps its original path; only the name shown to people changed.
+  { to: "/public-speaking", label: "Exclusive" },
 ] as const;
 
 /* --------------------------------- desktop -------------------------------- */
@@ -20,16 +20,12 @@ const LINKS = [
  * that slides between items rather than fading in and out per link.
  */
 function NavItem({ to, label }: { to: string; label: string }) {
-  // Only the Onam route gets the ceremonial entrance; every other link is an
-  // ordinary NavLink and stays instant.
-  const bloom = useBloomLink(to);
-
   return (
-    <NavLink
-      to={to}
-      onClick={to === BLOOM_ROUTE ? bloom : undefined}
-      className="group relative px-3 py-2"
-    >
+    // Every link navigates on the click, including this feature's — it used to
+    // hold the route change back behind a ~430ms bloom overlay, which is time
+    // the person who tapped it spends watching an animation instead of the
+    // page they asked for.
+    <NavLink to={to} className="group relative px-3 py-2">
       {({ isActive }) => (
         <>
           <span
@@ -75,7 +71,11 @@ export function Navbar() {
           paddingRight: "env(safe-area-inset-right)",
         }}
       >
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6">
+        {/* Full-bleed on purpose: the bar spans the viewport while `main` stays
+            in its max-w-6xl column, so the logo sits at the left edge instead of
+            384px inside it on a wide display. Gutters below `lg` are unchanged,
+            which keeps the mobile bar exactly as it was. */}
+        <div className="flex h-16 items-center justify-between gap-8 px-4 sm:px-6 lg:px-8">
           <Link to="/home" aria-label="Ekaton home" className="shrink-0">
             <Logo />
           </Link>
@@ -86,8 +86,9 @@ export function Navbar() {
             ))}
           </nav>
 
-          {/* Pushes the account cluster to the right on every breakpoint. */}
-          <div className="ml-auto flex items-center gap-2">
+          {/* On mobile the nav above is display:none, so this is the only
+              other flex item and justify-between still pins it to the edge. */}
+          <div className="flex items-center gap-2">
             <Link
               to="/profile"
               className="group hidden items-center gap-2.5 border-2 border-transparent py-1 pl-1 pr-3 transition-all hover:border-ink hover:bg-raised md:flex"
@@ -121,7 +122,8 @@ export function GuestNavbar({ onLogin }: { onLogin: () => void }) {
         paddingRight: "env(safe-area-inset-right)",
       }}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      {/* Matches Navbar's gutters so the logo doesn't jump on login. */}
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" aria-label="Ekaton home">
           <Logo />
         </Link>

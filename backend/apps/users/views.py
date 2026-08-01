@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from apps.accounts.docs import me_doc
 from core.responses import success_response
 from .serializers import UserSerializer,UpdateProfileSerializer
-from .services import update_profile_photo
+from .services import remove_profile_photo, update_profile_photo
 from rest_framework.parsers import MultiPartParser,FormParser
 
 class MeAPIView(APIView):
@@ -35,6 +35,25 @@ class MeAPIView(APIView):
 
         return success_response(
             message="User profile updated successfully",
+            data=UserSerializer(request.user).data
+        )
+
+
+class MeProfilePhotoAPIView(APIView):
+    """Removal of the authenticated user's profile photo.
+
+    Its own route rather than a `delete` on MeAPIView: DELETE /users/me/ reads
+    as "delete my account", and this endpoint clears one field.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+
+        remove_profile_photo(user=request.user)
+
+        return success_response(
+            message="Profile photo removed successfully",
             data=UserSerializer(request.user).data
         )
 

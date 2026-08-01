@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, RefreshCw, Upload } from "lucide-react";
+import { Camera, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { authApi } from "@/lib/api/auth";
 import { parseApiError } from "@/lib/errors";
-import { IMAGE_ACCEPT, MAX_IMAGE_LABEL, validateImageFile } from "@/lib/images";
+import {
+  IMAGE_ACCEPT,
+  MAX_SOURCE_IMAGE_BYTES,
+  SOURCE_IMAGE_TOO_LARGE_MESSAGE,
+  formatBytes,
+  prepareImageForUpload,
+  validateImageFile,
+  validateImageType,
+} from "@/lib/images";
 import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 import { ImageViewer } from "@/components/ui/ImageViewer";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn, initialsOf } from "@/lib/utils";
+import { RemovePhotoConfirmModal } from "./RemovePhotoConfirmModal";
 
 /**
  * Resolve once the browser has the bitmap in hand — or once it has given up.
@@ -51,13 +60,19 @@ export function ProfilePhotoUploader() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<{ file: File; url: string } | null>(null);
   const [uploading, setUploading] = useState(false);
+  /** True while a picked file is being resized/re-encoded for upload. */
+  const [preparing, setPreparing] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
   /**
    * The `disabled` attributes below already block a second click, but state
    * updates are async and a file input can fire again before React commits.
    * This ref is what actually makes a duplicate upload impossible.
    */
   const inFlight = useRef(false);
+  /** Same guard for the async prepare step — refs, because state lags events. */
+  const preparingRef = useRef(false);
 
   /**
    * The live object URL, mirrored outside state.
@@ -94,24 +109,47 @@ export function ProfilePhotoUploader() {
 
   const openPicker = () => inputRef.current?.click();
 
-  const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     // Clearing the value is what lets the same file be picked twice in a row —
     // without it, re-selecting after a rejection fires no change event at all.
     event.target.value = "";
-    if (!file || inFlight.current) return;
+    if (!file || inFlight.current || preparingRef.current) return;
 
-    const problem = validateImageFile(file, "Profile photo");
+    // Type is checked on the original; the size limit applies to what will
+    // actually be uploaded, which compression below is about to shrink.
+    const problem =
+      validateImageType(file) ??
+      (file.size > MAX_SOURCE_IMAGE_BYTES ? SOURCE_IMAGE_TOO_LARGE_MESSAGE : null);
     if (problem) {
       toast.error(problem);
       return;
     }
 
-    // Replace any earlier choice rather than leaking its blob.
-    if (pendingUrlRef.current) URL.revokeObjectURL(pendingUrlRef.current);
-    const url = URL.createObjectURL(file);
-    pendingUrlRef.current = url;
-    setPending({ file, url });
+    preparingRef.current = true;
+    setPreparing(true);
+    try {
+      // Resize + re-encode on the client so a 1–2 MB camera photo goes over
+      // the wire as a couple of hundred KB. Falls back to the original file
+      // untouched if anything about compression fails.
+      const prepared = await prepareImageForUpload(file);
+
+      const sizeProblem = validateImageFile(prepared, "Profile photo");
+      if (sizeProblem) {
+        toast.error(sizeProblem);
+        return;
+      }
+
+      // Replace any earlier choice rather than leaking its blob. Previewing
+      // the prepared file, not the original — what is shown is what uploads.
+      if (pendingUrlRef.current) URL.revokeObjectURL(pendingUrlRef.current);
+      const url = URL.createObjectURL(prepared);
+      pendingUrlRef.current = url;
+      setPending({ file: prepared, url });
+    } finally {
+      preparingRef.current = false;
+      setPreparing(false);
+    }
   };
 
   const upload = async () => {
@@ -137,6 +175,29 @@ export function ProfilePhotoUploader() {
     } finally {
       inFlight.current = false;
       setUploading(false);
+    }
+  };
+
+  const remove = async () => {
+    if (inFlight.current) return;
+
+    inFlight.current = true;
+    setRemoving(true);
+
+    try {
+      // Same contract as the upload: the response is the refreshed profile, so
+      // adopting it is what makes the initials reappear everywhere at once —
+      // no /me/ round trip and no reload.
+      const updated = await authApi.removeProfilePhoto();
+      setUser(updated);
+
+      toast.success("Profile photo removed.");
+      setConfirmRemove(false);
+    } catch (error) {
+      toast.error(parseApiError(error).message);
+    } finally {
+      inFlight.current = false;
+      setRemoving(false);
     }
   };
 
@@ -179,22 +240,32 @@ export function ProfilePhotoUploader() {
         </AnimatePresence>
       </button>
 
-      {/* The edit affordance is its own control, always visible — a hover-only
-          overlay is invisible on touch, and it used to be the only way in. */}
-      <button
-        type="button"
-        onClick={openPicker}
-        disabled={uploading}
-        aria-label={photo ? "Change profile photo" : "Upload a profile photo"}
-        className={cn(
-          "absolute -bottom-1.5 -right-1.5 grid size-8 place-items-center",
-          "border-2 border-ink bg-brand-yellow text-ink transition-all duration-150",
-          "hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-brand-lime",
-          "disabled:pointer-events-none disabled:opacity-60",
-        )}
-      >
-        {uploading ? <Spinner className="size-4" /> : <Camera className="size-4" />}
-      </button>
+      {/* Only when there is no photo yet, where it is an invitation rather
+          than clutter. Once a photo exists nothing sits on top of it — the
+          badge was a second icon over a picture the person chose, and changing
+          it moves into the viewer that the photo already opens. */}
+      {!photo && (
+        <button
+          type="button"
+          onClick={openPicker}
+          disabled={uploading || preparing}
+          aria-label="Upload a profile photo"
+          className={cn(
+            "absolute -bottom-1.5 -right-1.5 grid size-8 place-items-center",
+            "border-2 border-ink bg-brand-yellow text-ink transition-all duration-150",
+            "hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-brand-lime",
+            "disabled:pointer-events-none disabled:opacity-60",
+            // Invisible hit-slop: 32px of visible button, ~48px of tap target.
+            "after:absolute after:-inset-2 after:content-['']",
+          )}
+        >
+          {uploading || preparing ? (
+            <Spinner className="size-4" />
+          ) : (
+            <Camera className="size-4" />
+          )}
+        </button>
+      )}
 
       <input
         ref={inputRef}
@@ -204,8 +275,8 @@ export function ProfilePhotoUploader() {
         // The buttons above are the controls; the input must not be a second
         // tab stop announcing the same action.
         tabIndex={-1}
-        disabled={uploading}
-        onChange={handleFile}
+        disabled={uploading || preparing}
+        onChange={(event) => void handleFile(event)}
       />
 
       <ImageViewer
@@ -213,7 +284,63 @@ export function ProfilePhotoUploader() {
         src={photo}
         alt={`${user?.full_name ?? "Your"} profile photo`}
         caption={user?.full_name ?? undefined}
+        action={
+          // Both controls live here because the viewer is the one surface that
+          // only ever opens on an existing photo — which is exactly the
+          // condition for offering to remove it. Nothing extra is needed to
+          // keep "Remove" hidden for someone still on their initials.
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              // The viewer closes first: the confirm dialog that a chosen file
+              // opens sits below the viewer's layer, so leaving it up would put
+              // the preview behind the photo it is replacing. Still one gesture,
+              // so the picker opens normally.
+              onClick={() => {
+                setViewing(false);
+                openPicker();
+              }}
+              disabled={uploading || preparing}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border border-white/25 px-4 py-2",
+                "text-xs font-extrabold uppercase tracking-[0.14em] text-white",
+                "transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-50",
+              )}
+            >
+              <Camera className="size-4" aria-hidden="true" /> Change photo
+            </button>
+
+            <button
+              type="button"
+              // Closed for the same layering reason as above — the confirm
+              // sheet is a Modal at z-50, under the viewer's z-60.
+              onClick={() => {
+                setViewing(false);
+                setConfirmRemove(true);
+              }}
+              disabled={uploading || preparing}
+              className={cn(
+                // Red text on a quiet outline rather than a filled red button:
+                // destructive, but not competing with the photo it sits under.
+                "inline-flex items-center gap-2 rounded-full border border-red-400/35 px-4 py-2",
+                "text-xs font-extrabold uppercase tracking-[0.14em] text-red-300",
+                "transition-colors hover:bg-red-500/15 hover:text-red-200",
+                "disabled:pointer-events-none disabled:opacity-50",
+              )}
+            >
+              <Trash2 className="size-4" aria-hidden="true" /> Remove
+            </button>
+          </div>
+        }
         onClose={() => setViewing(false)}
+      />
+
+      {/* --------------------------- confirm remove -------------------------- */}
+      <RemovePhotoConfirmModal
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        onConfirm={() => void remove()}
+        loading={removing}
       />
 
       {/* --------------------------- confirm upload -------------------------- */}
@@ -241,7 +368,9 @@ export function ProfilePhotoUploader() {
           <p className="text-center text-xs text-muted">
             {uploading
               ? "Uploading…"
-              : `JPG, JPEG, PNG or WEBP · ${MAX_IMAGE_LABEL} max`}
+              : pending
+                ? `Ready to upload · ${formatBytes(pending.file.size)}`
+                : null}
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">

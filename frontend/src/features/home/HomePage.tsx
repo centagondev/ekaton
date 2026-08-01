@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { useMatchmaking } from "@/features/chat/useMatchmaking";
 import { Button } from "@/components/ui/Button";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { PoweredBy } from "@/components/layout/PoweredBy";
 import { cn } from "@/lib/utils";
 import { StackGame } from "./StackGame";
 import { Hero } from "./Hero";
@@ -179,6 +180,11 @@ export function HomePage() {
               loading={starting}
               onlineCount={onlineCount}
             />
+            {/* Home page only, and only at rest — it fades out with the hero
+                when a search starts. In the flow right under the feature
+                points, so it stays visually attached to the content instead
+                of floating at the far edge of the screen. */}
+            <PoweredBy className="mt-6 max-[359px]:mt-4 sm:mt-9" />
           </motion.div>
         )}
       </AnimatePresence>

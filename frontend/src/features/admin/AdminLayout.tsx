@@ -41,7 +41,7 @@ const NAV: NavItem[] = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/reports", label: "Reports", icon: Flag },
   { to: "/admin/events", label: "Events", icon: CalendarDays },
-  { to: "/admin/public-speaking", label: "Public Speaking", icon: Megaphone },
+  { to: "/admin/public-speaking", label: "Exclusive", icon: Megaphone },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {

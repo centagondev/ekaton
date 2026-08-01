@@ -1,4 +1,4 @@
-import { apiGet, apiPatchForm, apiPost, apiPostEnvelope } from "./client";
+import { apiDelete, apiGet, apiPatchForm, apiPost, apiPostEnvelope } from "./client";
 import type {
   ApiEnvelope,
   CheckEmailResult,
@@ -38,6 +38,13 @@ export const authApi = {
     form.append("profile_photo", file);
     return apiPatchForm<User>("/users/me/", form);
   },
+
+  /**
+   * Clear the profile photo, dropping the Cloudinary asset with it. Answers
+   * with the refreshed user like the upload does, so the session updates from
+   * the response alone.
+   */
+  removeProfilePhoto: (): Promise<User> => apiDelete<User>("/users/me/photo/"),
 
   setPassword: (payload: {
     token: string;

@@ -59,6 +59,8 @@ type UsersPayload = Awaited<ReturnType<typeof adminApi.users.list>>;
 
 /** Stable row identity — hoisted so DataTable never sees a new function. */
 const userRowKey = (user: User) => user.id;
+/** One identity for "no rows", so the memoized table can skip a re-render. */
+const NO_ROWS: User[] = [];
 
 /** Route DRF's field-keyed validation errors onto the form they belong to. */
 function applyFieldErrors(
@@ -398,7 +400,9 @@ export function AdminUsersPage() {
 
   const stats = query.data?.stats;
   const pageData = query.data?.users;
-  const rows = pageData?.results ?? [];
+  // A shared constant, not a fresh `[]`: DataTable is memoized, and a new
+  // empty array every render would defeat it while the first page loads.
+  const rows = pageData?.results ?? NO_ROWS;
 
   const deleteMutation = useMutation({
     mutationFn: (user: User) => adminApi.users.delete(user.id),
@@ -470,6 +474,24 @@ export function AdminUsersPage() {
   const confirmDelete = useCallback(() => {
     if (deleting) deleteMutation.mutate(deleting);
   }, [deleting, deleteMutation]);
+
+  // Memoized for the same reason as `columns`: it is a prop of the memoized
+  // table, so a new element here would re-render every row on each keystroke
+  // and on every dialog open.
+  const emptyState = useMemo(
+    () => (
+      <AEmpty
+        icon={UsersIcon}
+        title={search ? "No matching users" : "No users yet"}
+        description={
+          search
+            ? `Nothing matches “${search}”.`
+            : "Created accounts will appear here."
+        }
+      />
+    ),
+    [search],
+  );
 
   const columns: Array<Column<User>> = useMemo(
     () => [
@@ -661,17 +683,7 @@ export function AdminUsersPage() {
               rows={rows}
               rowKey={userRowKey}
               loading={query.isLoading}
-              empty={
-                <AEmpty
-                  icon={UsersIcon}
-                  title={search ? "No matching users" : "No users yet"}
-                  description={
-                    search
-                      ? `Nothing matches “${search}”.`
-                      : "Created accounts will appear here."
-                  }
-                />
-              }
+              empty={emptyState}
             />
             {pageData && (
               <APagination

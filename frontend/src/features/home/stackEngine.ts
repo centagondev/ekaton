@@ -12,7 +12,9 @@ const PERFECT_EPS = 4; // px of slack that still counts as a perfect drop
 const BASE_SPEED = 210; // px/s at tower height 0
 const SPEED_PER_ROW = 7; // px/s gained per placed block
 const MAX_SPEED = 520;
-const VISIBLE_ROWS = 9; // rows kept on screen before the camera pans
+const GROUND_H = 26; // strip under the tower holding the ground rule
+const TOP_HEADROOM = BLOCK_H * 2; // air kept above the moving block's row
+const MAX_VISIBLE_ROWS = 9; // rows kept on screen before the camera pans
 const RESTART_DELAY = 2000;
 
 type Phase = "idle" | "running" | "over";
@@ -65,6 +67,8 @@ export class StackEngine {
   private frame = 0;
   private restartTimer: number | undefined;
   private lastTime = 0;
+  /** Forces one paint of an otherwise-static scene (resize, reset, overlay). */
+  private needsRedraw = true;
 
   private ink = "#0a0a0a";
   private bg = "#fbf9f5";
@@ -130,7 +134,31 @@ export class StackEngine {
 
     // Keep the base block proportional when the viewport changes.
     if (this.blocks.length === 1 && this.phase === "idle") this.reset();
+
+    // Re-aim the camera for the new height, so a rotation or resize mid-game
+    // brings a tower that no longer fits back into view.
+    this.cameraTarget = Math.max(0, (this.blocks.length - this.visibleRows()) * BLOCK_H);
+    this.needsRedraw = true;
   };
+
+  /**
+   * How many placed rows fit on screen before the camera pans.
+   *
+   * Derived from the measured height instead of a fixed 9: nine rows need
+   * ~312px of canvas, but the responsive box clamps as low as 180px on short
+   * phones — there the camera panned far too late and the moving block rode
+   * above the top edge, partially hidden. Capped at MAX_VISIBLE_ROWS so tall
+   * canvases behave exactly as before.
+   */
+  private visibleRows(): number {
+    return Math.max(
+      2,
+      Math.min(
+        MAX_VISIBLE_ROWS,
+        Math.floor((this.height - GROUND_H - TOP_HEADROOM) / BLOCK_H),
+      ),
+    );
+  }
 
   private reset(): void {
     const baseWidth = Math.min(260, Math.max(120, this.width * 0.42));
@@ -142,6 +170,7 @@ export class StackEngine {
     this.shake = 0;
     this.cameraY = 0;
     this.cameraTarget = 0;
+    this.needsRedraw = true;
     this.spawn();
   }
 
@@ -218,7 +247,7 @@ export class StackEngine {
       this.score += 1;
     }
 
-    this.cameraTarget = Math.max(0, (this.blocks.length - VISIBLE_ROWS) * BLOCK_H);
+    this.cameraTarget = Math.max(0, (this.blocks.length - this.visibleRows()) * BLOCK_H);
     this.spawn();
   }
 
@@ -401,7 +430,22 @@ export class StackEngine {
     });
     this.particles = this.particles.filter((particle) => particle.life > 0);
 
-    this.draw();
+    // Repaint only when something can have moved. The idle "press to start"
+    // screen and the settled game-over card are static — redrawing them every
+    // frame was pure battery burn on phones. (Sub-half-pixel camera drift is
+    // invisible, so it does not count as motion.)
+    const animating =
+      this.phase === "running" ||
+      this.particles.length > 0 ||
+      this.flash > 0 ||
+      this.shake > 0 ||
+      Math.abs(this.cameraTarget - this.cameraY) > 0.5;
+
+    if (animating || this.needsRedraw) {
+      this.draw();
+      this.needsRedraw = false;
+    }
+
     this.frame = requestAnimationFrame(this.tick);
   };
 }

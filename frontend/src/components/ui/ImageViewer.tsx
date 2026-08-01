@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -47,12 +48,15 @@ export function ImageViewer({
   src,
   alt = "",
   caption,
+  action,
   onClose,
 }: {
   open: boolean;
   src: string | null;
   alt?: string;
   caption?: string;
+  /** Optional control rendered under the photo — e.g. "Change photo". */
+  action?: ReactNode;
   onClose: () => void;
 }) {
   const [transform, setTransform] = useState<Transform>(REST);
@@ -285,6 +289,11 @@ export function ImageViewer({
                 {caption}
               </p>
             )}
+
+            {/* Whatever the owner of the photo can do with it — the profile's
+                "change photo" lives here now that the avatar itself carries no
+                badge over the picture. */}
+            {action}
           </motion.div>
         </motion.div>
       )}

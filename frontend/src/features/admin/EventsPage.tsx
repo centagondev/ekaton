@@ -92,6 +92,8 @@ function bannerLabel(banner: EventBanner): string {
 }
 
 const eventRowKey = (event: AdminEvent) => event.id;
+/** One identity for "no rows", so the memoized table can skip a re-render. */
+const NO_ROWS: AdminEvent[] = [];
 
 /* ------------------------------ owner picker ------------------------------ */
 
@@ -677,7 +679,9 @@ export function AdminEventsPage() {
 
   const stats = query.data?.stats;
   const pageData = query.data?.events;
-  const rows = pageData?.results ?? [];
+  // A shared constant, not a fresh `[]`: DataTable is memoized, and a new
+  // empty array every render would defeat it while the first page loads.
+  const rows = pageData?.results ?? NO_ROWS;
 
   /**
    * Stable handlers for the four dialogs and the table.
@@ -689,6 +693,29 @@ export function AdminEventsPage() {
    */
   const openCreate = useCallback(() => setCreateOpen(true), []);
   const closeCreate = useCallback(() => setCreateOpen(false), []);
+  // A prop of the memoized table, so it is memoized too — otherwise every
+  // keystroke and every dialog open would re-render all the rows.
+  const emptyState = useMemo(
+    () => (
+      <AEmpty
+        icon={CalendarDays}
+        title={search ? "No matching events" : "No events yet"}
+        description={
+          search
+            ? `Nothing matches “${search}”.`
+            : "Created events will appear here."
+        }
+        action={
+          !search ? (
+            <AButton onClick={openCreate}>
+              <CalendarPlus className="size-4" /> New event
+            </AButton>
+          ) : undefined
+        }
+      />
+    ),
+    [search, openCreate],
+  );
   const openDetail = useCallback((event: AdminEvent) => setDetailId(event.id), []);
   const closeDetail = useCallback(() => setDetailId(null), []);
   const startEdit = useCallback((event: AdminEventDetail) => {
@@ -866,24 +893,7 @@ export function AdminEventsPage() {
               rowKey={eventRowKey}
               loading={query.isLoading}
               onRowClick={openDetail}
-              empty={
-                <AEmpty
-                  icon={CalendarDays}
-                  title={search ? "No matching events" : "No events yet"}
-                  description={
-                    search
-                      ? `Nothing matches “${search}”.`
-                      : "Created events will appear here."
-                  }
-                  action={
-                    !search ? (
-                      <AButton onClick={openCreate}>
-                        <CalendarPlus className="size-4" /> New event
-                      </AButton>
-                    ) : undefined
-                  }
-                />
-              }
+              empty={emptyState}
             />
             {pageData && (
               <APagination
