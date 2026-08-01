@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -14,44 +15,68 @@ import {
   Wifi,
 } from "lucide-react";
 import { parseApiError } from "@/lib/errors";
-import { AButton, ACard, AEmpty, PageEnter, PageHeader, StatCard } from "./ui";
+import {
+  AButton,
+  ACard,
+  AEmpty,
+  PageEnter,
+  PageHeader,
+  StatCard,
+  adminStatsQueryOptions,
+} from "./ui";
 import { adminApi } from "./api";
 
 /**
- * Every number the backend exposes for an overview, in one place. The stats
- * endpoint is cached for 60 seconds server-side, so refetching more often
- * than that only returns the same payload — staleTime mirrors the cache.
+ * Every number the backend exposes for an overview, in one place.
+ *
+ * Freshness comes from adminStatsQueryOptions: the endpoint is cached 60s
+ * server-side, so the client matches that cadence and re-syncs on focus and
+ * reconnect. Other admin pages invalidate ["admin", "dashboard"] after any
+ * mutation that moves one of these counters, so returning here shows current
+ * state without the manual Refresh below — which stays for the impatient.
  */
 export function AdminDashboardPage() {
   const query = useQuery({
     queryKey: ["admin", "dashboard"],
     queryFn: () => adminApi.dashboard(),
-    staleTime: 60_000,
-    retry: 1,
+    ...adminStatsQueryOptions,
   });
 
   const stats = query.data;
+  const { refetch } = query;
 
-  const quickLinks = [
-    {
-      to: "/admin/reports",
-      label: "Review pending reports",
-      count: stats?.pending_reports_count,
-      icon: Flag,
-    },
-    {
-      to: "/admin/users",
-      label: "Manage users",
-      count: stats?.users_count,
-      icon: Users,
-    },
-    {
-      to: "/admin/events",
-      label: "Manage events",
-      count: stats?.active_events_count,
-      icon: CalendarDays,
-    },
-  ];
+  // refetch is referentially stable, so both call sites keep one handler.
+  const handleRefresh = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  const quickLinks = useMemo(
+    () => [
+      {
+        to: "/admin/reports",
+        label: "Review pending reports",
+        count: stats?.pending_reports_count,
+        icon: Flag,
+      },
+      {
+        to: "/admin/users",
+        label: "Manage users",
+        count: stats?.users_count,
+        icon: Users,
+      },
+      {
+        to: "/admin/events",
+        label: "Manage events",
+        count: stats?.active_events_count,
+        icon: CalendarDays,
+      },
+    ],
+    [
+      stats?.pending_reports_count,
+      stats?.users_count,
+      stats?.active_events_count,
+    ],
+  );
 
   return (
     <PageEnter>
@@ -62,7 +87,7 @@ export function AdminDashboardPage() {
           <AButton
             variant="secondary"
             size="sm"
-            onClick={() => void query.refetch()}
+            onClick={handleRefresh}
             loading={query.isFetching && !query.isLoading}
           >
             <RefreshCw className="size-3.5" /> Refresh
@@ -76,9 +101,7 @@ export function AdminDashboardPage() {
             icon={Wifi}
             title="Couldn't load statistics"
             description={parseApiError(query.error).message}
-            action={
-              <AButton onClick={() => void query.refetch()}>Retry</AButton>
-            }
+            action={<AButton onClick={handleRefresh}>Retry</AButton>}
           />
         </ACard>
       ) : (
@@ -160,7 +183,8 @@ export function AdminDashboardPage() {
               <UserCheck className="size-4" />
             </span>
             <p className="text-sm leading-relaxed text-a-muted">
-              Statistics refresh every 60 seconds. Message totals are an
+              Statistics are cached for 60 seconds server-side and re-sync
+              when you return to this tab or hit Refresh. Message totals are an
               approximate count maintained by the database for performance —
               exact to within the last vacuum cycle.
             </p>

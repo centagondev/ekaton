@@ -185,7 +185,7 @@ def get_users(search=None, is_active=None, is_verified=None, gender=None, batch=
     return queryset, stats
 
 
-def update_user(user_id, data):
+def update_user(user_id, data, current_user):
     """Partially update a user's profile with the provided data.
 
     Args:
@@ -201,6 +201,12 @@ def update_user(user_id, data):
     """
     user = get_object_or_404(User, id=user_id)
 
+    if user.id == current_user.id and data.get("is_active") is False:
+        raise ValidationError("You cannot suspend you own account")
+    
+    if user.is_superuser or user.is_staff:
+        raise ValidationError("You cannot suspend admin accounts")
+    
     for field, value in data.items():
         setattr(user, field, value)
 

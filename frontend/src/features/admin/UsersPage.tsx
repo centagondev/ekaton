@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -38,6 +38,7 @@ import {
   PageHeader,
   SearchBox,
   StatCard,
+  adminListQueryOptions,
   useDebouncedValue,
   type Column,
 } from "./ui";
@@ -45,8 +46,19 @@ import { adminApi, getAdminUser, type CreateUserPayload } from "./api";
 
 const USERS_KEY = ["admin", "users"] as const;
 
+/**
+ * Every mutation on this page moves a number the dashboard prints (total,
+ * active, suspended, verified), so the stats query is invalidated alongside
+ * the list — otherwise the cards still show the pre-change counts when the
+ * admin navigates back.
+ */
+const DASHBOARD_KEY = ["admin", "dashboard"] as const;
+
 /** Shape of one cached page of the users list query. */
 type UsersPayload = Awaited<ReturnType<typeof adminApi.users.list>>;
+
+/** Stable row identity — hoisted so DataTable never sees a new function. */
+const userRowKey = (user: User) => user.id;
 
 /** Route DRF's field-keyed validation errors onto the form they belong to. */
 function applyFieldErrors(
@@ -82,7 +94,6 @@ function CreateUserModal({
   const mutation = useMutation({
     mutationFn: (payload: CreateFormValues) => adminApi.users.create(payload),
     onSuccess: (user) => {
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
       notify.success(`${user.full_name} created.`);
       form.reset();
       onClose();
@@ -95,6 +106,12 @@ function CreateUserModal({
         "gender",
       ]);
       if (message) notify.error(message);
+    },
+    // Settled, not success: a request that fails after the server already
+    // committed (or a network drop mid-write) must still re-sync the list.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 
@@ -179,7 +196,6 @@ interface EditFormValues {
   full_name: string;
   batch: string;
   gender: Gender;
-  profile_photo: string;
   is_verified: boolean;
 }
 
@@ -200,23 +216,21 @@ function EditUserModal({
       full_name: user.full_name,
       batch: user.batch,
       gender: user.gender,
-      profile_photo: user.profile_photo ?? "",
       is_verified: user.is_verified,
     });
   }, [user, form]);
 
   const mutation = useMutation({
+    // The photo is not editable from the portal, so it is left out of the
+    // payload entirely — PATCH only touches the keys it is given.
     mutationFn: (values: EditFormValues) =>
       adminApi.users.update(user!.id, {
         full_name: values.full_name,
         batch: values.batch,
         gender: values.gender,
-        // Empty input means "no photo" — the API accepts null to clear it.
-        profile_photo: values.profile_photo.trim() || null,
         is_verified: values.is_verified,
       }),
     onSuccess: (updated) => {
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
       notify.success(`${updated.full_name} updated.`);
       onClose();
     },
@@ -225,9 +239,12 @@ function EditUserModal({
         "full_name",
         "batch",
         "gender",
-        "profile_photo",
       ]);
       if (message) notify.error(message);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 
@@ -241,15 +258,21 @@ function EditUserModal({
           className="space-y-4"
           noValidate
         >
-          <div className="flex items-center gap-3 rounded-lg bg-a-raised px-3 py-2.5">
-            <span className="flex size-8 items-center justify-center rounded-full bg-a-accent text-xs font-semibold text-white">
+          {/* Identity, not a field: the email is the one thing that tells the
+              admin which account they are about to change, and the backend
+              refuses to change it — so it is shown in full (break-all, never
+              truncated) and left read-only. */}
+          <div className="flex items-start gap-3 rounded-lg bg-a-raised px-3 py-2.5">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-a-accent text-xs font-semibold text-white">
               {initialsOf(user.full_name)}
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-a-ink">
                 {user.full_name}
               </p>
-              <p className="truncate text-xs text-a-muted">{user.email}</p>
+              <p className="select-all break-all text-xs text-a-muted">
+                {user.email}
+              </p>
             </div>
           </div>
 
@@ -289,20 +312,6 @@ function EditUserModal({
               )}
             </AField>
           </div>
-          <AField
-            label="Profile photo URL"
-            hint="Leave empty to remove the photo."
-            error={form.formState.errors.profile_photo?.message}
-          >
-            {(id) => (
-              <AInput
-                id={id}
-                type="url"
-                placeholder="https://…"
-                {...form.register("profile_photo")}
-              />
-            )}
-          </AField>
           <AToggle
             checked={isVerified ?? false}
             onChange={(next) =>
@@ -366,14 +375,13 @@ export function AdminUsersPage() {
         gender: (gender || undefined) as Gender | undefined,
       }),
     placeholderData: keepPreviousData,
-    retry: 1,
+    ...adminListQueryOptions,
   });
 
   const toggleMutation = useMutation({
     mutationFn: (user: User) =>
       adminApi.users.update(user.id, { is_active: !user.is_active }),
     onSuccess: (updated) => {
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
       notify.success(
         updated.is_active
           ? `${updated.full_name} reactivated.`
@@ -382,6 +390,10 @@ export function AdminUsersPage() {
       setToggling(null);
     },
     onError: (error) => notify.error(parseApiError(error).message),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+    },
   });
 
   const stats = query.data?.stats;
@@ -435,6 +447,7 @@ export function AdminUsersPage() {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: USERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 
@@ -442,109 +455,125 @@ export function AdminUsersPage() {
   // obvious footgun: the signed-in admin deleting their own account.
   const myAdminId = getAdminUser()?.id;
 
+  // Dialog plumbing, memoized so the four overlays and the header button keep
+  // the same props across every keystroke in the search box.
+  const openCreate = useCallback(() => setCreateOpen(true), []);
+  const closeCreate = useCallback(() => setCreateOpen(false), []);
+  const closeEdit = useCallback(() => setEditing(null), []);
+  const closeToggle = useCallback(() => setToggling(null), []);
+  const closeDelete = useCallback(() => setDeleting(null), []);
+
+  const confirmToggle = useCallback(() => {
+    if (toggling) toggleMutation.mutate(toggling);
+  }, [toggling, toggleMutation]);
+
+  const confirmDelete = useCallback(() => {
+    if (deleting) deleteMutation.mutate(deleting);
+  }, [deleting, deleteMutation]);
+
   const columns: Array<Column<User>> = useMemo(
     () => [
-    {
-      key: "user",
-      header: "User",
-      render: (user) => (
-        <div className="flex items-center gap-2.5">
-          <span
-            className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white",
-              user.is_active ? "bg-a-accent" : "bg-a-faint",
-            )}
-          >
-            {initialsOf(user.full_name)}
-          </span>
-          <div className="min-w-0">
-            <p className="max-w-48 truncate font-medium text-a-ink">
-              {user.full_name}
-            </p>
-            <p className="max-w-48 truncate text-xs text-a-muted">
-              {user.email}
-            </p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "batch",
-      header: "Batch",
-      render: (user) => <span className="text-a-text">{user.batch}</span>,
-    },
-    {
-      key: "gender",
-      header: "Gender",
-      render: (user) => (
-        <span className="capitalize text-a-text">{user.gender}</span>
-      ),
-    },
-    {
-      key: "verified",
-      header: "Verified",
-      render: (user) =>
-        user.is_verified ? (
-          <ABadge tone="green">
-            <BadgeCheck className="size-3" /> Verified
-          </ABadge>
-        ) : (
-          <ABadge tone="gray">Unverified</ABadge>
-        ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (user) =>
-        user.is_active ? (
-          <ABadge tone="blue">Active</ABadge>
-        ) : (
-          <ABadge tone="red">Suspended</ABadge>
-        ),
-    },
-    {
-      key: "actions",
-      header: <span className="sr-only">Actions</span>,
-      className: "text-right",
-      render: (user) => (
-        <div className="flex justify-end gap-1">
-          <AButton
-            variant="ghost"
-            size="sm"
-            onClick={() => setEditing(user)}
-            aria-label={`Edit ${user.full_name}`}
-          >
-            <Pencil className="size-3.5" />
-          </AButton>
-          <AButton
-            variant={user.is_active ? "ghostDanger" : "ghostSuccess"}
-            size="sm"
-            onClick={() => setToggling(user)}
-            aria-label={
-              user.is_active
-                ? `Suspend ${user.full_name}`
-                : `Reactivate ${user.full_name}`
-            }
-          >
-            {user.is_active ? (
-              <ShieldBan className="size-3.5" />
-            ) : (
-              <ShieldCheck className="size-3.5" />
-            )}
-          </AButton>
-          {user.id !== myAdminId && (
-            <AButton
-              variant="ghostDanger"
-              size="sm"
-              onClick={() => setDeleting(user)}
-              aria-label={`Delete ${user.full_name}`}
+      {
+        key: "user",
+        header: "User",
+        render: (user) => (
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white",
+                user.is_active ? "bg-a-accent" : "bg-a-faint",
+              )}
             >
-              <Trash2 className="size-3.5" />
+              {initialsOf(user.full_name)}
+            </span>
+            <div className="min-w-0">
+              <p className="max-w-48 truncate font-medium text-a-ink">
+                {user.full_name}
+              </p>
+              <p className="max-w-48 truncate text-xs text-a-muted">
+                {user.email}
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "batch",
+        header: "Batch",
+        render: (user) => <span className="text-a-text">{user.batch}</span>,
+      },
+      {
+        key: "gender",
+        header: "Gender",
+        render: (user) => (
+          <span className="capitalize text-a-text">{user.gender}</span>
+        ),
+      },
+      {
+        key: "verified",
+        header: "Verified",
+        render: (user) =>
+          user.is_verified ? (
+            <ABadge tone="green">
+              <BadgeCheck className="size-3" /> Verified
+            </ABadge>
+          ) : (
+            <ABadge tone="gray">Unverified</ABadge>
+          ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (user) =>
+          user.is_active ? (
+            <ABadge tone="blue">Active</ABadge>
+          ) : (
+            <ABadge tone="red">Suspended</ABadge>
+          ),
+      },
+      {
+        key: "actions",
+        header: <span className="sr-only">Actions</span>,
+        className: "text-right",
+        render: (user) => (
+          <div className="flex justify-end gap-1">
+            <AButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditing(user)}
+              aria-label={`Edit ${user.full_name}`}
+            >
+              <Pencil className="size-3.5" />
             </AButton>
-          )}
-        </div>
-      ),
-    },
+            <AButton
+              variant={user.is_active ? "ghostDanger" : "ghostSuccess"}
+              size="sm"
+              onClick={() => setToggling(user)}
+              aria-label={
+                user.is_active
+                  ? `Suspend ${user.full_name}`
+                  : `Reactivate ${user.full_name}`
+              }
+            >
+              {user.is_active ? (
+                <ShieldBan className="size-3.5" />
+              ) : (
+                <ShieldCheck className="size-3.5" />
+              )}
+            </AButton>
+            {user.id !== myAdminId && (
+              <AButton
+                variant="ghostDanger"
+                size="sm"
+                onClick={() => setDeleting(user)}
+                aria-label={`Delete ${user.full_name}`}
+              >
+                <Trash2 className="size-3.5" />
+              </AButton>
+            )}
+          </div>
+        ),
+      },
     ],
     // Setters are stable; myAdminId is the only closed-over value that varies.
     [myAdminId],
@@ -556,7 +585,7 @@ export function AdminUsersPage() {
         title="Users"
         description="Every account on the platform."
         actions={
-          <AButton onClick={() => setCreateOpen(true)}>
+          <AButton onClick={openCreate}>
             <UserPlus className="size-4" /> New user
           </AButton>
         }
@@ -576,7 +605,7 @@ export function AdminUsersPage() {
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search name, email or batch…"
-            busy={query.isFetching && !query.isLoading}
+            busy={query.isPlaceholderData}
             className="col-span-2 w-full lg:w-64"
           />
           <ASelect
@@ -630,7 +659,7 @@ export function AdminUsersPage() {
             <DataTable
               columns={columns}
               rows={rows}
-              rowKey={(user) => user.id}
+              rowKey={userRowKey}
               loading={query.isLoading}
               empty={
                 <AEmpty
@@ -649,19 +678,19 @@ export function AdminUsersPage() {
                 page={page}
                 count={pageData.count}
                 onPage={setPage}
-                busy={query.isFetching}
+                busy={query.isPlaceholderData}
               />
             )}
           </>
         )}
       </ACard>
 
-      <CreateUserModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <EditUserModal user={editing} onClose={() => setEditing(null)} />
+      <CreateUserModal open={createOpen} onClose={closeCreate} />
+      <EditUserModal user={editing} onClose={closeEdit} />
       <ConfirmDialog
         open={toggling !== null}
-        onClose={() => setToggling(null)}
-        onConfirm={() => toggling && toggleMutation.mutate(toggling)}
+        onClose={closeToggle}
+        onConfirm={confirmToggle}
         busy={toggleMutation.isPending}
         tone={toggling?.is_active ? "danger" : "primary"}
         title={toggling?.is_active ? "Suspend this user?" : "Reactivate this user?"}
@@ -683,8 +712,8 @@ export function AdminUsersPage() {
       />
       <ConfirmDialog
         open={deleting !== null}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => deleting && deleteMutation.mutate(deleting)}
+        onClose={closeDelete}
+        onConfirm={confirmDelete}
         busy={deleteMutation.isPending}
         title="Delete this user?"
         confirmLabel="Delete permanently"

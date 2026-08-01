@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from datetime import timedelta
 from pathlib import Path
-
+import cloudinary
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -38,6 +38,14 @@ MESSAGE_ENCRYPTION_KEY = env("MESSAGE_ENCRYPTION_KEY")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost"])
+
+
+cloudinary.config(
+    cloud_name=env("CLOUDINARY_CLOUD_NAME"),
+    api_key=env("CLOUDINARY_API_KEY"),
+    api_secret=env("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
 
 # ---------------------------------------------------------------------------
 # Temporary public speaking mode — one demo session only.

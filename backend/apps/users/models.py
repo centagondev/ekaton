@@ -22,6 +22,12 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
 
     profile_photo = models.URLField(blank=True, null=True)
 
+    profile_photo_public_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
     can_edit_name = models.BooleanField(default=False)
 
     is_available = models.BooleanField(default=False)

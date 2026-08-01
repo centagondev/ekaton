@@ -277,16 +277,20 @@ export function AdminLayout() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.12, ease: "linear" }}
               onClick={() => setDrawerOpen(false)}
-              className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+              className="absolute inset-0 bg-black/50"
             />
             <motion.aside
               initial={{ x: -288 }}
               animate={{ x: 0 }}
               exit={{ x: -288 }}
-              transition={{ type: "tween", duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+              transition={{ type: "tween", duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
               className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-a-line bg-a-surface a-elev-lg"
               style={{
+                // Transform-only slide with a compositor hint — no layout or
+                // paint work per frame, which is what the drawer was paying for.
+                willChange: "transform",
                 paddingLeft: "env(safe-area-inset-left)",
                 paddingTop: "env(safe-area-inset-top)",
               }}
@@ -311,7 +315,7 @@ export function AdminLayout() {
       {/* topbar + page */}
       <div className="lg:pl-60">
         <header
-          className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-a-line bg-a-surface/85 px-3 backdrop-blur sm:gap-3 sm:px-6"
+          className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-a-line bg-a-surface px-3 sm:gap-3 sm:bg-a-surface/85 sm:px-6 sm:backdrop-blur"
           style={{
             paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
             paddingRight: "max(0.75rem, env(safe-area-inset-right))",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -23,6 +23,7 @@ import {
   ABadge,
   AButton,
   ACard,
+  adminListQueryOptions,
   AEmpty,
   AField,
   AInput,
@@ -53,6 +54,14 @@ import {
 
 const EVENTS_KEY = ["admin", "events"] as const;
 
+/**
+ * The dashboard's stats card set counts active events, so every mutation that
+ * can move an event in or out of `active` re-syncs it too. Invalidation only
+ * *refetches* observed queries — while the admin is on this page the dashboard
+ * query is unmounted, so this costs a request only if they navigate back.
+ */
+const DASHBOARD_KEY = ["admin", "dashboard"] as const;
+
 const STATUS_TONES: Record<EventStatus, BadgeTone> = {
   active: "green",
   ended: "gray",
@@ -82,6 +91,8 @@ function bannerLabel(banner: EventBanner): string {
   return `Banner ${banner.split("_")[1] ?? banner}`;
 }
 
+const eventRowKey = (event: AdminEvent) => event.id;
+
 /* ------------------------------ owner picker ------------------------------ */
 
 /**
@@ -104,8 +115,11 @@ function OwnerPicker({
   const query = useQuery({
     queryKey: ["admin", "owner-search", search],
     queryFn: () => adminApi.users.list({ search: search || undefined, page: 1 }),
+    // Still gated on having no owner yet: once one is picked this component
+    // renders the summary card instead, and the list must not keep fetching.
     enabled: value === null,
     placeholderData: keepPreviousData,
+    ...adminListQueryOptions,
   });
 
   const candidates = query.data?.users.results ?? [];
@@ -150,7 +164,7 @@ function OwnerPicker({
             value={term}
             onChange={setTerm}
             placeholder="Search users by name or email…"
-            busy={query.isFetching}
+            busy={query.isPlaceholderData}
           />
           <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-a-line">
             {query.isLoading ? (
@@ -319,7 +333,6 @@ function CreateEventModal({
         is_anonymous_chat: anonymous,
       }),
     onSuccess: (event) => {
-      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
       notify.success(`“${event.name}” created.`);
       form.reset();
       setOwner(null);
@@ -334,6 +347,13 @@ function CreateEventModal({
       }
       const message = applyEventFieldErrors(error, form);
       if (message) notify.error(message);
+    },
+    // Settled, not success: a request that failed at the transport layer may
+    // still have created the event, so both paths re-sync rather than leaving
+    // the table showing a list the backend no longer agrees with.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 
@@ -418,13 +438,20 @@ function EditEventModal({
       return adminApi.events.update(event!.id, payload);
     },
     onSuccess: (updated) => {
-      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
       notify.success(`“${updated.name}” updated.`);
       onClose();
     },
     onError: (error) => {
       const message = applyEventFieldErrors(error, form);
       if (message) notify.error(message);
+    },
+    // EVENTS_KEY is a prefix of the detail query's key, so this one call also
+    // marks ["admin","events","detail",id] stale — reopening the detail modal
+    // shows the saved values, not the copy from before the edit. A second,
+    // explicit detail invalidation would only risk a duplicate request.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 
@@ -481,6 +508,11 @@ function EventDetailModal({
     queryKey: [...EVENTS_KEY, "detail", eventId],
     queryFn: () => adminApi.events.detail(eventId!),
     enabled: eventId !== null,
+    // Without this the single-event view inherits the student app's 30s
+    // staleTime, so reopening it right after an edit shows the pre-edit
+    // payload until a refetch lands — and participant_count could be stale
+    // in the exact screen used to decide whether to cancel an event.
+    ...adminListQueryOptions,
   });
 
   const event = query.data;
@@ -621,23 +653,57 @@ export function AdminEventsPage() {
           | undefined,
       }),
     placeholderData: keepPreviousData,
-    retry: 1,
+    ...adminListQueryOptions,
   });
 
   const cancelMutation = useMutation({
     mutationFn: (event: AdminEventDetail) => adminApi.events.cancel(event.id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
       notify.success("Event cancelled.");
       setCancelling(null);
       setDetailId(null);
     },
     onError: (error) => notify.error(parseApiError(error).message),
+    // Cancelling drops the event out of the active count and empties its
+    // participants, so the table, the stat cards above it and the dashboard
+    // all re-sync — on failure too, since a timed-out cancel may still land.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+    },
   });
+
+  const { mutate: cancelEvent } = cancelMutation;
 
   const stats = query.data?.stats;
   const pageData = query.data?.events;
   const rows = pageData?.results ?? [];
+
+  /**
+   * Stable handlers for the four dialogs and the table.
+   *
+   * Not cosmetic: AModal keeps `onClose` in a useEffect dependency list (escape
+   * key + body scroll lock). Inline arrows here meant every keystroke in the
+   * search box re-ran that effect on any open dialog — tearing down the key
+   * listener and re-measuring the scrollbar to restyle document.body each time.
+   */
+  const openCreate = useCallback(() => setCreateOpen(true), []);
+  const closeCreate = useCallback(() => setCreateOpen(false), []);
+  const openDetail = useCallback((event: AdminEvent) => setDetailId(event.id), []);
+  const closeDetail = useCallback(() => setDetailId(null), []);
+  const startEdit = useCallback((event: AdminEventDetail) => {
+    setDetailId(null);
+    setEditing(event);
+  }, []);
+  const closeEdit = useCallback(() => setEditing(null), []);
+  const startCancel = useCallback(
+    (event: AdminEventDetail) => setCancelling(event),
+    [],
+  );
+  const closeCancel = useCallback(() => setCancelling(null), []);
+  const confirmCancel = useCallback(() => {
+    if (cancelling) cancelEvent(cancelling);
+  }, [cancelling, cancelEvent]);
 
   const columns = useMemo<Array<Column<AdminEvent>>>(
     () => [
@@ -726,7 +792,7 @@ export function AdminEventsPage() {
         title="Events"
         description="Campus events and their chats."
         actions={
-          <AButton onClick={() => setCreateOpen(true)}>
+          <AButton onClick={openCreate}>
             <CalendarPlus className="size-4" /> New event
           </AButton>
         }
@@ -746,7 +812,7 @@ export function AdminEventsPage() {
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search name, venue, owner…"
-            busy={query.isFetching && !query.isLoading}
+            busy={query.isPlaceholderData}
             className="col-span-2 w-full lg:w-64"
           />
           <ASelect
@@ -797,9 +863,9 @@ export function AdminEventsPage() {
             <DataTable
               columns={columns}
               rows={rows}
-              rowKey={(event) => event.id}
+              rowKey={eventRowKey}
               loading={query.isLoading}
-              onRowClick={(event) => setDetailId(event.id)}
+              onRowClick={openDetail}
               empty={
                 <AEmpty
                   icon={CalendarDays}
@@ -811,7 +877,7 @@ export function AdminEventsPage() {
                   }
                   action={
                     !search ? (
-                      <AButton onClick={() => setCreateOpen(true)}>
+                      <AButton onClick={openCreate}>
                         <CalendarPlus className="size-4" /> New event
                       </AButton>
                     ) : undefined
@@ -824,28 +890,25 @@ export function AdminEventsPage() {
                 page={page}
                 count={pageData.count}
                 onPage={setPage}
-                busy={query.isFetching}
+                busy={query.isPlaceholderData}
               />
             )}
           </>
         )}
       </ACard>
 
-      <CreateEventModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateEventModal open={createOpen} onClose={closeCreate} />
       <EventDetailModal
         eventId={detailId}
-        onClose={() => setDetailId(null)}
-        onEdit={(event) => {
-          setDetailId(null);
-          setEditing(event);
-        }}
-        onCancelEvent={(event) => setCancelling(event)}
+        onClose={closeDetail}
+        onEdit={startEdit}
+        onCancelEvent={startCancel}
       />
-      <EditEventModal event={editing} onClose={() => setEditing(null)} />
+      <EditEventModal event={editing} onClose={closeEdit} />
       <ConfirmDialog
         open={cancelling !== null}
-        onClose={() => setCancelling(null)}
-        onConfirm={() => cancelling && cancelMutation.mutate(cancelling)}
+        onClose={closeCancel}
+        onConfirm={confirmCancel}
         busy={cancelMutation.isPending}
         title="Cancel this event?"
         confirmLabel="Cancel event"
