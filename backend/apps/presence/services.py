@@ -6,7 +6,6 @@ from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-
 from core.redis import redis_client
 
 from .constants import (

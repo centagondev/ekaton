@@ -170,3 +170,212 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Admin portal design tokens — scoped under [data-admin] so the product's
+   brutalist styling never leaks into /admin and vice versa.
+
+   Every admin component styles itself with the a-* semantic utilities
+   declared in the @theme inline block below; the raw values live here as
+   custom properties, and dark mode is nothing more than a second set of
+   values behind [data-admin-theme="dark"]. */
+
+[data-admin] {
+  color-scheme: light;
+
+  /* surfaces */
+  --a-canvas: #f7f8fa;
+  --a-surface: #ffffff;
+  --a-raised: #f1f4f8;
+
+  /* hairlines */
+  --a-line: #e4e8ee;
+  --a-line-strong: #cbd3de;
+
+  /* text */
+  --a-ink: #0f1728;
+  --a-text: #38445a;
+  --a-muted: #64748b;
+  --a-faint: #94a3b8;
+
+  /* accent (blue) */
+  --a-accent: #2563eb;
+  --a-accent-strong: #1d4ed8;
+  --a-accent-soft: #eff4ff;
+  --a-accent-text: #1d4ed8;
+
+  /* danger (red) */
+  --a-danger: #dc2626;
+  --a-danger-strong: #b91c1c;
+  --a-danger-soft: #fef2f2;
+  --a-danger-text: #b91c1c;
+
+  /* elevation */
+  --a-shadow-sm: 0 1px 2px rgb(15 23 40 / 0.05), 0 1px 3px rgb(15 23 40 / 0.08);
+  --a-shadow-md: 0 2px 4px rgb(15 23 40 / 0.05), 0 6px 16px rgb(15 23 40 / 0.08);
+  --a-shadow-lg: 0 8px 16px rgb(15 23 40 / 0.1), 0 20px 44px rgb(15 23 40 / 0.16);
+
+  /* badge tones: background / text / border */
+  --a-tone-gray-bg: #f1f4f8;
+  --a-tone-gray-text: #475569;
+  --a-tone-gray-line: #dbe2ea;
+  --a-tone-blue-bg: #eff4ff;
+  --a-tone-blue-text: #1d4ed8;
+  --a-tone-blue-line: #d6e2fb;
+  --a-tone-green-bg: #ecfdf5;
+  --a-tone-green-text: #047857;
+  --a-tone-green-line: #c9f0de;
+  --a-tone-amber-bg: #fffbeb;
+  --a-tone-amber-text: #b45309;
+  --a-tone-amber-line: #f7e5b5;
+  --a-tone-red-bg: #fef2f2;
+  --a-tone-red-text: #b91c1c;
+  --a-tone-red-line: #f8d5d5;
+  --a-tone-violet-bg: #f5f3ff;
+  --a-tone-violet-text: #6d28d9;
+  --a-tone-violet-line: #e4defc;
+  /* No background/color here on purpose: admin roots paint themselves with
+     bg-a-canvas/text-a-ink utilities, and wrappers that re-establish the
+     token scope (toasts, modals) must be able to stay transparent. */
+}
+
+[data-admin][data-admin-theme="dark"] {
+  color-scheme: dark;
+
+  --a-canvas: #0a101d;
+  --a-surface: #111a2b;
+  --a-raised: #1a2537;
+
+  --a-line: #223049;
+  --a-line-strong: #33455f;
+
+  --a-ink: #eef2f8;
+  --a-text: #c2cbd9;
+  --a-muted: #8e9bb0;
+  --a-faint: #64748b;
+
+  --a-accent: #3b82f6;
+  --a-accent-strong: #2f6fe0;
+  --a-accent-soft: rgb(59 130 246 / 0.14);
+  --a-accent-text: #8fb6fb;
+
+  --a-danger: #ef4444;
+  --a-danger-strong: #dc2626;
+  --a-danger-soft: rgb(239 68 68 / 0.14);
+  --a-danger-text: #fca5a5;
+
+  --a-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --a-shadow-md: 0 4px 10px rgb(0 0 0 / 0.4);
+  --a-shadow-lg: 0 12px 24px rgb(0 0 0 / 0.45), 0 24px 56px rgb(0 0 0 / 0.4);
+
+  --a-tone-gray-bg: rgb(148 163 184 / 0.12);
+  --a-tone-gray-text: #c2cbd9;
+  --a-tone-gray-line: rgb(148 163 184 / 0.25);
+  --a-tone-blue-bg: rgb(59 130 246 / 0.14);
+  --a-tone-blue-text: #8fb6fb;
+  --a-tone-blue-line: rgb(59 130 246 / 0.3);
+  --a-tone-green-bg: rgb(16 185 129 / 0.13);
+  --a-tone-green-text: #5fd6ac;
+  --a-tone-green-line: rgb(16 185 129 / 0.3);
+  --a-tone-amber-bg: rgb(245 158 11 / 0.13);
+  --a-tone-amber-text: #f3c364;
+  --a-tone-amber-line: rgb(245 158 11 / 0.3);
+  --a-tone-red-bg: rgb(239 68 68 / 0.13);
+  --a-tone-red-text: #f39d9d;
+  --a-tone-red-line: rgb(239 68 68 / 0.3);
+  --a-tone-violet-bg: rgb(139 92 246 / 0.14);
+  --a-tone-violet-text: #bda6f8;
+  --a-tone-violet-line: rgb(139 92 246 / 0.3);
+}
+
+/* Theme flip feels intentional rather than jarring. Lives in @layer base so
+   any per-element transition-* utility still wins (unlayered rules would
+   silently override Tailwind's layered utilities), and reduced-motion users
+   are covered by the global rule above. */
+@layer base {
+  [data-admin],
+  [data-admin] * {
+    transition-property: background-color, border-color, color, box-shadow,
+      fill, stroke;
+    transition-duration: 160ms;
+    transition-timing-function: ease-out;
+  }
+}
+
+[data-admin] :focus-visible {
+  outline: 2px solid var(--a-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+[data-admin] ::selection {
+  background: var(--a-accent-soft);
+  color: var(--a-ink);
+}
+
+/* Admin semantic color utilities — classes like bg-a-surface / text-a-ink /
+   border-a-line compile straight to the [data-admin] custom properties above,
+   so one set of markup serves both themes. */
+@theme inline {
+  --color-a-canvas: var(--a-canvas);
+  --color-a-surface: var(--a-surface);
+  --color-a-raised: var(--a-raised);
+  --color-a-line: var(--a-line);
+  --color-a-line-strong: var(--a-line-strong);
+  --color-a-ink: var(--a-ink);
+  --color-a-text: var(--a-text);
+  --color-a-muted: var(--a-muted);
+  --color-a-faint: var(--a-faint);
+  --color-a-accent: var(--a-accent);
+  --color-a-accent-strong: var(--a-accent-strong);
+  --color-a-accent-soft: var(--a-accent-soft);
+  --color-a-accent-text: var(--a-accent-text);
+  --color-a-danger: var(--a-danger);
+  --color-a-danger-strong: var(--a-danger-strong);
+  --color-a-danger-soft: var(--a-danger-soft);
+  --color-a-danger-text: var(--a-danger-text);
+}
+
+/* Admin toasts render through sonner's global Toaster, whose toastOptions
+   carry the product's brutalist !important classes. This surgically strips
+   that frame from toasts that contain an admin-styled card, and nothing else.
+   It sits in @layer base because !important priority INVERTS across layers —
+   base is declared before utilities, so these important declarations beat the
+   Toaster's important utility classes (unlayered !important would lose). */
+@layer base {
+  [data-sonner-toast]:has([data-admin-toast]) {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+  }
+}
+
+/* Badge + icon-chip tones (component classes because Tailwind utilities
+   cannot switch three coordinated colors per tone). */
+.a-tone-gray   { background: var(--a-tone-gray-bg);   color: var(--a-tone-gray-text);   border-color: var(--a-tone-gray-line); }
+.a-tone-blue   { background: var(--a-tone-blue-bg);   color: var(--a-tone-blue-text);   border-color: var(--a-tone-blue-line); }
+.a-tone-green  { background: var(--a-tone-green-bg);  color: var(--a-tone-green-text);  border-color: var(--a-tone-green-line); }
+.a-tone-amber  { background: var(--a-tone-amber-bg);  color: var(--a-tone-amber-text);  border-color: var(--a-tone-amber-line); }
+.a-tone-red    { background: var(--a-tone-red-bg);    color: var(--a-tone-red-text);    border-color: var(--a-tone-red-line); }
+.a-tone-violet { background: var(--a-tone-violet-bg); color: var(--a-tone-violet-text); border-color: var(--a-tone-violet-line); }
+
+.a-chip-gray   { background: var(--a-tone-gray-bg);   color: var(--a-tone-gray-text); }
+.a-chip-blue   { background: var(--a-tone-blue-bg);   color: var(--a-tone-blue-text); }
+.a-chip-green  { background: var(--a-tone-green-bg);  color: var(--a-tone-green-text); }
+.a-chip-amber  { background: var(--a-tone-amber-bg);  color: var(--a-tone-amber-text); }
+.a-chip-red    { background: var(--a-tone-red-bg);    color: var(--a-tone-red-text); }
+.a-chip-violet { background: var(--a-tone-violet-bg); color: var(--a-tone-violet-text); }
+
+/* Elevation helpers (shadows change with the theme). */
+.a-elev    { box-shadow: var(--a-shadow-sm); }
+.a-elev-md { box-shadow: var(--a-shadow-md); }
+.a-elev-lg { box-shadow: var(--a-shadow-lg); }
+
+/* The admin SearchBox draws its own clear button; WebKit's native cancel
+   button on type=search inputs was doubling it. */
+.a-search::-webkit-search-cancel-button,
+.a-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}

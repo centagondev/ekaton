@@ -3,8 +3,8 @@ from django.urls import path
 from .views import (
     ComplaintAPIView,
     ComplaintCommentAPIView,
-    ComplaintUpvoteAPIView,
     ComplaintDetailAPIView,
+    ComplaintUpvoteAPIView,
 )
 
 urlpatterns = [

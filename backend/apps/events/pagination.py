@@ -1,6 +1,5 @@
-from rest_framework.pagination import CursorPagination
-
 from core.responses import success_response
+from rest_framework.pagination import CursorPagination
 
 
 class EventMessageCursorPagination(CursorPagination):

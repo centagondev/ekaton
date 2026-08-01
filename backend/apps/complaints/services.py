@@ -1,11 +1,12 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Count
 from django.http import Http404
+from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 from .models import Complaint, ComplaintComment, ComplaintUpvote
-from rest_framework.exceptions import PermissionDenied
-from django.utils import timezone
-from datetime import timedelta
 
 
 @transaction.atomic
@@ -21,7 +22,7 @@ def create_complaint(user, title, description, category, is_anonymous):
     return complaint
 
 
-from django.db.models import Subquery, OuterRef
+from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
 
 

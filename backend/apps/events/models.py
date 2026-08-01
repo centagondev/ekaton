@@ -1,8 +1,7 @@
+from core.base_model import BaseModel
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
-
-from core.base_model import BaseModel
 
 # Maximum length of an event chat message. The model field, the REST
 # serializer and the WebSocket consumer all validate against this, so it

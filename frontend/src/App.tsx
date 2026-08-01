@@ -46,14 +46,63 @@ const PublicSpeakingPage = lazy(() =>
 const AdminLoginPage = lazy(() =>
   import("@/features/admin/AdminLoginPage").then((m) => ({ default: m.AdminLoginPage })),
 );
-const AdminModerationPage = lazy(() =>
-  import("@/features/admin/AdminModerationPage").then((m) => ({
-    default: m.AdminModerationPage,
+const AdminLayout = lazy(() =>
+  import("@/features/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })),
+);
+const AdminDashboardPage = lazy(() =>
+  import("@/features/admin/DashboardPage").then((m) => ({
+    default: m.AdminDashboardPage,
+  })),
+);
+const AdminUsersPage = lazy(() =>
+  import("@/features/admin/UsersPage").then((m) => ({ default: m.AdminUsersPage })),
+);
+const AdminReportsPage = lazy(() =>
+  import("@/features/admin/ReportsPage").then((m) => ({
+    default: m.AdminReportsPage,
+  })),
+);
+const AdminEventsPage = lazy(() =>
+  import("@/features/admin/EventsPage").then((m) => ({
+    default: m.AdminEventsPage,
+  })),
+);
+const AdminPublicSpeakingPage = lazy(() =>
+  import("@/features/admin/PublicSpeakingPage").then((m) => ({
+    default: m.AdminPublicSpeakingPage,
   })),
 );
 const NotFoundPage = lazy(() =>
   import("@/features/NotFoundPage").then((m) => ({ default: m.NotFoundPage })),
 );
+
+/**
+ * Fallback for admin chunk loads, defined inline so it ships in the main
+ * bundle without pulling any admin code in. It honors the persisted admin
+ * theme (read directly — the admin ui module isn't loaded yet) so a dark-mode
+ * reload doesn't flash a white screen.
+ */
+function AdminChunkFallback() {
+  let dark = true;
+  try {
+    dark = localStorage.getItem("ekaton:admin-theme") !== "light";
+  } catch {
+    /* default to dark */
+  }
+  return (
+    <div
+      className="flex min-h-dvh items-center justify-center"
+      style={{ backgroundColor: dark ? "#0a101d" : "#f7f8fa" }}
+    >
+      <span
+        className="size-6 animate-spin rounded-full border-2 border-t-transparent"
+        style={{ borderColor: dark ? "#33455f" : "#cbd3de", borderTopColor: "transparent" }}
+        role="status"
+        aria-label="Loading"
+      />
+    </div>
+  );
+}
 
 export default function App() {
   const bootstrap = useAuthStore((state) => state.bootstrap);
@@ -72,11 +121,37 @@ export default function App() {
             <Route path="/set-password" element={<PasswordSetupPage mode="set" />} />
             <Route path="/reset-password" element={<PasswordSetupPage mode="reset" />} />
 
-            {/* Moderation has its own admin JWT (features/admin/api.ts), entirely
-                separate from the end-user session below — reachable regardless
-                of whether a visitor is logged into an Ekaton account. */}
-            <Route path="/admin" element={<AdminLoginPage />} />
-            <Route path="/admin/public-speaking" element={<AdminModerationPage />} />
+            {/* The admin portal has its own admin JWT (features/admin/api.ts),
+                entirely separate from the end-user session below — reachable
+                regardless of whether a visitor is logged into an Ekaton
+                account. AdminLayout guards every page inside it. Cold loads
+                fall back to the portal's own minimal spinner instead of the
+                product's brutalist loader; once the layout is up, its internal
+                Suspense handles page chunks. */}
+            <Route
+              path="/admin"
+              element={
+                <Suspense fallback={<AdminChunkFallback />}>
+                  <AdminLoginPage />
+                </Suspense>
+              }
+            />
+            <Route
+              element={
+                <Suspense fallback={<AdminChunkFallback />}>
+                  <AdminLayout />
+                </Suspense>
+              }
+            >
+              <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/reports" element={<AdminReportsPage />} />
+              <Route path="/admin/events" element={<AdminEventsPage />} />
+              <Route
+                path="/admin/public-speaking"
+                element={<AdminPublicSpeakingPage />}
+              />
+            </Route>
 
             <Route element={<GuestRoute />}>
               <Route path="/" element={<LandingPage />} />

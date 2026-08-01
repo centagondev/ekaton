@@ -1,16 +1,14 @@
 import logging
 
+from core.pagination import DefaultPagination
+from core.responses import error_response, success_response
 from django.db.models import Q
-
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
 
-from core.pagination import DefaultPagination
-from core.responses import error_response, success_response
-
 from . import services
 from .models import PublicSpeakingMessage
-from .serializers import PublicSpeakingMessageSerializer
+from .serializers import AdminPublicSpeakingMessageSerializer
 
 logger = logging.getLogger("public_speaking")
 
@@ -41,8 +39,12 @@ class AdminPublicSpeakingMessagesAPIView(APIView):
             )
 
         # participant=None: a moderator has no anonymous identity, so the
-        # has_upvoted / is_own annotations correctly stay False.
-        queryset = services.messages_queryset(discussion=discussion)
+        # has_upvoted / is_own annotations correctly stay False. The extra
+        # select_related feeds the admin serializer's real_name without a
+        # per-row query.
+        queryset = services.messages_queryset(discussion=discussion).select_related(
+            "participant__user"
+        )
 
         search = (request.query_params.get("search") or "").strip()
         if search:
@@ -64,7 +66,7 @@ class AdminPublicSpeakingMessagesAPIView(APIView):
         return success_response(
             message="Public speaking messages fetched successfully",
             data=paginator.get_paginated_response(
-                PublicSpeakingMessageSerializer(page, many=True).data
+                AdminPublicSpeakingMessageSerializer(page, many=True).data
             ),
         )
 

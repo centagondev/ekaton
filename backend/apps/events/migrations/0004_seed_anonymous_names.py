@@ -1,6 +1,5 @@
-from django.db import migrations
-
 from apps.events.anonymous_names import ANONYMOUS_NAMES
+from django.db import migrations
 
 
 def seed_anonymous_names(apps, schema_editor):

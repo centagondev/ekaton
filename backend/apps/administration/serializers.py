@@ -1,9 +1,8 @@
-from django.utils import timezone
-from rest_framework import serializers
-
 from apps.chat.models import Report
 from apps.events.models import Event
 from apps.users.models import User
+from django.utils import timezone
+from rest_framework import serializers
 
 
 class AdminLoginSerializer(serializers.Serializer):
