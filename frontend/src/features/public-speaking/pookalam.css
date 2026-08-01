@@ -1,0 +1,265 @@
+/**
+ * Pookalam Premium — scoped to the Onam page.
+ *
+ * Every rule is nested under `.theme-pookalam`, or is a `pk-` class only that
+ * page uses. Nothing leaks: the rest of Ekaton keeps its brutalist
+ * ink-and-hard-shadow language untouched.
+ *
+ * PERFORMANCE CONTRACT — this file was cut down hard after the first version
+ * made the page feel heavy, and these rules are the reason it is cheap now:
+ *
+ *   1. No `backdrop-filter`. A frosted full-width header and composer had to
+ *      re-blur every time anything behind them changed.
+ *   2. No `mix-blend-mode`. It forces a separate full-screen compositing pass.
+ *   3. Nothing animates except `transform` and `opacity`.
+ *   4. Infinite animations are rationed. Currently: the live dot, and three
+ *      background petals.
+ *
+ * Rule 3 used to read "no infinite animations except the live dot", and the
+ * petals below are a deliberate amendment to it rather than an oversight. The
+ * original seven petals were lethal *specifically* because the frosted header
+ * and composer sat over them, so every petal frame invalidated a full-width
+ * backdrop blur. Rule 1 removed those surfaces. With no `backdrop-filter`
+ * anywhere on the page, a transform-only drift is promoted to its own
+ * compositor layer and repaints nothing — which is why three is now safe and
+ * seven still is not.
+ *
+ * If you are about to add a frosted surface, a blend mode, or a fourth looping
+ * animation here, that is the thing that will make this page slow again.
+ */
+
+.theme-pookalam {
+  --pk-hairline: rgba(24, 19, 16, 0.08);
+  --pk-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  background-color: var(--color-cream);
+  color: var(--color-ink-warm);
+}
+
+/**
+ * Focus ring — a deliberate deviation from a literal "2px gold ring".
+ *
+ * Gold is invisible against this page's gold surfaces (the voted heart, the
+ * primary button, the banner), and amber-on-cream measures ~2:1, under the
+ * 3:1 WCAG 2.2 needs for a focus indicator. Warm ink carries the contrast on
+ * every surface here (17:1 on cream, 11:1 on gold) and the gold halo supplies
+ * the theme. Legible first, themed second.
+ */
+.theme-pookalam :focus-visible {
+  outline: 2px solid var(--color-ink-warm);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(254, 208, 1, 0.35);
+}
+
+.theme-pookalam ::selection {
+  background: var(--color-festival-gold);
+  color: var(--color-ink-warm);
+}
+
+.theme-pookalam .scroll-thin {
+  scrollbar-color: #e6d8b4 transparent;
+}
+.theme-pookalam .scroll-thin::-webkit-scrollbar-thumb {
+  background: #e6d8b4;
+  border-radius: 999px;
+}
+
+/* -------------------------------- surfaces -------------------------------- */
+
+/**
+ * Gold falling from behind the banner. A static gradient: painted once, then
+ * free for the life of the page.
+ */
+.pk-wash {
+  background:
+    radial-gradient(120% 62% at 50% -12%, rgba(254, 208, 1, 0.2), transparent 62%),
+    radial-gradient(80% 50% at 92% 34%, rgba(254, 208, 1, 0.08), transparent 70%);
+}
+
+/**
+ * Pookalam watermark — a concentric petal mandala as a CSS data: URI.
+ *
+ * The first attempt at this was ~130 stroked SVG paths mounted in the DOM,
+ * sitting permanently in the layer tree, and it was cut for exactly that
+ * reason. As a background-image the same drawing is rasterised once by the
+ * style system and costs the same as any other painted pixel: zero nodes,
+ * zero layout, zero per-frame work.
+ *
+ * Two petal rings and two circles rather than a faithful eight-ring pookalam —
+ * at 4% opacity the fine rings vanish into the cream anyway, and the simple
+ * geometry is what survives being barely visible. Positioned to bleed off the
+ * right edge mid-page; the small echo sits low-left at half scale.
+ */
+.pk-mandala {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23a97a06' stroke-width='1.1'%3E%3Ccircle cx='100' cy='100' r='16'/%3E%3Ccircle cx='100' cy='100' r='95'/%3E%3Cg%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(30 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(60 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(90 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(120 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(150 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(180 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(210 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(240 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(270 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(300 100 100)'/%3E%3Cpath d='M100 84c7-14 0-32 0-32s-7 18 0 32z' transform='rotate(330 100 100)'/%3E%3C/g%3E%3Cg%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(15 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(45 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(75 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(105 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(135 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(165 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(195 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(225 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(255 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(285 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(315 100 100)'/%3E%3Cpath d='M100 60c11-20 0-42 0-42s-11 22 0 42z' transform='rotate(345 100 100)'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23a97a06' stroke-width='1.4'%3E%3Ccircle cx='100' cy='100' r='20'/%3E%3Cg%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(45 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(90 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(135 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(180 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(225 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(270 100 100)'/%3E%3Cpath d='M100 76c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(315 100 100)'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position:
+    right -180px top 32%,
+    left -110px bottom -60px;
+  background-size: 460px 460px, 230px 230px;
+  opacity: 0.05;
+}
+
+/**
+ * Scattered petals — small solid shapes, static, part of one painted layer.
+ * The drifting ones are separate elements (below) so only they own a
+ * compositor layer; a layer that never changes shouldn't pay for one.
+ */
+.pk-petal-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900'%3E%3Cg fill='%23a97a06'%3E%3Cpath d='M80 120c8-15 0-34 0-34s-8 19 0 34z' transform='rotate(24 80 103)'/%3E%3Cpath d='M470 260c6-12 0-26 0-26s-6 14 0 26z' transform='rotate(-40 470 247)'/%3E%3Cpath d='M180 520c9-17 0-38 0-38s-9 21 0 38z' transform='rotate(64 180 501)'/%3E%3Cpath d='M530 640c7-13 0-29 0-29s-7 16 0 29z' transform='rotate(-15 530 625)'/%3E%3Cpath d='M90 790c6-11 0-24 0-24s-6 13 0 24z' transform='rotate(105 90 778)'/%3E%3Cpath d='M330 80c5-10 0-22 0-22s-5 12 0 22z' transform='rotate(-70 330 69)'/%3E%3Cpath d='M420 830c8-15 0-33 0-33s-8 18 0 33z' transform='rotate(38 420 813)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 600px 900px;
+  opacity: 0.06;
+}
+
+/** Kasavu accent — the one hard gold line, under the banner. */
+.pk-kasavu-line {
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-amber-deep) 18%,
+    var(--color-festival-gold) 50%,
+    var(--color-amber-deep) 82%,
+    transparent
+  );
+}
+
+/**
+ * The header and composer surface.
+ *
+ * Was frosted glass. It is now simply opaque cream — over a static background
+ * a blur had almost nothing to reveal, and it cost a full-width re-blur on
+ * every frame that anything moved underneath.
+ */
+.pk-surface {
+  background: var(--color-cream);
+}
+
+/* -------------------------------- keyframes ------------------------------- */
+
+/** Skeleton sweep. Runs only while content is loading, then unmounts. */
+@keyframes pk-shimmer {
+  0% {
+    transform: translateX(-140%);
+  }
+  100% {
+    transform: translateX(240%);
+  }
+}
+
+/** The live dot. The one thing on this page allowed to loop forever. */
+@keyframes pk-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+/**
+ * Ambient petal drift. Transform-only, so it runs on the compositor; safe for
+ * the reasons argued in the contract above, and rationed to three elements.
+ * The path wanders sideways as it falls and never leaves the viewport band it
+ * started in — a slow presence, not a particle effect.
+ */
+@keyframes pk-drift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate3d(14px, 22px, 0) rotate(40deg);
+  }
+  50% {
+    transform: translate3d(-8px, 46px, 0) rotate(85deg);
+  }
+  75% {
+    transform: translate3d(10px, 24px, 0) rotate(130deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(180deg);
+  }
+}
+
+.pk-drift {
+  animation: pk-drift var(--pk-drift-time, 26s) ease-in-out infinite;
+  animation-delay: var(--pk-delay, 0s);
+}
+
+/**
+ * Thiruvathira turn — the loader's circle motion.
+ *
+ * Thiruvathira kali is danced slowly, clockwise, in a circle around the lamp;
+ * the assembled pookalam turns the same way, with the chethi ring drifting
+ * counter-clockwise against it. Loader-scoped: these classes appear only
+ * inside PookalamLoader, which unmounts the moment content arrives, so they
+ * are in the same ration category as pk-shimmer — looping only while loading
+ * exists to be looped over.
+ *
+ * `transform-box: view-box` pins the origin to the SVG's own centre, which is
+ * what lets a ring group spin in place instead of orbiting the corner.
+ */
+@keyframes pk-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pk-dance {
+  animation: pk-turn 14s linear infinite;
+}
+
+.pk-dance-ccw {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: pk-turn 22s linear infinite reverse;
+}
+
+/** Nilavilakku flame — empty state only, and only while it is on screen. */
+@keyframes pk-flicker {
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 1;
+  }
+  40% {
+    transform: scaleY(1.14) scaleX(0.93);
+    opacity: 0.88;
+  }
+  70% {
+    transform: scaleY(0.94) scaleX(1.05);
+    opacity: 1;
+  }
+}
+
+.pk-shimmer {
+  animation: pk-shimmer 1.7s var(--pk-ease-out) infinite;
+  animation-delay: var(--pk-delay, 0s);
+}
+.pk-breathe {
+  animation: pk-breathe 2.2s ease-out infinite;
+}
+.pk-flicker {
+  transform-origin: 50% 100%;
+  animation: pk-flicker 1.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-shimmer,
+  .pk-flicker,
+  .pk-drift,
+  .pk-dance,
+  .pk-dance-ccw {
+    animation: none;
+  }
+  .pk-breathe {
+    animation: none;
+    opacity: 0.85;
+  }
+}

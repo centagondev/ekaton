@@ -21,7 +21,12 @@ export const authApi = {
   logout: (refresh: string): Promise<null> =>
     apiPost<null>("/accounts/logout/", { refresh }),
 
-  me: (): Promise<User> => apiGet<User>("/accounts/me/"),
+  /**
+   * The one profile route that does not live under /accounts/: it moved to the
+   * users app, so it is mounted at /api/v1/users/. Everything else here is
+   * still an accounts route.
+   */
+  me: (): Promise<User> => apiGet<User>("/users/me/"),
 
   setPassword: (payload: {
     token: string;

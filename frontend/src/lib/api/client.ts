@@ -56,6 +56,62 @@ async function refreshAccessToken(): Promise<string> {
   return data.access;
 }
 
+/** Treat a token with less than this much life left as already spent. */
+const TOKEN_MARGIN_MS = 30_000;
+
+/** Read `exp` out of a JWT without verifying it — the server does that part. */
+function expiresWithin(token: string, marginMs: number): boolean {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return true;
+    // base64url -> base64, then pad to a multiple of four.
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const { exp } = JSON.parse(atob(padded)) as { exp?: number };
+    if (typeof exp !== "number") return false;
+    return exp * 1000 - Date.now() < marginMs;
+  } catch {
+    // Unreadable token: let the server be the judge rather than locking the
+    // caller out on a parsing detail.
+    return false;
+  }
+}
+
+/**
+ * A usable access token, refreshed first if the stored one is spent.
+ *
+ * HTTP calls never need this — the response interceptor above catches a 401
+ * and retries. WebSockets have no such second chance: the token goes in the
+ * handshake URL, and an expired one is refused before any application code
+ * runs. The socket then reconnects on a backoff, presenting the same dead
+ * token every time, forever.
+ *
+ * That is exactly what stranded the Public Speaking room after thirty minutes
+ * — `ACCESS_TOKEN_LIFETIME`. Sockets should call this instead of reading
+ * storage directly.
+ *
+ * Shares `refreshPromise` with the interceptor, so a socket reconnecting at
+ * the same moment as an in-flight request cannot burn two refresh tokens under
+ * `ROTATE_REFRESH_TOKENS`.
+ */
+export async function getFreshAccessToken(): Promise<string | null> {
+  const token = getAccessToken();
+  if (token && !expiresWithin(token, TOKEN_MARGIN_MS)) return token;
+  if (!getRefreshToken()) return token;
+
+  try {
+    refreshPromise ??= refreshAccessToken();
+    const access = await refreshPromise;
+    refreshPromise = null;
+    return access;
+  } catch {
+    refreshPromise = null;
+    clearSession();
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    return null;
+  }
+}
+
 instance.interceptors.response.use(
   (response) => response,
   async (error) => {

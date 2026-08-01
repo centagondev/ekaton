@@ -6,7 +6,6 @@ from .views import (
     ForgetPasswordAPIView,
     LoginAPIView,
     LogoutAPIView,
-    MeAPIView,
     ResendPasswordResetAPIView,
     ResetPasswordAPIView,
     SetPasswordAPIView,
@@ -18,7 +17,6 @@ urlpatterns = [
     path("set-password/", SetPasswordAPIView.as_view(), name="set_password"),
     path("login/", LoginAPIView.as_view(), name="login"),
     path("logout/", LogoutAPIView.as_view(), name="logout"),
-    path("me/", MeAPIView.as_view(), name="me"),
     path("refresh/", TokenRefreshAPIView.as_view(), name="token_refresh"),
     path("forget-password/", ForgetPasswordAPIView.as_view(), name="forget_password"),
     path(
