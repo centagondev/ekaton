@@ -118,7 +118,7 @@ export function AdminPublicSpeakingPage() {
   return (
     <PageEnter>
       <PageHeader
-        title="Public Speaking"
+        title="Exclusive"
         description="Moderate the live discussion wall."
       />
 
@@ -170,7 +170,7 @@ export function AdminPublicSpeakingPage() {
           <AEmpty
             icon={MegaphoneOff}
             title="No discussion is running"
-            description="When a public speaking session goes live, its responses appear here for moderation."
+            description="When an Exclusive session goes live, its responses appear here for moderation."
           />
         ) : parsedError ? (
           <AEmpty

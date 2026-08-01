@@ -279,6 +279,23 @@ export function AdminReportsPage() {
     lastSelectedRef.current = null;
   }, []);
 
+  // A prop of the memoized table, so it is memoized too — otherwise every
+  // keystroke and every dialog open would re-render all the rows.
+  const emptyState = useMemo(
+    () => (
+      <AEmpty
+        icon={Flag}
+        title={search ? "No matching reports" : "No reports"}
+        description={
+          search
+            ? `Nothing matches “${search}”.`
+            : "Reports filed by users will appear here."
+        }
+      />
+    ),
+    [search],
+  );
+
   const columns = useMemo<Array<Column<AdminReport>>>(
     () => [
       {
@@ -428,17 +445,7 @@ export function AdminReportsPage() {
               rowKey={reportKey}
               loading={query.isLoading}
               onRowClick={openReport}
-              empty={
-                <AEmpty
-                  icon={Flag}
-                  title={search ? "No matching reports" : "No reports"}
-                  description={
-                    search
-                      ? `Nothing matches “${search}”.`
-                      : "Reports filed by users will appear here."
-                  }
-                />
-              }
+              empty={emptyState}
             />
             {pageData && (
               <APagination

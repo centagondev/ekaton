@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -6,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -162,6 +164,27 @@ export function useIsMobile(): boolean {
       return () => mobileQuery?.removeEventListener("change", onChange);
     },
     () => mobileQuery?.matches ?? false,
+    () => false,
+  );
+}
+
+/**
+ * True below `md` — the table/card split inside DataTable.
+ *
+ * Read synchronously through `useSyncExternalStore`, so the very first render
+ * already picks the right layout and there is no frame where the wrong one is
+ * on screen.
+ */
+const cardListQuery =
+  typeof window === "undefined" ? null : window.matchMedia("(max-width: 767.98px)");
+
+function useIsCardList(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      cardListQuery?.addEventListener("change", onChange);
+      return () => cardListQuery?.removeEventListener("change", onChange);
+    },
+    () => cardListQuery?.matches ?? false,
     () => false,
   );
 }
@@ -618,8 +641,20 @@ export interface Column<T> {
  * string-headed columns become label/value rows, and columns without a string
  * header (the actions cell) become the card's footer. No page defines its
  * layout twice, and phones never see a sideways-scrolling table.
+ *
+ * Only the layout in use is rendered. Both used to be, with `hidden md:block`
+ * and `md:hidden` deciding which one was painted — so every row existed twice
+ * in the DOM, every avatar and badge and action button was built twice, and
+ * the half nobody could see still had to be laid out. That doubled cost is
+ * paid again on every re-render, and reflowed again each time a sheet locks
+ * the page scroll, which is a large part of why the heaviest page in the
+ * portal was also the one whose sheets felt slow to open.
+ *
+ * Memoized (see the export below) because the pages that own the sheets also
+ * own the row data: without it, opening or closing a dialog re-rendered the
+ * entire table for a state change the table cannot see.
  */
-export function DataTable<T>({
+function DataTableInner<T>({
   columns,
   rows,
   rowKey,
@@ -635,6 +670,7 @@ export function DataTable<T>({
   onRowClick?: (row: T) => void;
 }) {
   const [headColumn, ...restColumns] = columns;
+  const cardList = useIsCardList();
 
   const interactive = onRowClick
     ? {
@@ -652,139 +688,151 @@ export function DataTable<T>({
   return (
     <div>
       {/* md+ table */}
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-max text-sm">
-          <thead>
-            <tr className="border-b border-a-line bg-a-raised/60">
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  scope="col"
-                  className={cn(
-                    "px-4 py-2.5 text-xs font-medium text-a-muted",
-                    column.className ?? "text-left",
-                  )}
-                >
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 6 }, (_, index) => (
-                  <tr key={index} className="border-b border-a-line/70">
-                    {columns.map((column) => (
-                      <td key={column.key} className="px-4 py-3.5">
-                        <ASkeleton className="h-4 w-full max-w-32" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : rows.map((row) => (
-                  <tr
-                    key={rowKey(row)}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    {...(interactive
-                      ? {
-                          role: interactive.role,
-                          tabIndex: interactive.tabIndex,
-                          onKeyDown: (event: React.KeyboardEvent) =>
-                            interactive.onKeyDown(event, row),
-                        }
-                      : {})}
+      {!cardList && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
+            <thead>
+              <tr className="border-b border-a-line bg-a-raised/60">
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    scope="col"
                     className={cn(
-                      "border-b border-a-line/70 last:border-0",
-                      onRowClick &&
-                        "cursor-pointer transition-colors hover:bg-a-raised/60",
+                      "px-4 py-2.5 text-xs font-medium text-a-muted",
+                      column.className ?? "text-left",
                     )}
                   >
-                    {columns.map((column) => (
-                      <td
-                        key={column.key}
-                        className={cn("px-4 py-3", column.className)}
-                      >
-                        {column.render(row)}
-                      </td>
-                    ))}
-                  </tr>
+                    {column.header}
+                  </th>
                 ))}
-          </tbody>
-        </table>
-      </div>
+              </tr>
+            </thead>
+            <tbody>
+              {loading
+                ? Array.from({ length: 6 }, (_, index) => (
+                    <tr key={index} className="border-b border-a-line/70">
+                      {columns.map((column) => (
+                        <td key={column.key} className="px-4 py-3.5">
+                          <ASkeleton className="h-4 w-full max-w-32" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : rows.map((row) => (
+                    <tr
+                      key={rowKey(row)}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      {...(interactive
+                        ? {
+                            role: interactive.role,
+                            tabIndex: interactive.tabIndex,
+                            onKeyDown: (event: React.KeyboardEvent) =>
+                              interactive.onKeyDown(event, row),
+                          }
+                        : {})}
+                      className={cn(
+                        "border-b border-a-line/70 last:border-0",
+                        onRowClick &&
+                          "cursor-pointer transition-colors hover:bg-a-raised/60",
+                      )}
+                    >
+                      {columns.map((column) => (
+                        <td
+                          key={column.key}
+                          className={cn("px-4 py-3", column.className)}
+                        >
+                          {column.render(row)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* <md card list */}
-      <div className="md:hidden">
-        {loading ? (
-          <div className="divide-y divide-a-line">
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="space-y-2.5 p-4">
-                <ASkeleton className="h-5 w-2/3" />
-                <ASkeleton className="h-4 w-full" />
-                <ASkeleton className="h-4 w-1/2" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="divide-y divide-a-line">
-            {rows.map((row) => (
-              <div
-                key={rowKey(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                {...(interactive
-                  ? {
-                      role: interactive.role,
-                      tabIndex: interactive.tabIndex,
-                      onKeyDown: (event: React.KeyboardEvent) =>
-                        interactive.onKeyDown(event, row),
+      {cardList && (
+        <div>
+          {loading ? (
+            <div className="divide-y divide-a-line">
+              {Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className="space-y-2.5 p-4">
+                  <ASkeleton className="h-5 w-2/3" />
+                  <ASkeleton className="h-4 w-full" />
+                  <ASkeleton className="h-4 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="divide-y divide-a-line">
+              {rows.map((row) => (
+                <div
+                  key={rowKey(row)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  {...(interactive
+                    ? {
+                        role: interactive.role,
+                        tabIndex: interactive.tabIndex,
+                        onKeyDown: (event: React.KeyboardEvent) =>
+                          interactive.onKeyDown(event, row),
+                      }
+                    : {})}
+                  className={cn(
+                    "space-y-3 px-4 py-3.5",
+                    onRowClick &&
+                      "cursor-pointer transition-colors active:bg-a-raised/70",
+                  )}
+                >
+                  {headColumn && <div>{headColumn.render(row)}</div>}
+                  {restColumns.map((column) => {
+                    const label =
+                      typeof column.header === "string" ? column.header : null;
+                    const content = column.render(row);
+                    if (label === null) {
+                      // Actions cell — right-aligned footer, no label.
+                      return (
+                        <div
+                          key={column.key}
+                          className="flex justify-end border-t border-a-line/70 pt-3"
+                        >
+                          {content}
+                        </div>
+                      );
                     }
-                  : {})}
-                className={cn(
-                  "space-y-3 px-4 py-3.5",
-                  onRowClick &&
-                    "cursor-pointer transition-colors active:bg-a-raised/70",
-                )}
-              >
-                {headColumn && <div>{headColumn.render(row)}</div>}
-                {restColumns.map((column) => {
-                  const label =
-                    typeof column.header === "string" ? column.header : null;
-                  const content = column.render(row);
-                  if (label === null) {
-                    // Actions cell — right-aligned footer, no label.
                     return (
                       <div
                         key={column.key}
-                        className="flex justify-end border-t border-a-line/70 pt-3"
+                        className="flex min-h-6 items-center justify-between gap-4"
                       >
-                        {content}
+                        <span className="shrink-0 text-xs font-medium text-a-muted">
+                          {label}
+                        </span>
+                        <div className="flex min-w-0 items-center justify-end text-sm text-a-text">
+                          {content}
+                        </div>
                       </div>
                     );
-                  }
-                  return (
-                    <div
-                      key={column.key}
-                      className="flex min-h-6 items-center justify-between gap-4"
-                    >
-                      <span className="shrink-0 text-xs font-medium text-a-muted">
-                        {label}
-                      </span>
-                      <div className="flex min-w-0 items-center justify-end text-sm text-a-text">
-                        {content}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {!loading && rows.length === 0 && empty}
     </div>
   );
 }
+
+/**
+ * The generic signature is preserved through the cast — `memo` would otherwise
+ * erase it and every call site would lose row typing. Callers keep `columns`,
+ * `rows`, `rowKey`, `empty` and `onRowClick` stable across renders for this to
+ * do anything; the pages that use it already do.
+ */
+export const DataTable = memo(DataTableInner) as typeof DataTableInner;
 
 /** Backend page size is fixed by DefaultPagination unless overridden. */
 export const PAGE_SIZE = 10;
@@ -852,6 +900,10 @@ export function APagination({
  * the bottom edge, rounds only its top corners, scrolls internally and pads
  * for the home-indicator safe area.
  */
+/** The sheet curve — fast off the mark, long glide into rest. */
+const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+const SHEET_OUT = { type: "tween", duration: 0.15, ease: SHEET_EASE } as const;
+
 export function AModal({
   open,
   onClose,
@@ -895,7 +947,17 @@ export function AModal({
     };
   }, [open]);
 
-  return (
+  /**
+   * Portaled to <body>, like the student app's sheet.
+   *
+   * Rendered in place it was the last child of whichever page had opened it,
+   * so the browser inserted, laid out and removed a full-screen layer inside
+   * the subtree of a table with a hundred cells in it — and any transformed
+   * ancestor would have quietly become the containing block for a
+   * `position: fixed` panel. At the end of <body> it is a sibling of the page,
+   * and mounting it touches nothing else.
+   */
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div
@@ -927,13 +989,22 @@ export function AModal({
               isMobile ? { y: "100%" } : { opacity: 0, scale: 0.97, y: 8 }
             }
             animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
-            exit={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.98, y: 4 }}
+            // Dismissal is quicker than arrival — a sheet that takes as long
+            // to leave as it took to arrive is what reads as "closing is slow".
+            exit={
+              isMobile
+                ? { y: "100%", transition: SHEET_OUT }
+                : { opacity: 0, scale: 0.98, y: 4, transition: SHEET_OUT }
+            }
             transition={
               isMobile
-                ? { type: "tween", duration: 0.22, ease: [0.32, 0.72, 0, 1] }
-                : { duration: 0.13, ease: [0.32, 0.72, 0, 1] }
+                ? { type: "tween", duration: 0.22, ease: SHEET_EASE }
+                : { duration: 0.13, ease: SHEET_EASE }
             }
-            style={{ willChange: "transform" }}
+            /* No hand-written `will-change`: Framer sets it for the values it
+               animates and clears it on settle, where this pinned a
+               full-screen layer in GPU memory for as long as the sheet was
+               open — on the devices least able to spare it. */
             className={cn(
               "relative flex w-full flex-col border-a-line bg-a-surface a-elev-lg",
               // Sheet on phones…
@@ -964,7 +1035,8 @@ export function AModal({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 

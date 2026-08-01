@@ -191,8 +191,8 @@ export function ProfilePage() {
           <p className="mt-5 flex items-start gap-1.5 border-t border-ink/10 pt-4 text-xs leading-relaxed text-muted">
             <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>
-              Tap your photo to view it, or the camera icon to change it. Other details are
-              managed by the Ekaton team.
+              Tap your photo to view or change it. Other details are managed by the Ekaton
+              team.
             </span>
           </p>
         </motion.section>

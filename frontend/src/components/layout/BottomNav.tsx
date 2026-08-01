@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CalendarDays, Home, Megaphone, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BLOOM_ROUTE, useBloomLink } from "./bloom.store";
 
 /**
  * Complaint Box is deliberately absent — it is not part of the MVP, and the
@@ -11,7 +10,7 @@ import { BLOOM_ROUTE, useBloomLink } from "./bloom.store";
 const TABS = [
   { to: "/home", label: "Home", Icon: Home },
   { to: "/events", label: "Events", Icon: CalendarDays },
-  { to: "/public-speaking", label: "Speaking", Icon: Megaphone },
+  { to: "/public-speaking", label: "Exclusive", Icon: Megaphone },
   { to: "/profile", label: "Profile", Icon: UserRound },
 ] as const;
 
@@ -26,22 +25,19 @@ const TABS = [
  * would make Framer try to animate between a visible element and a
  * `display: none` one.
  */
-/**
- * One tab. Extracted from the map so it can hold a hook — the Onam tab needs
- * `useBloomLink`, and every other tab passes `undefined` for it and behaves
- * exactly as it did before.
- */
+/** One tab. */
 function Tab({ to, label, Icon }: (typeof TABS)[number]) {
-  const bloom = useBloomLink(to);
-
   return (
     <li className="flex-1">
       {/* `end` on /home only: /events must not stay lit while the user is
-          on /events/:id, but /home has no children to match. */}
+          on /events/:id, but /home has no children to match.
+
+          Every tab navigates on the tap. This one used to hold the route
+          change behind a ~430ms bloom overlay first, which is the slowest
+          thing in the tab bar and bought nothing the page itself does not. */}
       <NavLink
         to={to}
         end={to === "/home"}
-        onClick={to === BLOOM_ROUTE ? bloom : undefined}
         className="group relative flex size-full flex-col items-center justify-center gap-1"
       >
         {({ isActive }) => (

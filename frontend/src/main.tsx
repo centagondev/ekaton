@@ -40,6 +40,12 @@ createRoot(container).render(
     <Toaster
       position="top-center"
       theme="light"
+      // Every toast gets a ✕ so it can be dismissed on the spot rather than
+      // waited out. Auto-dismiss is untouched — this is a second way to close,
+      // not a replacement. sonner skips the button on `toast.custom`, so the
+      // admin cards keep the ✕ they draw themselves instead of growing two.
+      // It is squared off to match the brutalist frame in index.css.
+      closeButton
       toastOptions={{
         className:
           "!rounded-none !border-2 !border-[#0a0a0a] !bg-white !text-[#0a0a0a] !shadow-[4px_4px_0px_#0a0a0a] !font-sans",

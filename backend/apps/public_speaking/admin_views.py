@@ -64,7 +64,7 @@ class AdminPublicSpeakingMessagesAPIView(APIView):
         page = paginator.paginate_queryset(queryset, request, view=self)
 
         return success_response(
-            message="Public speaking messages fetched successfully",
+            message="Exclusive messages fetched successfully",
             data=paginator.get_paginated_response(
                 AdminPublicSpeakingMessageSerializer(page, many=True).data
             ),

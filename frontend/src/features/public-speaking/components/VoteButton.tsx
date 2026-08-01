@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
-import { DURATION, EASE_OUT_EXPO, PARTICLES, useMotionPrefs } from "@/lib/motion";
+import { DURATION, EASE_OUT_EXPO, useMotionPrefs } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { SpeakingMessage } from "../api";
 
@@ -10,14 +10,14 @@ import type { SpeakingMessage } from "../api";
  * Behaviour is unchanged from the version this replaces: the same
  * `onUpvote(id)` handler, the same optimistic paint by the parent, the same
  * reconcile-by-ack and rollback-by-error, the same refusal to let anyone vote
- * for their own response. What changed is that a vote now *feels* like
- * something: gold rises through the heart like liquid, a handful of small
- * hearts float up and away, the count rolls, and a ring pulses away from the
- * button.
+ * for their own response.
  *
- * Un-voting deliberately plays none of the celebration — the gold drains back
- * down and the count rolls the other way. Taking a vote back should feel calm,
- * not punished.
+ * What it plays on a tap is only what reports state: the press scale, gold
+ * rising through the heart, and the count rolling. The celebration that used
+ * to fire alongside — four hearts flying out of the button and a ring pulsing
+ * away from it — mounted eleven animated layers per tap on top of the vote
+ * itself, and on the page where people tap fastest. Un-voting drains the gold
+ * back down and rolls the count the other way.
  */
 
 /** Classic solid heart on a 24-unit grid; used as fill, outline and clip. */
@@ -70,73 +70,6 @@ function Odometer({ value, instant }: { value: number; instant: boolean }) {
   );
 }
 
-/* --------------------------------- burst ---------------------------------- */
-
-/**
- * Four designed flights, not four random ones — fixed vectors read as one
- * gesture, where `Math.random()` reliably clumps two hearts together.
- * Consecutive votes are varied by mirroring the drift with the seed, which
- * costs nothing and never clumps.
- *
- * All four rise: hearts that fall read as failure. Sizes mixed 10–16px,
- * starts staggered 60ms apart, each gone inside ~750ms.
- */
-const FLIGHTS = [
-  { drift: 10, rise: 46, size: 15, tilt: 18, delay: 0 },
-  { drift: -11, rise: 38, size: 11, tilt: -22, delay: 0.06 },
-  { drift: 4, rise: 50, size: 13, tilt: 10, delay: 0.12 },
-  { drift: -5, rise: 32, size: 10, tilt: -14, delay: 0.18 },
-].slice(0, PARTICLES.voteBurst);
-
-/** Gold-led with a single vermilion note — the warm mix that suits the theme. */
-const HEART_TONES = [
-  "var(--color-festival-gold)",
-  "var(--color-vermilion)",
-  "var(--color-amber-deep)",
-  "var(--color-festival-gold)",
-] as const;
-
-function HeartBurst({ seed }: { seed: number }) {
-  // Mirror alternate bursts so the 2nd tap isn't a replay of the 1st.
-  const flip = seed % 2 === 0 ? -1 : 1;
-
-  return (
-    <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 z-10">
-      {FLIGHTS.map((flight, index) => (
-        <motion.span
-          key={index}
-          className="absolute block"
-          style={{
-            width: flight.size,
-            height: flight.size,
-            marginLeft: -flight.size / 2,
-            marginTop: -flight.size / 2,
-            color: HEART_TONES[index % HEART_TONES.length],
-          }}
-          initial={{ x: 0, y: 0, scale: 0.4, opacity: 0.95, rotate: 0 }}
-          animate={{
-            x: flight.drift * flip,
-            y: -flight.rise,
-            scale: [0.4, 1.08, 1],
-            opacity: 0,
-            rotate: flight.tilt * flip,
-          }}
-          transition={{
-            duration: 0.72,
-            delay: flight.delay,
-            ease: EASE_OUT_EXPO,
-            scale: { duration: 0.3, delay: flight.delay, ease: EASE_OUT_EXPO },
-          }}
-        >
-          <svg viewBox="0 0 24 24" className="size-full">
-            <path d={HEART} fill="currentColor" />
-          </svg>
-        </motion.span>
-      ))}
-    </span>
-  );
-}
-
 /* --------------------------------- button --------------------------------- */
 
 export function VoteButton({
@@ -158,8 +91,6 @@ export function VoteButton({
   // Stripped to plain ident characters: React's generated ids carry delimiters
   // that are not safe to drop into a `url(#…)` reference across every engine.
   const clipId = `pk-heart-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const [burst, setBurst] = useState(0);
-  const [pulse, setPulse] = useState(0);
   const shakeControls = useAnimationControls();
 
   const inert = message.is_own;
@@ -169,8 +100,8 @@ export function VoteButton({
   // admits that the number it just showed was a guess that did not hold.
   //
   // Driven by imperative controls rather than by re-keying the element: a key
-  // change would remount the button, wiping the burst and pulse counters
-  // below and re-running this effect against a reset ref.
+  // change would remount the button and re-run this effect against a reset
+  // ref, shaking on a rejection it has already reported.
   const seenRejection = useRef(rejectedNonce);
   useEffect(() => {
     if (rejectedNonce === seenRejection.current) return;
@@ -186,10 +117,6 @@ export function VoteButton({
     // Ranked cards are expandable; voting must never trigger that.
     event.stopPropagation();
     if (inert || pending) return;
-    if (!voted && !reduced) {
-      setBurst((n) => n + 1);
-      setPulse((n) => n + 1);
-    }
     onUpvote(message.id);
   };
 
@@ -237,23 +164,6 @@ export function VoteButton({
         )}
         style={{ boxShadow: "inset 0 1px 6px rgba(169,122,6,0.35)" }}
       />
-
-      {/* One ring, expanding away from the button as the vote lands. */}
-      <AnimatePresence>
-        {pulse > 0 && (
-          <motion.span
-            key={pulse}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full border border-festival-gold"
-            initial={{ scale: 0.85, opacity: 0.9 }}
-            animate={{ scale: 1.65, opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.6, ease: EASE_OUT_EXPO }}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>{burst > 0 && <HeartBurst key={burst} seed={burst} />}</AnimatePresence>
 
       {/* The heart. Outline always; the gold is a rectangle rising inside a
           heart-shaped clip, which is what gives it the liquid read. */}

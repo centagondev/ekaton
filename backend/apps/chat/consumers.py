@@ -622,7 +622,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "type": "reveal_success",
                     "message": "Identity reveal accepted.",
                     "user": {
-                        "id": str(other_user.id),
                         "full_name": other_user.full_name,
                         "batch": other_user.batch,
                         "profile_photo": (
