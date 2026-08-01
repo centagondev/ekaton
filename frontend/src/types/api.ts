@@ -36,7 +36,10 @@ export interface User {
   email: string;
   batch: string;
   gender: Gender;
-  /** URLField on the model — a URL string or null. No upload endpoint exists. */
+  /**
+   * URLField on the model — a URL string or null. Set by PATCH /users/me/,
+   * which uploads the file to Cloudinary and stores the hosted URL.
+   */
   profile_photo: string | null;
   is_available: boolean;
   is_verified: boolean;
@@ -82,7 +85,14 @@ export interface ReportPayload {
   room_id: string;
   reason: ReportReason;
   description?: string;
+  /** An already-hosted evidence link. Ignored by the server when a file is sent. */
   evidence_url?: string;
+  /**
+   * A screenshot to attach. The server uploads it to Cloudinary and stores the
+   * resulting URL as `evidence_url` — the model holds one image, not a list.
+   * Sending this switches the request to multipart.
+   */
+  evidence_image?: File | null;
 }
 
 /* -------------------------- chat websocket wire -------------------------- */

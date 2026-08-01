@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -867,12 +868,19 @@ export function AModal({
   const isMobile = useIsMobile();
   const [theme] = useAdminTheme();
 
+  // Callers pass `onClose={() => setOpen(false)}`, a fresh function per render.
+  // Held in a ref so the effect below hangs on `open` alone — as a dependency
+  // it re-parked the page scroll and re-bound the key listener on every
+  // unrelated re-render behind an open sheet.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Escape closes; page scroll is parked while any modal is up. Removing the
   // scrollbar shifts the desktop layout, so its width is compensated.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     const scrollbar = window.innerWidth - document.documentElement.clientWidth;
@@ -885,7 +893,7 @@ export function AModal({
       document.body.style.overflow = previousOverflow;
       document.body.style.paddingRight = previousPadding;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <AnimatePresence>

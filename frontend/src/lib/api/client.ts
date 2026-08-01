@@ -158,6 +158,31 @@ export async function apiDelete<T>(url: string): Promise<T> {
   return response.data.data;
 }
 
+/**
+ * Multipart variants, for the endpoints that take a file.
+ *
+ * The `Content-Type` override is load-bearing, not decoration: this instance
+ * defaults to `application/json`, and axios v1 answers a JSON content type by
+ * *serializing FormData into a JSON body* — the file would silently vanish.
+ * Naming multipart here stops that; the browser adapter then clears the header
+ * again so the boundary is generated for us.
+ */
+const FORM_HEADERS = { "Content-Type": "multipart/form-data" } as const;
+
+export async function apiPostForm<T>(url: string, form: FormData): Promise<T> {
+  const response = await instance.post<ApiEnvelope<T>>(url, form, {
+    headers: FORM_HEADERS,
+  });
+  return response.data.data;
+}
+
+export async function apiPatchForm<T>(url: string, form: FormData): Promise<T> {
+  const response = await instance.patch<ApiEnvelope<T>>(url, form, {
+    headers: FORM_HEADERS,
+  });
+  return response.data.data;
+}
+
 /** Full envelope, for the few places the server `message` matters verbatim. */
 export async function apiPostEnvelope<T>(
   url: string,

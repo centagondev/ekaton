@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { DURATION, EASE_OUT_EXPO, SPRING_GENTLE } from "@/lib/motion";
+import { EASE_OUT_EXPO, SPRING_GENTLE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -126,23 +126,53 @@ export function PookalamMandala({
 /* -------------------------------- 1. loader -------------------------------- */
 
 /**
+ * The choreography of the laying, as numbers rather than as a feeling.
+ *
+ * These are exported (through `ASSEMBLE_MS`) because the loader has to know
+ * when this finishes, and the two ways it could find that out are not equal.
+ * It used to wait for an `onAnimationComplete` on whichever petal happened to
+ * be drawn last — an event that never arrives at all if the tab is
+ * backgrounded while the page loads, and that quietly moves if a future edit
+ * reorders the rings. Deriving the moment from the same constants that
+ * schedule the petals means the sequence is synchronised by construction
+ * rather than by observation.
+ */
+const ASSEMBLE = {
+  /**
+   * Quiet beat before the first petal, so the seed is watched blooming alone
+   * rather than glimpsed under the wave already arriving on top of it.
+   */
+  start: 1.2,
+  /** How long the wave of petals takes to travel from centre to rim. */
+  spread: 2.4,
+  /**
+   * One petal's own unfurl.
+   *
+   * Deliberately not `DURATION.standard`. That is the product's general-purpose
+   * 300ms and belongs to buttons and panels — things that should get out of the
+   * way. A petal being laid is the thing being looked at, and at 300ms it read
+   * as switching on rather than opening.
+   */
+  petal: 0.5,
+} as const;
+
+/** Wall-clock length of the full assembly, first frame to last petal at rest. */
+export const ASSEMBLE_MS = Math.round(
+  (ASSEMBLE.start + ASSEMBLE.spread + ASSEMBLE.petal) * 1000,
+);
+
+/**
  * The assembling form.
  *
  * Beat 1 is the centre dot blooming. Beat 2 lays the rings from the inside out
  * — each petal scales and rotates into place, staggered within its ring so you
- * can see it being *laid* rather than switched on. `onLaid` fires when the last
- * petal lands, which is the loader's cue to begin the morph into the logo.
+ * can see it being *laid* rather than switched on. The whole thing takes
+ * `ASSEMBLE_MS`, which is what the loader times its next beat off.
  *
  * Reduced motion is handled by the caller: it renders `PookalamMandala`
  * instead, fully formed, and crossfades it.
  */
-export function PookalamAssemble({
-  className,
-  onLaid,
-}: {
-  className?: string;
-  onLaid?: () => void;
-}) {
+export function PookalamAssemble({ className }: { className?: string }) {
   // Inside-out: the visual order a pookalam is actually built in.
   const laying = [...RINGS].reverse();
   const total = laying.reduce((sum, ring) => sum + ring.count, 0);
@@ -158,7 +188,10 @@ export function PookalamAssemble({
         fill="url(#pk-glow)"
         initial={{ opacity: 0, scale: 0.2 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.2, ease: EASE_OUT_EXPO }}
+        /* Runs the length of beat 1 and into the laying, so the warmth is
+           still spreading outward as the first ring goes down rather than
+           having arrived before anything else has begun. */
+        transition={{ duration: 2, ease: EASE_OUT_EXPO }}
         style={{ transformOrigin: "100px 100px" }}
       />
       <defs>
@@ -168,7 +201,10 @@ export function PookalamAssemble({
         </radialGradient>
       </defs>
 
-      {/* Beat 1 — the seed. */}
+      {/* Beat 1 — the seed. The two circles are spaced far enough apart to be
+          read as two events: the gold bed is laid, and then the amber heart
+          is set into it. At the delays this used to carry (0.05 / 0.16) they
+          landed inside the same tenth of a second and read as one shape. */}
       <motion.circle
         cx="100"
         cy="100"
@@ -176,7 +212,7 @@ export function PookalamAssemble({
         fill="var(--color-festival-gold)"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        transition={{ ...SPRING_GENTLE, delay: 0.05 }}
+        transition={{ ...SPRING_GENTLE, delay: 0.2 }}
         style={{ transformOrigin: "100px 100px" }}
       />
       <motion.circle
@@ -186,7 +222,7 @@ export function PookalamAssemble({
         fill="var(--color-amber-deep)"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        transition={{ ...SPRING_GENTLE, delay: 0.16 }}
+        transition={{ ...SPRING_GENTLE, delay: 0.55 }}
         style={{ transformOrigin: "100px 100px" }}
       />
 
@@ -199,8 +235,7 @@ export function PookalamAssemble({
           into a heap at the centre. */}
       {laying.map((ring, ringIndex) =>
         ringPetals(ring).map((petal) => {
-          const delay = 0.3 + (laid++ / total) * 1.05;
-          const isLast = laid === total;
+          const delay = ASSEMBLE.start + (laid++ / total) * ASSEMBLE.spread;
           return (
             <g key={`${ringIndex}-${petal.key}`} transform={petal.transform}>
               <motion.path
@@ -212,8 +247,7 @@ export function PookalamAssemble({
                 style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}
                 initial={{ opacity: 0, scale: 0, rotate: -35 }}
                 animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                transition={{ delay, duration: DURATION.standard, ease: EASE_OUT_EXPO }}
-                onAnimationComplete={isLast ? onLaid : undefined}
+                transition={{ delay, duration: ASSEMBLE.petal, ease: EASE_OUT_EXPO }}
               />
             </g>
           );

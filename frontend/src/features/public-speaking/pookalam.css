@@ -150,19 +150,6 @@
   }
 }
 
-/** The live dot. The one thing on this page allowed to loop forever. */
-@keyframes pk-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: scale(2.1);
-    opacity: 0;
-  }
-}
-
 /**
  * Ambient petal drift. Transform-only, so it runs on the compositor; safe for
  * the reasons argued in the contract above, and rationed to three elements.
@@ -204,6 +191,13 @@
  *
  * `transform-box: view-box` pins the origin to the SVG's own centre, which is
  * what lets a ring group spin in place instead of orbiting the corner.
+ *
+ * The periods are set against the length of the loader's story, not chosen for
+ * their own sake: a quarter turn over the whole telling. They were nearly
+ * twice as fast when the story was half as long, and left as they were the
+ * flower would have swung through most of a half turn while its petals were
+ * still being laid onto it — a turning canvas rather than a slow ceremonial
+ * circle. Anyone retiming the story should retime these with it.
  */
 @keyframes pk-turn {
   to {
@@ -212,13 +206,13 @@
 }
 
 .pk-dance {
-  animation: pk-turn 14s linear infinite;
+  animation: pk-turn 26s linear infinite;
 }
 
 .pk-dance-ccw {
   transform-box: view-box;
   transform-origin: 50% 50%;
-  animation: pk-turn 22s linear infinite reverse;
+  animation: pk-turn 40s linear infinite reverse;
 }
 
 /** Nilavilakku flame — empty state only, and only while it is on screen. */
@@ -242,9 +236,6 @@
   animation: pk-shimmer 1.7s var(--pk-ease-out) infinite;
   animation-delay: var(--pk-delay, 0s);
 }
-.pk-breathe {
-  animation: pk-breathe 2.2s ease-out infinite;
-}
 .pk-flicker {
   transform-origin: 50% 100%;
   animation: pk-flicker 1.9s ease-in-out infinite;
@@ -257,9 +248,5 @@
   .pk-dance,
   .pk-dance-ccw {
     animation: none;
-  }
-  .pk-breathe {
-    animation: none;
-    opacity: 0.85;
   }
 }

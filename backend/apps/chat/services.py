@@ -1,11 +1,32 @@
+import logging
+
+from core.cloudinary import delete_image, upload_image
 from core.encryption import encrypt_message
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
+
+logger = logging.getLogger("chat")
+
+# Cloudinary folder for moderation evidence, kept separate from "profile" so
+# the two asset sets can be retained and purged on their own schedules.
+REPORT_EVIDENCE_FOLDER = "reports/evidence"
+
+
+class EvidenceUploadFailed(APIException):
+    """Cloudinary rejected or could not be reached for an evidence upload.
+
+    A 502 rather than a 400: nothing about the reporter's file is wrong, so
+    telling them to fix it would be a lie. Retrying is the right advice.
+    """
+
+    status_code = 502
+    default_detail = "Could not upload the evidence image. Please try again."
+    default_code = "evidence_upload_failed"
 
 
 def create_private_chat_room(user_one, user_two):
@@ -224,6 +245,35 @@ def respond_to_reveal_request(reveal_request, receiver, status):
         room.save(update_fields=["reveal_completed"])
 
     return reveal_request
+
+
+def upload_report_evidence(image):
+    """Upload a moderation evidence image to Cloudinary.
+
+    Deliberately outside `create_report`'s transaction: a network round trip
+    has no business holding a database lock. The caller is responsible for
+    calling `discard_report_evidence` if the report it belongs to is rejected.
+
+    Args:
+        image: The validated uploaded image file.
+
+    Returns:
+        A dict with the hosted `url` and its Cloudinary `public_id`.
+
+    Raises:
+        EvidenceUploadFailed: If the upload does not complete.
+    """
+    try:
+        return upload_image(image, REPORT_EVIDENCE_FOLDER)
+    except Exception:
+        logger.exception("Cloudinary upload failed for report evidence")
+        raise EvidenceUploadFailed()
+
+
+def discard_report_evidence(upload):
+    """Roll back an evidence upload whose report was never created."""
+    if upload:
+        delete_image(upload.get("public_id"))
 
 
 @transaction.atomic

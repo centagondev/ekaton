@@ -211,9 +211,11 @@ export function VoteButton({
             : `Vote for this response. ${message.upvote_count} ${message.upvote_count === 1 ? "vote" : "votes"}`
       }
       className={cn(
-        "relative flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5",
+        "relative flex shrink-0 items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 sm:gap-1.5 sm:px-3",
         // min-h keeps the tap target at 44px on touch without inflating it on
-        // desktop, where the pill would look chunky.
+        // desktop, where the pill would look chunky. The width is what gives on
+        // a phone instead: same target, ~14px less of it taken out of the line
+        // the response has to share with it.
         "min-h-11 sm:min-h-0",
         "transition-colors duration-200",
         inert

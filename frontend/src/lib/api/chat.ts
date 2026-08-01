@@ -1,4 +1,4 @@
-import { apiPost } from "./client";
+import { apiPost, apiPostForm } from "./client";
 import type { ReportPayload, ReportReason, StartChatResult } from "@/types/api";
 
 export const chatApi = {
@@ -12,8 +12,23 @@ export const chatApi = {
   end: (roomId: string): Promise<null> =>
     apiPost<null>("/chat/end/", { room_id: roomId }),
 
-  report: (payload: ReportPayload): Promise<null> =>
-    apiPost<null>("/chat/report/", payload),
+  /**
+   * Multipart only when a screenshot is attached — the JSON path is the one
+   * every existing caller already takes, and there is no reason to move a
+   * text-only report onto a heavier encoding.
+   */
+  report: ({ evidence_image, ...payload }: ReportPayload): Promise<null> => {
+    if (!evidence_image) return apiPost<null>("/chat/report/", payload);
+
+    const form = new FormData();
+    form.append("room_id", payload.room_id);
+    form.append("reason", payload.reason);
+    if (payload.description) form.append("description", payload.description);
+    if (payload.evidence_url) form.append("evidence_url", payload.evidence_url);
+    form.append("evidence_image", evidence_image);
+
+    return apiPostForm<null>("/chat/report/", form);
+  },
 };
 
 export const REPORT_REASONS: ReadonlyArray<{ value: ReportReason; label: string }> = [

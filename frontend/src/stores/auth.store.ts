@@ -20,6 +20,8 @@ interface AuthState {
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<User>;
+  /** Adopt a user the server just returned, without re-fetching /me/. */
+  setUser: (user: User) => void;
   clear: () => void;
 }
 
@@ -68,6 +70,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     setStoredUser(user);
     set({ user, isAuthenticated: true });
     return user;
+  },
+
+  /**
+   * For endpoints that already answer with the full, updated user — the
+   * profile photo PATCH being the one today. Re-fetching /me/ after those
+   * would only add a round trip and a second chance to fail.
+   */
+  setUser: (user) => {
+    setStoredUser(user);
+    set({ user, isAuthenticated: true });
   },
 
   clear: () => {
