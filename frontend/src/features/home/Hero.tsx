@@ -28,18 +28,18 @@ export function Hero({
       variants={staggerContainer}
       initial="hidden"
       animate="show"
-      className="flex w-full flex-col items-center justify-center px-4 py-10 text-center"
+      className="flex w-full flex-col items-center justify-center px-4 py-2 text-center max-[359px]:py-0 sm:py-10"
     >
       <motion.p
         variants={staggerItem}
-        className="mb-8 border-2 border-ink bg-surface px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.25em]"
+        className="mb-5 border-2 border-ink bg-surface px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.25em] max-[359px]:mb-3 sm:mb-8"
       >
         Anonymous &amp; Secure
       </motion.p>
 
       <motion.h1
         variants={staggerItem}
-        className="text-5xl font-black uppercase leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
+        className="text-[2.6rem] font-black uppercase leading-[1.02] tracking-tight max-[359px]:text-[2.05rem] sm:text-6xl lg:text-7xl"
       >
         Meet someone{" "}
         <span className="inline-block whitespace-nowrap bg-brand-yellow px-3 shadow-brutal-sm">
@@ -47,16 +47,19 @@ export function Hero({
         </span>
       </motion.h1>
 
-      <motion.p variants={staggerItem} className="mt-6 max-w-md text-base text-muted">
+      <motion.p
+        variants={staggerItem}
+        className="mt-4 max-w-md text-sm text-muted max-[359px]:mt-3 max-[359px]:text-xs sm:mt-6 sm:text-base"
+      >
         Real conversations with real students, completely anonymous. No profiles,
         no pressure, just connection.
       </motion.p>
 
-      <motion.div variants={staggerItem} className="mt-10">
+      <motion.div variants={staggerItem} className="mt-8 max-[359px]:mt-5 sm:mt-10">
         <button
           onClick={onStart}
           disabled={loading}
-          className="group inline-flex items-center gap-2 border-2 border-ink bg-brand-yellow px-10 py-4 text-base font-extrabold uppercase tracking-wide text-ink shadow-brutal transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm active:translate-x-[5px] active:translate-y-[5px] active:shadow-none disabled:opacity-60"
+          className="group inline-flex items-center gap-2 border-2 border-ink bg-brand-yellow px-8 py-3.5 text-base font-extrabold uppercase tracking-wide text-ink shadow-brutal transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm active:translate-x-[5px] active:translate-y-[5px] active:shadow-none max-[359px]:px-6 max-[359px]:py-3 disabled:opacity-60 sm:px-10 sm:py-4"
         >
           {loading ? "Starting…" : "Start chat"}
           <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
@@ -66,7 +69,7 @@ export function Hero({
       {onlineCount !== null && (
         <motion.p
           variants={staggerItem}
-          className="mt-6 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.2em]"
+          className="mt-5 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.2em] max-[359px]:mt-4 sm:mt-6"
           aria-live="polite"
         >
           <span className="relative flex size-2">
@@ -79,14 +82,22 @@ export function Hero({
 
       <motion.ul
         variants={staggerItem}
-        className="mt-12 flex flex-col items-center gap-3 sm:mt-14 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-3"
+        /* items-start below sm so all three icons share one left edge — with
+           items-center the short third line floated inward while the two wrapped
+           ones stayed left, which read as a mistake. The list as a whole is
+           still centred, by the section. */
+        className="mt-8 flex flex-col items-start gap-2.5 max-[359px]:mt-5 max-[359px]:gap-2 sm:mt-14 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-x-8 sm:gap-y-3"
       >
         {POINTS.map((point) => (
+          /* Left-aligned below sm: these lines are wider than a 375px phone and
+             have to wrap, and centred wrap left the icon stranded on its own at
+             the far edge. From sm they sit on one line each, where start and
+             centre look the same. */
           <li
             key={point.text}
-            className="flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted"
+            className="flex items-start gap-2 text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted sm:items-center sm:text-center"
           >
-            <point.icon className="size-3.5 shrink-0 text-ink" />
+            <point.icon className="mt-0.5 size-3.5 shrink-0 text-ink sm:mt-0" />
             {point.text}
           </li>
         ))}

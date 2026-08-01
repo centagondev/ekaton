@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { toast } from "sonner";
-import {
-  CheckCircle2,
-  Heart,
-  MessagesSquare,
-  SendHorizonal,
-  Trophy,
-  VenetianMask,
-} from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Logo } from "@/components/Logo";
-import { Modal } from "@/components/ui/Modal";
-import { FullPageLoader } from "@/components/ui/Spinner";
+import { ArrowLeft, CheckCircle2, SendHorizonal, Trophy, VenetianMask, WifiOff } from "lucide-react";
+import { LogoMark } from "@/components/Logo";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { parseApiError } from "@/lib/errors";
-import { cn, formatTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import {
+  DURATION,
+  EASE_OUT_EXPO,
+  listContainer,
+  useMotionPrefs,
+} from "@/lib/motion";
 import {
   COARSE_POINTER,
   chatSurfaceStyle,
@@ -25,349 +22,167 @@ import {
   useChatViewport,
 } from "@/lib/useChatViewport";
 import { publicSpeakingApi, type SpeakingMessage } from "./api";
+import { byNewest } from "./ordering";
 import { useSpeakingSocket } from "./useSpeakingSocket";
+import { BackgroundStage } from "./components/BackgroundStage";
+import { Nilavilakku, PookalamMandala } from "./components/Pookalam";
+import { PookalamLoader, StorySkeleton } from "./components/PookalamLoader";
+import { RankingModal } from "./components/RankingModal";
+import { StoryCard } from "./components/StoryCard";
+import { SubmittedDialog } from "./components/SubmittedDialog";
 import onamBanner from "./assets/onam-banner.png";
+import "./pookalam.css";
 
 const MAX_LENGTH = 1000;
-const LEADERBOARD_SIZE = 10;
+/** Where the counter starts mattering. */
+const COUNTER_FROM = 800;
+
+/** How far from the top a reader can be and still be auto-followed to a new story. */
+const FOLLOW_THRESHOLD_PX = 120;
+
+/** How long a newly arrived card keeps its highlight wash. */
+const FRESH_MS = 2400;
+
+/** Safety valve on the in-flight vote lock, if an ack never arrives. */
+const VOTE_TIMEOUT_MS = 4000;
+
+/** Socket vote frames are coalesced into one render per window. */
+const VOTE_BATCH_MS = 120;
+
+/** The banner's intrinsic size — supplied so it can never shift the layout. */
+const BANNER = { width: 2172, height: 324 };
+
+/* --------------------------------- header --------------------------------- */
 
 /**
- * Reddit ranking, applied client-side too.
+ * One pill recipe, used by every control in the bar.
  *
- * The server returns history already ranked, but votes and new messages arrive
- * over the socket afterwards; re-sorting here keeps the list correct without a
- * refetch per vote.
+ * The previous version had four different heights (44 / 26 / 26 / 34px) and
+ * four different border alphas (/10, /12, /25, /30) sitting on one line, which
+ * is what made the cluster read as assorted rather than as a set. Height,
+ * radius, border and label treatment are now decided once, here.
+ *
+ * `h-11` below `sm` is the 44px touch target; `sm:h-9` is the slimmer desktop
+ * proportion, where a 44px pill in a 64px bar looks heavy.
  */
-function rank(messages: SpeakingMessage[]): SpeakingMessage[] {
-  return [...messages].sort((a, b) => {
-    if (b.upvote_count !== a.upvote_count) return b.upvote_count - a.upvote_count;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-}
+const PILL = "h-11 sm:h-9 shrink-0 rounded-full border border-ink-warm/12 shadow-rest";
 
-/* --------------------------------- avatar --------------------------------- */
+/** The label recipe already established across this page. */
+const PILL_LABEL = "font-mono text-[10px] font-bold uppercase tracking-[0.16em]";
 
-const AVATAR_FILLS = ["bg-brand-yellow", "bg-brand-lime", "bg-brand-lavender"] as const;
-
-/**
- * Deterministic square avatar: same anonymous name → same colour everywhere it
- * appears, so a voice stays recognisable across the feed and the leaderboard.
- */
-function avatarFill(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return AVATAR_FILLS[Math.abs(hash) % AVATAR_FILLS.length];
-}
-
-function AnonAvatar({ name, className }: { name: string; className?: string }) {
+/** Connection state, visible in every state of the page rather than only inside
+ *  the composer — which is where it used to live, and therefore vanished the
+ *  moment you posted and spent the rest of your session voting blind. */
+function ConnectionPill({ connected }: { connected: boolean }) {
   return (
     <span
-      aria-hidden="true"
       className={cn(
-        "flex size-9 shrink-0 select-none items-center justify-center border-2 border-ink text-sm font-black uppercase",
-        avatarFill(name),
-        className,
+        PILL,
+        PILL_LABEL,
+        "flex items-center gap-1.5 px-3",
+        connected
+          ? "border-leaf/25 bg-leaf/10 text-leaf-deep"
+          : "border-vermilion/30 bg-vermilion/10 text-vermilion-deep",
       )}
+      role="status"
     >
-      {name.charAt(0)}
+      {connected ? (
+        <>
+          {/* The only thing on this page permitted to loop forever. Leaf, not
+              vermilion — vermilion is reserved for the two states that are
+              genuinely wrong: a dropped socket, and the character counter
+              running out. */}
+          <span className="relative flex size-1.5 shrink-0">
+            <span className="pk-breathe absolute inline-flex size-full rounded-full bg-leaf" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-leaf" />
+          </span>
+          <span className="hidden sm:inline">Live</span>
+        </>
+      ) : (
+        <>
+          <WifiOff className="size-3 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">Reconnecting</span>
+        </>
+      )}
     </span>
   );
 }
 
-/* ------------------------------- vote button ------------------------------- */
-
-/** Brutalist confetti: four little squares thrown from the heart on vote. */
-const BURST_VECTORS = [
-  { x: -14, y: -12 },
-  { x: 12, y: -16 },
-  { x: -10, y: 10 },
-  { x: 15, y: 8 },
-] as const;
+/* ------------------------------- empty state ------------------------------- */
 
 /**
- * Horizontal heart chip: ❤ count, side by side.
- *
- * A heart, not an arrow — the prompt on stage is "vote for the most relatable
- * experience", and relating is what a heart says.
- *
- * A Reddit-style toggle: tap fills it yellow, tap again empties it. Only your
- * own story is inert (with a tooltip saying why). Votes are painted
- * optimistically by the parent, so fill, pop, burst and the rolling count all
- * play the instant of the tap — in either direction.
+ * Nothing has been said yet, so the lamp is unlit and the pookalam is only
+ * beginning. It lights on mount — once — which makes the empty state the first
+ * appearance of the motif rather than an apology for missing content.
  */
-function VoteButton({
-  message,
-  onUpvote,
-  className,
-}: {
-  message: SpeakingMessage;
-  onUpvote: (id: string) => void;
-  className?: string;
-}) {
-  const [burst, setBurst] = useState(0);
-  const inert = message.is_own;
+function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean }) {
+  const { reduced, spring } = useMotionPrefs();
+  const [lit, setLit] = useState(reduced);
+
+  useEffect(() => {
+    if (reduced) return;
+    const timer = window.setTimeout(() => setLit(true), 900);
+    return () => window.clearTimeout(timer);
+  }, [reduced]);
 
   return (
-    <motion.button
-      type="button"
-      whileTap={inert ? undefined : { scale: 0.85 }}
-      onClick={(event) => {
-        // Cards can have their own click behaviour (leaderboard expand);
-        // voting must never trigger it.
-        event.stopPropagation();
-        if (inert) return;
-        // The burst celebrates adding a vote; removing one plays no confetti.
-        if (!message.has_upvoted) setBurst((n) => n + 1);
-        onUpvote(message.id);
-      }}
-      aria-pressed={message.has_upvoted}
-      aria-disabled={inert || undefined}
-      title={message.is_own ? "You can't vote for your own response." : undefined}
-      aria-label={
-        message.is_own
-          ? `Your response (${message.upvote_count} votes)`
-          : message.has_upvoted
-            ? `Remove your vote (${message.upvote_count})`
-            : `Vote for this story (${message.upvote_count})`
-      }
-      className={cn(
-        "relative flex shrink-0 items-center gap-1.5 rounded-sm border-2 border-ink px-2.5 py-1 transition-all duration-150",
-        message.is_own
-          ? "cursor-not-allowed bg-raised opacity-60"
-          : message.has_upvoted
-            ? "bg-brand-yellow shadow-brutal-sm hover:-translate-y-[1px]"
-            : "bg-surface hover:-translate-y-[1px] hover:bg-raised hover:shadow-brutal-sm",
-        className,
-      )}
-    >
-      {/* Burst — keyed so each vote replays it, gone in ~350ms. */}
-      <AnimatePresence>
-        {burst > 0 && (
-          <motion.span
-            key={burst}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2 top-1/2"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-          >
-            {BURST_VECTORS.map((vector, index) => (
-              <motion.span
-                key={index}
-                className="absolute size-1.5 bg-brand-yellow ring-1 ring-ink"
-                initial={{ x: 0, y: 0, scale: 1 }}
-                animate={{ x: vector.x, y: vector.y, scale: 0 }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
-              />
-            ))}
-          </motion.span>
-        )}
-      </AnimatePresence>
-
-      {/* Keyed on voted state: filling pops in large, emptying shrinks back. */}
-      <motion.span
-        key={`heart-${message.has_upvoted}`}
-        initial={message.has_upvoted ? { scale: 1.4 } : { scale: 0.8 }}
-        animate={{ scale: 1 }}
-        transition={{ type: "spring", stiffness: 520, damping: 20 }}
-      >
-        <Heart
-          className={cn(
-            "size-3.5 transition-colors duration-150",
-            message.has_upvoted && "fill-ink stroke-ink",
-          )}
-        />
-      </motion.span>
-
-      {/* Rolling counter: old value slides up and out, new one slides in. */}
-      <span className="relative block h-4 overflow-hidden">
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={message.upvote_count}
-            initial={{ y: 12, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -12, opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="block font-mono text-[11px] font-black leading-4 tabular-nums"
-          >
-            {message.upvote_count}
-          </motion.span>
-        </AnimatePresence>
-      </span>
-    </motion.button>
-  );
-}
-
-/* ------------------------------- leaderboard ------------------------------- */
-
-const MEDALS = ["🥇", "🥈", "🥉"] as const;
-
-/**
- * One ranked story. The MESSAGE is the hero: two clamped lines with a fade,
- * tap to expand; rank, votes and the anonymous name are quiet metadata.
- */
-function TopStoryCard({
-  message,
-  index,
-  onUpvote,
-}: {
-  message: SpeakingMessage;
-  index: number;
-  onUpvote: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  // Rough two-line capacity; below this there is nothing to fade or expand.
-  const clampable = message.content.length > 90;
-
-  return (
-    <motion.li
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-      className="rounded-sm border-2 border-ink bg-surface transition-all hover:-translate-y-[1px] hover:shadow-brutal-sm"
-    >
-      <div className="p-4">
-        {/* The story area is the expand control; the vote chip below stays a
-            sibling, never a nested button. */}
-        <button
-          type="button"
-          onClick={() => clampable && setExpanded((current) => !current)}
-          aria-expanded={clampable ? expanded : undefined}
-          className="block w-full text-left"
+    <div className="flex flex-col items-center py-12 text-center sm:py-16">
+      <div className="relative mb-8 flex h-32 w-52 items-end justify-center">
+        <motion.div
+          className="absolute bottom-0 left-1/2 size-40 -translate-x-1/2"
+          initial={reduced ? false : { scale: 0.4, opacity: 0, rotate: -40 }}
+          animate={{ scale: 1, opacity: 0.9, rotate: 0 }}
+          transition={{ duration: 1.4, ease: EASE_OUT_EXPO }}
         >
-          {/* Rank — small inline badge, not a block. */}
-          <p className="mb-1.5 font-mono text-[11px] font-black tracking-[0.1em]">
-            {MEDALS[index] ? `${MEDALS[index]} ` : ""}#{index + 1}
-          </p>
+          <PookalamMandala className="size-full" />
+        </motion.div>
 
-          {/* The story itself, large. */}
-          <div className="relative">
-            <motion.p
-              layout="position"
-              className={cn(
-                "break-words text-[15px] font-medium leading-relaxed",
-                !expanded && "line-clamp-2",
-              )}
-            >
-              {message.content}
-            </motion.p>
-            {/* The second line fades out while clamped, promising more below. */}
-            {clampable && !expanded && (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-surface to-transparent"
-              />
-            )}
-          </div>
-        </button>
-
-        {/* Metadata row: votes first, identity last and tiny. */}
-        <div className="mt-3 flex items-center gap-3">
-          <VoteButton message={message} onUpvote={onUpvote} />
-          <span className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.14em] text-muted">
-            {message.display_name} · {formatTime(message.created_at)}
-          </span>
+        {/* No ambient float. An `Infinity` repeat is a JavaScript animation
+            that never stops paying for itself; the flame's CSS flicker carries
+            the life here on its own. */}
+        <div className="relative z-10 -mb-2">
+          <Nilavilakku lit={lit} className="h-28" />
         </div>
       </div>
-    </motion.li>
-  );
-}
 
-/**
- * Top ten, in a modal behind the 🏆 button.
- *
- * Derived from the same ranked array the feed renders, so the existing
- * `upvote` socket frames keep it live with no extra request — and `layout` on
- * each card animates rank changes as votes land while it is open.
- */
-function LeaderboardModal({
-  open,
-  onClose,
-  messages,
-  onUpvote,
-}: {
-  open: boolean;
-  onClose: () => void;
-  messages: SpeakingMessage[];
-  onUpvote: (id: string) => void;
-}) {
-  const top = messages.filter((m) => m.upvote_count > 0).slice(0, LEADERBOARD_SIZE);
-
-  return (
-    <Modal open={open} onClose={onClose} title="🏆 Top Stories">
-      <p className="-mt-2 mb-5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
-        Most upvoted experiences today.
+      <h2 className="font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm">
+        The celebration starts with you
+      </h2>
+      <p className="mx-auto mt-2.5 max-w-sm text-[15px] leading-[1.55] text-ink-soft">
+        {canPost
+          ? "No name suggestions yet — share the first one and get the pookalam growing."
+          : "No responses to show right now. Yours will appear here as the room fills up."}
       </p>
-      {top.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted">
-          No votes yet — heart the stories you relate to.
-        </p>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          <AnimatePresence initial={false}>
-            {top.map((message, index) => (
-              <TopStoryCard
-                key={message.id}
-                message={message}
-                index={index}
-                onUpvote={onUpvote}
-              />
-            ))}
-          </AnimatePresence>
-        </ol>
+
+      {/* Offered only when there is actually a composer to send them to. */}
+      {canPost && (
+        <motion.button
+          type="button"
+          onClick={onStart}
+          whileTap={reduced ? undefined : { scale: 0.96 }}
+          transition={spring}
+          className={cn(
+            "group relative mt-7 flex items-center gap-2 rounded-full border border-amber-deep",
+            "bg-festival-gold px-7 py-3.5 text-sm font-bold text-ink-warm shadow-rest",
+            "transition-transform duration-200 hover:-translate-y-0.5",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
+          />
+          <span className="relative">Share the first response</span>
+        </motion.button>
       )}
-    </Modal>
-  );
-}
-
-/* --------------------------------- card ----------------------------------- */
-
-function StoryCard({
-  message,
-  onUpvote,
-}: {
-  message: SpeakingMessage;
-  onUpvote: (id: string) => void;
-}) {
-  return (
-    <motion.li
-      layout="position"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-      className={cn(
-        "group border-2 border-ink bg-surface p-4 transition-all sm:p-5",
-        // Hover elevation, brutalist: the card lifts onto a hard shadow.
-        "hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-brutal-sm",
-      )}
-    >
-      <div className="flex items-center gap-3">
-        <AnonAvatar name={message.display_name} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[11px] font-black uppercase tracking-[0.14em]">
-            {message.display_name}
-          </p>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-muted">
-            {formatTime(message.created_at)}
-          </p>
-        </div>
-        <VoteButton message={message} onUpvote={onUpvote} />
-      </div>
-
-      <p className="mt-3 break-words text-[15px] leading-relaxed">
-        {message.content}
-      </p>
-    </motion.li>
+    </div>
   );
 }
 
 /* ---------------------------------- page ---------------------------------- */
 
 export function PublicSpeakingPage() {
+  const { reduced, spring, snappy } = useMotionPrefs();
+
   const [messages, setMessages] = useState<SpeakingMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [displayName, setDisplayName] = useState<string | null>(null);
@@ -377,11 +192,32 @@ export function PublicSpeakingPage() {
   // so the notice can thank them instead of confirming a submission they made
   // in some earlier session.
   const [postedEarlier, setPostedEarlier] = useState(false);
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingStopRef = useRef<number | undefined>(undefined);
   const typingSentRef = useRef(false);
+
+  /* ------------------------------ presentation ----------------------------- */
+
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [submittedOpen, setSubmittedOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [sending, setSending] = useState(false);
+  /** Ids of cards that arrived over the socket a moment ago. */
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
+  /** Ids with a vote in flight — the button is inert until the server answers. */
+  const [pendingVotes, setPendingVotes] = useState<ReadonlySet<string>>(() => new Set());
+  /** Bumped per message when the server rejects a vote, to trigger the shake. */
+  const [rejections, setRejections] = useState<Record<string, number>>({});
+  /**
+   * Announcements for screen readers.
+   *
+   * Deliberately only the acting user's own results. Putting `aria-live` on
+   * every card's count, as a literal reading of the spec would, turns a busy
+   * room into a hundred unsolicited announcements a minute.
+   */
+  const [announcement, setAnnouncement] = useState("");
 
   /**
    * The database is the source of truth for whether a discussion is running.
@@ -414,7 +250,12 @@ export function PublicSpeakingPage() {
       // offering an input the backend would reject.
       setHasPosted(result.has_posted);
       setPostedEarlier(result.has_posted);
-      setMessages(rank(await publicSpeakingApi.messages()));
+      setHistoryLoading(true);
+      try {
+        setMessages(byNewest(await publicSpeakingApi.messages()));
+      } finally {
+        setHistoryLoading(false);
+      }
     },
     onError: (error) => toast.error(parseApiError(error).message),
   });
@@ -450,34 +291,142 @@ export function PublicSpeakingPage() {
     setDisplayName(state.display_name);
     setHasPosted(state.already_posted);
     setPostedEarlier(state.already_posted);
-    void publicSpeakingApi.messages().then((rows) => setMessages(rank(rows)));
+    setHistoryLoading(true);
+    void publicSpeakingApi
+      .messages()
+      .then((rows) => setMessages(byNewest(rows)))
+      // Without this the rejection was unhandled and the page fell straight
+      // through to "No responses yet" — telling someone the room is empty
+      // when the truth is that we could not read it.
+      .catch((error) => toast.error(parseApiError(error).message))
+      .finally(() => setHistoryLoading(false));
   }, [stateQuery.data]);
 
+  /* ------------------------------ vote plumbing ---------------------------- */
+
+  const voteTimers = useRef(new Map<string, number>());
+  /**
+   * The in-flight set, mirrored into a ref.
+   *
+   * `vote` must not change identity when a vote starts or finishes: it is the
+   * `onUpvote` prop on every card, and a new function each time would defeat
+   * the memoisation entirely and re-render the whole wall on every tap — the
+   * exact cost the memo was added to remove.
+   */
+  const pendingRef = useRef(pendingVotes);
+  useEffect(() => {
+    pendingRef.current = pendingVotes;
+  }, [pendingVotes]);
+
+  /** Kept above the socket handlers, which restore it when a post is refused. */
+  const lastDraft = useRef("");
+
+  const clearPending = useCallback((messageId: string) => {
+    const timer = voteTimers.current.get(messageId);
+    if (timer) {
+      window.clearTimeout(timer);
+      voteTimers.current.delete(messageId);
+    }
+    setPendingVotes((current) => {
+      if (!current.has(messageId)) return current;
+      const next = new Set(current);
+      next.delete(messageId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const timers = voteTimers.current;
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
   /* -------------------------------- socket -------------------------------- */
+
+  const freshTimers = useRef(new Map<string, number>());
 
   const handleMessage = useCallback((incoming: SpeakingMessage) => {
     setMessages((current) =>
       current.some((message) => message.id === incoming.id)
         ? current
-        : rank([...current, incoming]),
+        : byNewest([...current, incoming]),
     );
+
+    // A card that landed while you were watching announces itself, once.
+    setFresh((current) => new Set(current).add(incoming.id));
+    const timer = window.setTimeout(() => {
+      setFresh((current) => {
+        if (!current.has(incoming.id)) return current;
+        const next = new Set(current);
+        next.delete(incoming.id);
+        return next;
+      });
+      freshTimers.current.delete(incoming.id);
+    }, FRESH_MS);
+    freshTimers.current.set(incoming.id, timer);
   }, []);
 
-  const handleUpvote = useCallback((messageId: string, count: number, mine?: boolean) => {
-    setMessages((current) =>
-      rank(
-        current.map((message) =>
-          message.id === messageId
-            ? {
-                ...message,
-                upvote_count: count,
-                has_upvoted: mine ?? message.has_upvoted,
-              }
-            : message,
-        ),
-      ),
-    );
+  useEffect(() => {
+    const timers = freshTimers.current;
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
+
+  /**
+   * A vote changes a count, not a position — the feed is in time order, so
+   * there is nothing to re-sort. The ranking modal sorts its own copy.
+   *
+   * Frames are coalesced into one state write per 120ms window. A popular
+   * response during a live talk produces bursts of `upvote` frames, and
+   * applying each one separately meant a render per frame; last-write-wins per
+   * message id is correct here because every frame carries the server's
+   * absolute count rather than a delta.
+   */
+  const voteQueue = useRef(new Map<string, { count: number; mine?: boolean }>());
+  const voteFlush = useRef<number | undefined>(undefined);
+
+  const handleUpvote = useCallback(
+    (messageId: string, count: number, mine?: boolean) => {
+      // `mine` only ever arrives on the voter's own ack; a broadcast landing
+      // afterwards must not erase it.
+      const queued = voteQueue.current.get(messageId);
+      voteQueue.current.set(messageId, { count, mine: mine ?? queued?.mine });
+
+      if (mine !== undefined) clearPending(messageId);
+
+      if (voteFlush.current !== undefined) return;
+      voteFlush.current = window.setTimeout(() => {
+        voteFlush.current = undefined;
+        const batch = voteQueue.current;
+        voteQueue.current = new Map();
+
+        setMessages((current) =>
+          current.map((message) => {
+            const patch = batch.get(message.id);
+            return patch
+              ? {
+                  ...message,
+                  upvote_count: patch.count,
+                  has_upvoted: patch.mine ?? message.has_upvoted,
+                }
+              : message;
+          }),
+        );
+      }, VOTE_BATCH_MS);
+    },
+    [clearPending],
+  );
+
+  useEffect(
+    () => () => {
+      if (voteFlush.current !== undefined) window.clearTimeout(voteFlush.current);
+    },
+    [],
+  );
 
   const { status, typingNames, sendMessage, sendUpvote, sendTyping } = useSpeakingSocket({
     enabled: joined,
@@ -485,6 +434,8 @@ export function PublicSpeakingPage() {
     onUpvote: handleUpvote,
     onPosted: useCallback((messageId: string | undefined) => {
       setHasPosted(true);
+      setSending(false);
+      setSubmittedOpen(true);
       // Mark the just-broadcast message as ours so the no-self-vote rule
       // applies to it immediately; a refresh gets the same flag from the API.
       if (messageId) {
@@ -496,6 +447,7 @@ export function PublicSpeakingPage() {
       }
     }, []),
     onError: useCallback((message: string, alreadyPosted: boolean) => {
+      setSending(false);
       // A rejection that means "you already answered" locks the composer in
       // place — no refresh — so a stale tab stops offering an input the server
       // will never accept.
@@ -505,31 +457,43 @@ export function PublicSpeakingPage() {
         toast.error("You have already submitted your response.");
         return;
       }
+      // Hand the words back. The draft is cleared optimistically on send, and
+      // losing a thousand characters to a rate limit is not a cost anyone
+      // should pay for an animation.
+      setDraft((current) => current || lastDraft.current);
       toast.error(message);
     }, []),
     // An optimistic vote the server refused: land the UI back on exactly what
     // the database holds, then explain.
     onVoteError: useCallback(
       (messageId: string, count: number, hasUpvoted: boolean, message: string) => {
+        clearPending(messageId);
+        voteQueue.current.delete(messageId);
         setMessages((current) =>
-          rank(
-            current.map((item) =>
-              item.id === messageId
-                ? { ...item, upvote_count: count, has_upvoted: hasUpvoted }
-                : item,
-            ),
+          current.map((item) =>
+            item.id === messageId
+              ? { ...item, upvote_count: count, has_upvoted: hasUpvoted }
+              : item,
           ),
         );
+        setRejections((current) => ({
+          ...current,
+          [messageId]: (current[messageId] ?? 0) + 1,
+        }));
         toast.error(message);
       },
-      [],
+      [clearPending],
     ),
   });
+
+  const connected = status === "connected";
 
   // Optimistic voting: paint the vote before the network answers. Guards run
   // against a ref so the callback never goes stale mid-render.
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const vote = useCallback(
     (messageId: string) => {
@@ -544,37 +508,98 @@ export function PublicSpeakingPage() {
         return;
       }
 
+      // One vote in flight per message. The lock is released by the ack, the
+      // error frame, or the timeout below — never left hanging.
+      if (pendingRef.current.has(messageId)) return;
+      setPendingVotes((current) => new Set(current).add(messageId));
+      const timer = window.setTimeout(() => clearPending(messageId), VOTE_TIMEOUT_MS);
+      voteTimers.current.set(messageId, timer);
+
+      // A queued frame for this message is now stale — the local truth below
+      // supersedes it until the server answers.
+      voteQueue.current.delete(messageId);
+
       // Toggle, Reddit-style: painted optimistically in whichever direction,
       // reconciled by upvote_ack, rolled back by upvote_error.
       navigator.vibrate?.(target.has_upvoted ? 8 : 15);
+      const adding = !target.has_upvoted;
       setMessages((current) =>
-        rank(
-          current.map((item) =>
-            item.id === messageId
-              ? {
-                  ...item,
-                  has_upvoted: !item.has_upvoted,
-                  upvote_count: item.upvote_count + (item.has_upvoted ? -1 : 1),
-                }
-              : item,
-          ),
+        current.map((item) =>
+          item.id === messageId
+            ? {
+                ...item,
+                has_upvoted: !item.has_upvoted,
+                upvote_count: item.upvote_count + (item.has_upvoted ? -1 : 1),
+              }
+            : item,
         ),
+      );
+      setAnnouncement(
+        `${adding ? "Vote added" : "Vote removed"}. ${
+          target.upvote_count + (adding ? 1 : -1)
+        } votes.`,
       );
       sendUpvote(messageId);
     },
-    [sendUpvote, status],
+    [sendUpvote, status, clearPending],
   );
 
   useChatViewport();
 
-  // Ranking means a new message can land anywhere, so jumping to the top on
-  // every arrival yanks a reader off what they were reading to show them
-  // nothing. Only follow when the top card actually changed.
+  /* -------------------------------- scrolling ------------------------------ */
+
+  // Newest-first means every arrival changes the head, so following it blindly
+  // would yank anyone who had scrolled down to read. Follow only when they are
+  // already parked at the top — the same courtesy a chat log extends to its
+  // bottom edge.
   const headId = messages[0]?.id;
   useEffect(() => {
     if (!headId) return;
-    listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [headId]);
+    const list = listRef.current;
+    if (!list || list.scrollTop > FOLLOW_THRESHOLD_PX) return;
+    list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+  }, [headId, reduced]);
+
+  /**
+   * Drives the header's shadow and its 64 → 56px shrink.
+   *
+   * The window on this route never scrolls — the shell is pinned to the visual
+   * viewport and only the feed moves — so this listens to the feed instead.
+   * Coalesced to one read per frame, and `passive` so it can never delay a
+   * scroll.
+   *
+   * The two thresholds are not a rounding detail, they are the whole reason
+   * this works: shrinking the header makes the scroller 8px taller, which can
+   * push `scrollTop` back under a single threshold and un-shrink it, which
+   * makes it shorter again — a header that flickers forever at one scroll
+   * position. Entering at 32px and leaving at 8px puts that feedback loop out
+   * of reach.
+   */
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      const y = root.scrollTop;
+      setScrolled((current) => (current ? y > 8 : y > 32));
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(read);
+    };
+
+    read();
+    root.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      root.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+    // Re-attaches once the loader lifts and this tree actually mounts — while
+    // the query is pending `listRef` is still null, because the loader is what
+    // is on screen.
+  }, [joined, historyLoading]);
 
   /* -------------------------------- actions -------------------------------- */
 
@@ -595,7 +620,9 @@ export function PublicSpeakingPage() {
     event?.preventDefault();
     const text = draft.trim();
     // The guard is a courtesy; the server rejects a second post regardless.
-    if (!text || status !== "connected" || hasPosted) return;
+    if (!text || status !== "connected" || hasPosted || sending) return;
+    lastDraft.current = text;
+    setSending(true);
     sendMessage(text);
     setDraft("");
     window.clearTimeout(typingStopRef.current);
@@ -605,6 +632,14 @@ export function PublicSpeakingPage() {
     }
   };
 
+  // If neither `posted` nor `error` ever arrives, the button must not stay
+  // spinning for the rest of the session.
+  useEffect(() => {
+    if (!sending) return;
+    const timer = window.setTimeout(() => setSending(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [sending]);
+
   useEffect(() => () => window.clearTimeout(typingStopRef.current), []);
 
   const typingLabel = useMemo(() => {
@@ -613,9 +648,26 @@ export function PublicSpeakingPage() {
     return `${typingNames.length} people are typing…`;
   }, [typingNames]);
 
+  const focusComposer = useCallback(() => {
+    inputRef.current?.focus();
+    inputRef.current?.scrollIntoView({ block: "nearest" });
+  }, []);
+
   /* -------------------------------- render -------------------------------- */
 
-  if (discussionQuery.isPending) return <FullPageLoader />;
+  /**
+   * The loader is a fallback, never a gate.
+   *
+   * It shows for exactly as long as the query takes and not one millisecond
+   * longer. An earlier version also waited for the animation's own last beat,
+   * which meant a page sitting behind a flower for up to 2.6s — on a database
+   * that already costs ~80ms a query from here, and ~730ms on a cold
+   * connection. Ceremony does not get to bill the user for time the data
+   * wasn't taking anyway; the story simply plays as far as it gets.
+   */
+  if (discussionQuery.isPending) {
+    return <PookalamLoader />;
+  }
 
   if (noDiscussion) {
     return (
@@ -642,230 +694,550 @@ export function PublicSpeakingPage() {
   }
 
   const discussion = discussionQuery.data;
+  const remaining = MAX_LENGTH - draft.length;
 
   return (
-    <div
-      className="fixed inset-x-0 flex flex-col overflow-hidden bg-canvas"
-      style={chatSurfaceStyle}
-    >
-      {/* -------------------------------- header ------------------------------- */}
-      <header
-        className="shrink-0 border-b-2 border-ink bg-surface"
-        style={{
-          paddingLeft: "env(safe-area-inset-left)",
-          paddingRight: "env(safe-area-inset-right)",
-        }}
+    /**
+     * `reducedMotion="user"` is the belt to the braces of `useMotionPrefs`.
+     *
+     * Explicit gating covers the animations this code writes; it cannot cover
+     * `layout`, which Framer drives internally and which otherwise slides
+     * every card on the wall regardless of the visitor's preference. With this
+     * set, Framer drops transform animations of its own accord and keeps
+     * opacity — exactly the reduced-motion contract — for everything in the
+     * subtree, including anything added later that forgets to ask.
+     */
+    <MotionConfig reducedMotion="user">
+      <div
+        className="theme-pookalam fixed inset-x-0 flex flex-col overflow-hidden"
+        style={chatSurfaceStyle}
       >
-        {/* Top row: brand left, identity + leaderboard right. */}
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-2.5 sm:px-6">
-          {/* This page sits outside AppLayout, so BottomNav is not mounted —
-              without this the only interactive page has no way back. */}
-          <Link to="/home" aria-label="Back to Ekaton home" className="shrink-0">
-            <Logo />
-          </Link>
-          <div className="ml-auto flex min-w-0 items-center gap-2">
-            {joined && (
-              <span className="flex min-w-0 items-center gap-1.5 border-2 border-ink bg-brand-lavender px-2 py-1">
-                <VenetianMask className="size-3.5 shrink-0" />
-                <span className="hidden truncate font-mono text-[10px] font-black uppercase tracking-[0.14em] sm:inline">
-                  {displayName}
-                </span>
-              </span>
-            )}
-            {/* Desktop leaderboard trigger — the mobile one floats over the feed. */}
-            <button
-              type="button"
-              onClick={() => setLeaderboardOpen(true)}
-              className="hidden items-center gap-1.5 border-2 border-ink bg-surface px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.14em] shadow-brutal-sm transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none sm:flex"
-            >
-              <Trophy className="size-3.5" /> Top 10
-            </button>
-          </div>
-        </div>
+        <BackgroundStage />
 
-        {/* The question is the event, never scrolled away. The real banner
-            artwork replaces the hand-built version — it already bakes in the
-            title/topic/how-it-works copy, so none of that is rendered as text
-            here. That does mean this banner is static: it won't reflect a
-            future discussion.title/topic change the way the old JSX version
-            did, since the words are pixels now, not props. */}
-        <div className="overflow-hidden border-t-2 border-ink bg-brand-yellow">
-          <img
-            src={onamBanner}
-            alt={`${discussion.title}: ${discussion.topic}`}
-            /* The banner is a fixed ~6.7:1 strip — squeezed to a phone's full
-               width at its natural ratio, the text shrinks to ~50px tall and
-               becomes unreadable. Below `sm`, crop to a shorter box instead:
-               object-cover zooms into the centred text/badge/pill band and
-               lets the boat and sadhya art at the edges run off-canvas, which
-               reads far better on a phone than the whole strip shrunk down.
-               From `sm` up there's enough width to show the full artwork. */
-            className="block h-24 w-full object-cover object-center sm:h-auto sm:object-fill"
+        {/* Only the acting user's own results are announced. */}
+        <span aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
+
+        {/* -------------------------------- header ------------------------------- */}
+        <header
+          className="relative z-20 shrink-0"
+          style={{
+            paddingLeft: "env(safe-area-inset-left)",
+            paddingRight: "env(safe-area-inset-right)",
+          }}
+        >
+          {/* "Content is passing under this edge" — a pre-rendered shadow whose
+              opacity is the only thing that ever moves. */}
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-0 transition-opacity duration-300",
+              scrolled ? "opacity-100" : "opacity-0",
+            )}
+            style={{ boxShadow: "0 10px 26px rgba(169,122,6,0.16)" }}
           />
-        </div>
-      </header>
 
-      {/* --------------------------------- feed --------------------------------- */}
-      <main className="relative flex min-h-0 flex-1 flex-col">
-        {/* Mobile floating leaderboard button, top-right over the feed. */}
-        <motion.button
-          type="button"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setLeaderboardOpen(true)}
-          aria-label="Top 10 responses"
-          className="absolute right-3 top-3 z-20 flex items-center gap-1.5 border-2 border-ink bg-brand-yellow px-3 py-2 font-mono text-[10px] font-black uppercase tracking-[0.14em] shadow-brutal-sm sm:hidden"
-        >
-          <Trophy className="size-4" /> Top 10
-        </motion.button>
+          {/*
+            Three zones: back | brand | status.
 
-        <div
-          ref={listRef}
-          className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
-          <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
-            {!joined ? (
-              /* ----------------------------- join gate ---------------------------- */
-              <div className="flex flex-col items-center gap-6 py-14 text-center sm:py-20">
-                <motion.div
-                  initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 18 }}
-                  className="border-2 border-ink bg-brand-lavender p-5 shadow-brutal"
-                >
-                  <VenetianMask className="size-9" />
-                </motion.div>
-                <div>
-                  <h2 className="text-xl font-black uppercase tracking-tight">
-                    Join anonymously
-                  </h2>
-                  <p className="mx-auto mt-1.5 max-w-xs text-sm text-muted">
-                    No account, no email. You'll be given a random name for this
-                    session — share one story, then vote.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => joinMutation.mutate()}
-                  loading={joinMutation.isPending}
-                  className="px-8 py-3.5"
-                >
-                  Join discussion
-                </Button>
-              </div>
-            ) : messages.length === 0 ? (
-              /* ---------------------------- empty state --------------------------- */
-              <div className="flex flex-col items-center gap-5 py-14 text-center sm:py-20">
-                <motion.div
-                  animate={{ rotate: [0, -4, 4, 0] }}
-                  transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                  className="border-2 border-ink bg-brand-yellow p-6 shadow-brutal"
-                >
-                  <MessagesSquare className="size-12" />
-                </motion.div>
-                <div>
-                  <h2 className="text-xl font-black uppercase tracking-tight">
-                    No responses yet.
-                  </h2>
-                  <p className="mt-1 text-sm text-muted">Be the first to share.</p>
-                </div>
-              </div>
-            ) : (
-              <ul className="flex flex-col gap-3 pt-8 sm:gap-4 sm:pt-0">
-                <AnimatePresence initial={false}>
-                  {messages.map((message) => (
-                    <StoryCard
-                      key={message.id}
-                      message={message}
-                      onUpvote={vote}
-                    />
-                  ))}
-                </AnimatePresence>
-              </ul>
+            Full-bleed rather than the old `max-w-3xl`, so the bar's left edge
+            lines up with the full-width banner underneath it instead of
+            floating in a 768px column over it.
+
+            Height is declared, not emergent: 56px on mobile always, 64px on
+            desktop shrinking to 56px once the feed is scrolled. The transition
+            is on `height` alone — one reflow per state change, not per frame.
+          */}
+          <nav
+            aria-label="Discussion"
+            className={cn(
+              "relative border-b border-ink-warm/[0.07] transition-[height] duration-300 ease-out",
+              "h-14",
+              scrolled ? "sm:h-14" : "sm:h-16",
             )}
-          </div>
-        </div>
-
-        {/* --------------------- composer, or the posted notice -------------------- */}
-        {joined && hasPosted && (
-          <div
-            className="shrink-0 border-t-2 border-ink bg-surface"
-            style={composerPaddingStyle}
-            role="status"
+            /* Translucent cream, deliberately without `backdrop-filter`. The
+               bar does not overlap the feed — it is a flex sibling above its
+               own scroll container — so a blur would sample nothing but the
+               static background gradient behind it: visually identical to a
+               flat tint, and a full-width re-blur every frame anything moved.
+               The glass look, none of the glass cost. */
+            style={{ backgroundColor: "rgba(255, 251, 240, 0.92)" }}
           >
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mx-auto flex w-full max-w-3xl items-center justify-center gap-3 px-4 py-4 sm:px-6"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center border-2 border-ink bg-brand-lime">
-                <CheckCircle2 className="size-5" />
-              </span>
-              <div className="min-w-0 text-left">
-                <p className="text-sm font-black uppercase tracking-tight">
-                  {postedEarlier
-                    ? "You already shared your story."
-                    : "Your response has been submitted."}
-                </p>
-                <p className="text-xs text-muted">
-                  {postedEarlier
-                    ? "Thank you for participating — you can vote for other stories."
-                    : "You can now vote for other stories."}
-                </p>
-              </div>
-            </motion.div>
-          </div>
-        )}
+            <div className="flex h-full items-center gap-2 px-3 sm:gap-2.5 sm:px-5">
+              {/* ---------------------------- back ---------------------------- */}
+              {/*
+                Standalone, far left, and the only link in this bar.
 
-        {joined && !hasPosted && (
-          <div
-            className="shrink-0 border-t-2 border-ink bg-surface"
-            style={composerPaddingStyle}
-          >
-            <div className="mx-auto w-full max-w-3xl px-4 pb-3 pt-2 sm:px-6">
-              <p className="mb-1.5 h-4 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                {typingLabel ?? (status === "connected" ? "" : "Reconnecting…")}
-              </p>
-              <form onSubmit={submit} className="flex items-end gap-2">
-                <div className="flex flex-1 items-end border-2 border-ink bg-canvas focus-within:shadow-brutal-sm">
-                  <textarea
-                    ref={inputRef}
-                    rows={1}
-                    value={draft}
-                    onChange={(event) => handleDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) submit(event);
-                    }}
-                    placeholder="Share your story…"
-                    aria-label="Your answer"
-                    autoFocus={!COARSE_POINTER}
-                    enterKeyHint="send"
-                    /* 16px minimum — iOS zooms on focus below that. */
-                    className="max-h-40 min-h-[3rem] w-full resize-none bg-transparent px-4 py-3 text-base outline-none placeholder:text-muted/60"
+                It used to be fused into the logo pill — one element that meant
+                both "leave" and "Ekaton". That was done to avoid two screen
+                reader stops pointing at the same route; splitting them is
+                better on both counts, because the wordmark beside it is now
+                plain text rather than a second link to the same place.
+              */}
+              <motion.div
+                initial={reduced ? false : { opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
+              >
+                <Link
+                  to="/home"
+                  aria-label="Go back"
+                  className={cn(
+                    PILL,
+                    PILL_LABEL,
+                    "group flex items-center gap-2 bg-kasavu px-3 text-ink-warm sm:px-3.5",
+                    "transition-[transform,background-color,border-color] duration-200 ease-out",
+                    "hover:border-amber-deep/40 hover:bg-festival-gold/20 hover:-translate-y-px",
+                    "active:scale-95",
+                  )}
+                >
+                  <ArrowLeft
+                    className="size-4 shrink-0 transition-transform duration-200 ease-out group-hover:-translate-x-[3px]"
+                    aria-hidden="true"
                   />
-                </div>
-                <motion.div whileTap={{ scale: 0.92 }} className="shrink-0">
-                  <Button
-                    type="submit"
-                    disabled={!draft.trim() || status !== "connected"}
-                    aria-label="Send"
-                    className="h-[3rem] px-4"
+                  {/* Icon-only below `sm`; the pill keeps its 44px height, so
+                      the target never shrinks with the label. */}
+                  <span className="hidden sm:inline">Back</span>
+                </Link>
+              </motion.div>
+
+              {/* ---------------------------- brand --------------------------- */}
+              {/* Deliberately not a link. The control beside it already goes
+                  home, and two adjacent links to one route is a tab stop and a
+                  screen reader announcement nobody needs. */}
+              <motion.div
+                className="flex min-w-0 items-center gap-2"
+                initial={reduced ? false : { opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: DURATION.entrance, delay: 0.07, ease: EASE_OUT_EXPO }}
+              >
+                <LogoMark className="size-7 shrink-0" />
+                <span className="hidden text-[15px] font-black uppercase leading-none tracking-[-0.02em] text-ink-warm sm:inline">
+                  Ekaton
+                </span>
+              </motion.div>
+
+              {/* ---------------------------- status -------------------------- */}
+              <motion.div
+                className="ml-auto flex min-w-0 items-center gap-2"
+                initial={reduced ? false : { opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: DURATION.entrance, delay: 0.14, ease: EASE_OUT_EXPO }}
+              >
+                {joined && <ConnectionPill connected={connected} />}
+
+                {joined && displayName && (
+                  <span
+                    className={cn(
+                      PILL,
+                      "flex min-w-0 items-center gap-2 bg-kasavu pl-1.5 pr-1.5 sm:pr-3",
+                    )}
                   >
-                    <SendHorizonal className="size-4" />
-                  </Button>
+                    {/* An initial block rather than a generic mask icon: below
+                        `sm` the icon carried no information at all, where the
+                        first letter of the handle at least identifies you. */}
+                    <span
+                      aria-hidden="true"
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-festival-gold/35 text-[11px] font-black uppercase text-ink-warm sm:size-6"
+                    >
+                      {displayName.charAt(0)}
+                    </span>
+                    <span
+                      className={cn(PILL_LABEL, "hidden max-w-36 truncate text-ink-soft sm:inline")}
+                    >
+                      {displayName}
+                    </span>
+                    <span className="sr-only sm:hidden">You are {displayName}</span>
+                  </span>
+                )}
+
+                {/* Primary action in this cluster, and now present at every
+                    breakpoint — it used to disappear below `sm` in favour of a
+                    separately styled button floating over the feed, which was
+                    two controls for one job. */}
+                <motion.button
+                  type="button"
+                  onClick={() => setRankingOpen(true)}
+                  whileTap={reduced ? undefined : { scale: 0.95 }}
+                  whileHover={reduced ? undefined : { scale: 1.03 }}
+                  transition={snappy}
+                  aria-label="Responses ranked by votes"
+                  className={cn(
+                    PILL,
+                    PILL_LABEL,
+                    "group flex items-center gap-2 bg-festival-gold/25 px-3 text-ink-warm sm:px-3.5",
+                    "transition-[background-color,border-color] duration-200 ease-out",
+                    "hover:border-amber-deep/50 hover:bg-festival-gold/55",
+                  )}
+                >
+                  <Trophy
+                    className="size-4 shrink-0 transition-transform duration-200 ease-out group-hover:-rotate-[10deg] sm:size-3.5"
+                    aria-hidden="true"
+                  />
+                  <span className="hidden sm:inline">Ranking</span>
+                </motion.button>
+              </motion.div>
+            </div>
+          </nav>
+
+          {/* The question is the event, never scrolled away. The real banner
+              artwork replaces the hand-built version — it already bakes in the
+              title/topic/how-it-works copy, so none of that is rendered as text
+              here. That does mean this banner is static: it won't reflect a
+              future discussion.title/topic change the way the old JSX version
+              did, since the words are pixels now, not props.
+
+              The artwork itself is untouched. What is new is the stage around
+              it: a gold hairline, a soft glow beneath, and an entrance that
+              makes it the first thing to arrive. */}
+          <motion.div
+            className="relative overflow-hidden border-y border-amber-deep/25 bg-festival-gold"
+            initial={reduced ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
+          >
+            <img
+              src={onamBanner}
+              alt={`${discussion.title}: ${discussion.topic}`}
+              width={BANNER.width}
+              height={BANNER.height}
+              /* Explicit intrinsic size reserves the box before the bytes land,
+                 so the banner can never push the feed down as it decodes; it is
+                 the largest paint on the page, hence the priority hint. */
+              fetchPriority="high"
+              decoding="async"
+              /* The banner is a fixed ~6.7:1 strip — squeezed to a phone's full
+                 width at its natural ratio, the text shrinks to ~50px tall and
+                 becomes unreadable. Below `sm`, crop to a shorter box instead:
+                 object-cover zooms into the centred text/badge/pill band and
+                 lets the boat and sadhya art at the edges run off-canvas, which
+                 reads far better on a phone than the whole strip shrunk down.
+                 From `sm` up there's enough width to show the full artwork.
+                 Capped at its own intrinsic width so an ultra-wide display gets
+                 a centred poster rather than an upscaled, softened one. */
+              className="mx-auto block h-24 w-full max-w-[2172px] object-cover object-center sm:h-auto"
+            />
+            {/* Soft warmth falling out of the bottom edge, tying the artwork to
+                the page rather than letting it sit on top as a sticker. */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 -bottom-px h-6 bg-gradient-to-b from-transparent to-amber-deep/25"
+            />
+          </motion.div>
+
+          {/* Kasavu accent — the sari-border gold line, once, under the banner.
+              The single hard gold detail the background system allows itself;
+              a sibling of the banner block, which itself stays untouched. */}
+          <div aria-hidden="true" className="pk-kasavu-line" />
+        </header>
+
+        {/* --------------------------------- feed --------------------------------- */}
+        <main className="relative flex min-h-0 flex-1 flex-col">
+          {/* The mobile Ranking button used to float here, over the feed.
+              Removed: Ranking is now in the navbar at every breakpoint, and two
+              differently-styled controls for one action was the problem rather
+              than the fix. Its departure also retires the `pt-8` offset the
+              list carried purely to clear it. */}
+          <div
+            ref={listRef}
+            className="scroll-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          >
+            {/* pt-3: the gap between the banner and the first row is dead
+                space; the kasavu line already marks the transition. */}
+            {/* One width rail, shared with the notice and the composer below.
+                3xl up to laptop; wider from `lg` so a desktop reads as a
+                desktop rather than a stretched phone column. */}
+            <div className="mx-auto w-full max-w-3xl px-4 pb-5 pt-3 sm:px-6 lg:max-w-5xl xl:max-w-6xl">
+              {!joined ? (
+                /* ----------------------------- join gate ---------------------------- */
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
+                  className="flex flex-col items-center gap-7 py-12 text-center sm:py-16"
+                >
+                  <div className="relative flex size-36 items-center justify-center">
+                    <motion.div
+                      className="absolute inset-0"
+                      initial={reduced ? false : { scale: 0.5, opacity: 0, rotate: -50 }}
+                      animate={{ scale: 1, opacity: 0.85, rotate: 0 }}
+                      transition={{ duration: 1.3, ease: EASE_OUT_EXPO }}
+                    >
+                      <PookalamMandala className="size-full" />
+                    </motion.div>
+                    <motion.span
+                      className="relative flex size-14 items-center justify-center rounded-full border-2 border-ink-warm bg-cream"
+                      initial={reduced ? false : { scale: 0.7, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ ...spring, delay: 0.3 }}
+                    >
+                      <VenetianMask className="size-7" aria-hidden="true" />
+                    </motion.span>
+                  </div>
+
+                  <div>
+                    <h2 className="font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm">
+                      Join anonymously
+                    </h2>
+                    <p className="mx-auto mt-2.5 max-w-xs text-[15px] leading-[1.55] text-ink-soft">
+                      No account, no email. You'll be given a random name for this
+                      session — share one response, then vote.
+                    </p>
+                  </div>
+
+                  <motion.button
+                    type="button"
+                    onClick={() => joinMutation.mutate()}
+                    disabled={joinMutation.isPending}
+                    whileTap={reduced ? undefined : { scale: 0.96 }}
+                    transition={spring}
+                    className={cn(
+                      "group relative flex items-center gap-2.5 rounded-full border border-amber-deep",
+                      "bg-festival-gold px-8 py-3.5 text-sm font-bold text-ink-warm shadow-rest",
+                      "transition-transform duration-200 hover:-translate-y-0.5",
+                      "disabled:pointer-events-none disabled:opacity-60",
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
+                    />
+                    <span className="relative">
+                      {joinMutation.isPending ? "Joining…" : "Join discussion"}
+                    </span>
+                  </motion.button>
                 </motion.div>
-              </form>
+              ) : historyLoading && messages.length === 0 ? (
+                /* Skeletons, not a spinner — and not the empty state, which is
+                   what used to flash here over a wall that was already full. */
+                <div>
+                  <StorySkeleton />
+                </div>
+              ) : messages.length === 0 ? (
+                <EmptyWall onStart={focusComposer} canPost={!hasPosted} />
+              ) : (
+                <motion.ul
+                  variants={listContainer}
+                  initial="hidden"
+                  animate="show"
+                  className="flex list-none flex-col gap-2"
+                >
+                  <AnimatePresence>
+                    {messages.map((message, index) => (
+                      <StoryCard
+                        key={message.id}
+                        message={message}
+                        index={index}
+                        onUpvote={vote}
+                        pending={pendingVotes.has(message.id)}
+                        rejectedNonce={rejections[message.id] ?? 0}
+                        fresh={fresh.has(message.id)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </motion.ul>
+              )}
             </div>
           </div>
-        )}
-      </main>
 
-      <LeaderboardModal
-        open={leaderboardOpen}
-        onClose={() => setLeaderboardOpen(false)}
-        messages={messages}
-        onUpvote={vote}
-      />
-    </div>
+          {/* --------------------- composer, or the posted notice -------------------- */}
+          {/*
+            Once posted, the mobile bottom edge becomes a native-feeling stack:
+            the slim confirmation directly above the app's own BottomNav.
+
+            The nav is the same component every AppLayout page mounts — this
+            route lives outside AppLayout with the full-bleed chat screens, and
+            that exclusion is correct for the *composer* state, where a fixed
+            tab bar and the keyboard would fight over the same edge. In the
+            posted state there is no input on the page at all, so the reason to
+            exclude it is gone — and without it the only way off this page on a
+            phone was the Back pill in the header. Mounting it here, in this
+            state only, is what keeps the keyboard case impossible rather than
+            merely handled.
+          */}
+          {joined && hasPosted && (
+            <>
+              <div
+                className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08] md:pb-[max(0px,calc(env(safe-area-inset-bottom)-var(--chat-keyboard-inset,0px)))]"
+                style={{
+                  // Sides only. The bottom inset belongs to whichever element
+                  // actually meets the home indicator: below `md` that is the
+                  // nav (which pads for it itself), from `md` this bar — the
+                  // class above. Keeping it inline here too would pad the strip
+                  // twice on phones.
+                  paddingLeft: "env(safe-area-inset-left)",
+                  paddingRight: "env(safe-area-inset-right)",
+                }}
+                role="status"
+              >
+                <motion.div
+                  /* Slides up only in the session where submission actually
+                     happened. Arriving on the page already-posted renders the
+                     bar simply *there* — re-playing an entrance on every visit
+                     made a day-old fact look like breaking news. */
+                  initial={reduced || postedEarlier ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
+                  className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-4 py-2.5 md:gap-3 md:px-6 md:py-4 lg:max-w-5xl xl:max-w-6xl"
+                >
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-leaf/25 bg-leaf/10 text-leaf-deep md:size-9">
+                    <CheckCircle2 className="size-4 md:size-5" aria-hidden="true" />
+                  </span>
+                  {/* One quiet line on phones, where the nav below already
+                      carries the visual weight. */}
+                  <p className="min-w-0 truncate text-[12.5px] font-medium text-ink-warm md:hidden">
+                    {postedEarlier
+                      ? "You already suggested a name — vote for your favourites!"
+                      : "Name submitted — vote for your favourites!"}
+                  </p>
+                  <div className="hidden min-w-0 text-left md:block">
+                    <p className="font-display text-[15px] font-extrabold tracking-[-0.01em] text-ink-warm">
+                      {postedEarlier
+                        ? "You already suggested a name for our Onam celebration."
+                        : "Your name suggestion has been submitted."}
+                    </p>
+                    <p className="mt-0.5 text-[13px] text-ink-soft">
+                      {postedEarlier
+                        ? "Thank you for taking part — now vote for the names you love."
+                        : "Now vote for the names you love."}
+                    </p>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* In-flow stand-in for the fixed nav, so the notice rests on the
+                  nav's top edge instead of underneath it. Deliberately not a
+                  transformed wrapper around the nav itself: a transform would
+                  turn the wrapper into the fixed element's containing block and
+                  unpin it from the viewport. */}
+              <div
+                aria-hidden="true"
+                className="h-[calc(4.25rem+env(safe-area-inset-bottom))] shrink-0 md:hidden"
+              />
+              <BottomNav />
+            </>
+          )}
+
+          {joined && !hasPosted && (
+            <div
+              className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08]"
+              style={composerPaddingStyle}
+            >
+              <div className="mx-auto w-full max-w-3xl px-4 pb-3 pt-2 sm:px-6 lg:max-w-5xl xl:max-w-6xl">
+                <div className="mb-1.5 flex h-4 items-center justify-between">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+                    {typingLabel ?? (connected ? "" : "Reconnecting…")}
+                  </p>
+                  {/* Only once it starts to matter — a counter that is present
+                      from the first keystroke reads as a limit being enforced
+                      rather than an allowance being offered. */}
+                  <AnimatePresence>
+                    {draft.length >= COUNTER_FROM && (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className={cn(
+                          "font-mono text-[10px] font-bold tabular-nums",
+                          remaining <= 40 ? "text-vermilion-deep" : "text-ink-soft",
+                        )}
+                      >
+                        {remaining}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <form onSubmit={submit} className="flex items-end gap-2">
+                  <div
+                    className={cn(
+                      "group relative flex flex-1 items-end rounded-pk-md border border-ink-warm/12 bg-cream",
+                      "transition-colors duration-200 focus-within:border-amber-deep",
+                    )}
+                  >
+                    {/* Focus glow, crossfaded. */}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-pk-md opacity-0 shadow-glow transition-opacity duration-200 group-focus-within:opacity-100"
+                    />
+                    <textarea
+                      ref={inputRef}
+                      rows={1}
+                      value={draft}
+                      onChange={(event) => handleDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) submit(event);
+                      }}
+                      /* Short enough to hold one line in the composer's single-
+                         line rest height on a phone — the longer sentence
+                         wrapped and clipped mid-word ("celebration…" sliced at
+                         the bottom edge), which read as a rendering bug. */
+                      placeholder="Suggest a name for Onam…"
+                      aria-label="Your answer"
+                      autoFocus={!COARSE_POINTER}
+                      enterKeyHint="send"
+                      /* 16px minimum — iOS zooms on focus below that. */
+                      className="relative max-h-40 min-h-[3rem] w-full resize-none rounded-pk-md bg-transparent px-4 py-3 text-base text-ink-warm outline-none placeholder:text-ink-soft/85"
+                    />
+                  </div>
+
+                  <motion.button
+                    type="submit"
+                    disabled={!draft.trim() || !connected || sending}
+                    aria-label="Send"
+                    whileTap={reduced ? undefined : { scale: 0.94 }}
+                    transition={snappy}
+                    className={cn(
+                      "group relative flex h-[3rem] w-[3.25rem] shrink-0 items-center justify-center",
+                      "rounded-pk-md border border-amber-deep bg-festival-gold text-ink-warm shadow-rest",
+                      "transition-[transform,opacity] duration-200 hover:-translate-y-0.5",
+                      "disabled:pointer-events-none disabled:opacity-45",
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-pk-md opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
+                    />
+                    {sending ? (
+                      // Three petal dots rather than a spinner — the wait belongs
+                      // to the same family as everything else on the page.
+                      <span className="relative flex items-center gap-1" aria-hidden="true">
+                        {[0, 1, 2].map((dot) => (
+                          <motion.span
+                            key={dot}
+                            className="block size-1.5 rounded-full bg-ink-warm"
+                            animate={reduced ? undefined : { opacity: [0.25, 1, 0.25] }}
+                            transition={{
+                              duration: 0.9,
+                              repeat: Infinity,
+                              delay: dot * 0.15,
+                              ease: "easeInOut",
+                            }}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <SendHorizonal className="relative size-4" aria-hidden="true" />
+                    )}
+                  </motion.button>
+                </form>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <RankingModal
+          open={rankingOpen}
+          onClose={() => setRankingOpen(false)}
+          messages={messages}
+          onUpvote={vote}
+          pendingVotes={pendingVotes}
+          rejections={rejections}
+        />
+
+        <SubmittedDialog open={submittedOpen} onClose={() => setSubmittedOpen(false)} />
+      </div>
+    </MotionConfig>
   );
 }

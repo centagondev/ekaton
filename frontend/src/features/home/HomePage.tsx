@@ -88,7 +88,7 @@ function Searching({ onCancel }: { onCancel: () => void }) {
     >
       <FloatingShapes />
 
-      <h1 className="text-3xl font-black tracking-tight lg:text-4xl">
+      <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
         Finding another student…
       </h1>
       <p className="mt-2 text-sm text-muted lg:text-base">
@@ -96,12 +96,17 @@ function Searching({ onCancel }: { onCancel: () => void }) {
       </p>
 
       {/* The game is the hero of the wait. Mounted only while searching, so a
-          match unmounts it and tears its loop down immediately. */}
-      <div className="mt-7 h-[300px] w-full border-2 border-ink bg-canvas shadow-brutal-lg sm:h-[420px] lg:h-[470px]">
+          match unmounts it and tears its loop down immediately.
+
+          Height scales with the screen rather than sitting at a fixed 300/420/470:
+          those numbers overflowed a 667px phone and, at lg, an 800px-tall laptop
+          — the two most ordinary screens there are. The engine re-measures via a
+          ResizeObserver, so a fluid box costs it nothing. */}
+      <div className="mt-4 h-[clamp(180px,34dvh,300px)] w-full border-2 border-ink bg-canvas shadow-brutal-lg sm:mt-7 sm:h-[clamp(240px,42dvh,420px)] lg:h-[clamp(300px,46dvh,470px)]">
         <StackGame />
       </div>
 
-      <div className="mt-8 w-72 max-w-full lg:w-96">
+      <div className="mt-5 w-72 max-w-full sm:mt-8 lg:w-96">
         <div className="relative h-2.5 overflow-hidden border-2 border-ink bg-surface">
           <motion.div
             className="absolute inset-y-0 w-1/3 bg-brand-lime"
@@ -115,7 +120,7 @@ function Searching({ onCancel }: { onCancel: () => void }) {
         </div>
       </div>
 
-      <Button variant="secondary" className="mt-10" onClick={onCancel}>
+      <Button variant="secondary" className="mt-6 sm:mt-10" onClick={onCancel}>
         <X className="size-4" /> Cancel search
       </Button>
     </motion.div>
@@ -149,8 +154,15 @@ export function HomePage() {
   return (
     /* flex-1 rather than a 100dvh calc: the hero now has to share the screen
        with the mobile bottom bar as well as the navbar, and letting it fill
-       whatever is left keeps it centred without a chain of magic offsets. */
-    <PageTransition className="flex flex-1 items-center justify-center">
+       whatever is left keeps it centred without a chain of magic offsets.
+
+       The negative margins give back the shell's mobile gutters. AppLayout pads
+       every page by pt-8 plus a bottom inset 2rem deeper than the nav bar, so
+       that a scrolling page's last row clears the bar. This page never scrolls —
+       it is one screen, centred — so on a short phone those 64px are the
+       difference between fitting and not. Cancelled below md only; from there
+       the bar is gone and the ordinary gutters apply. */
+    <PageTransition className="-mb-8 -mt-8 flex flex-1 items-center justify-center md:mb-0 md:mt-0">
       <AnimatePresence mode="wait">
         {searching ? (
           <Searching key="searching" onCancel={cancel} />

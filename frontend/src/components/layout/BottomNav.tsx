@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CalendarDays, Home, Megaphone, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BLOOM_ROUTE, useBloomLink } from "./bloom.store";
 
 /**
  * Complaint Box is deliberately absent — it is not part of the MVP, and the
@@ -25,6 +26,59 @@ const TABS = [
  * would make Framer try to animate between a visible element and a
  * `display: none` one.
  */
+/**
+ * One tab. Extracted from the map so it can hold a hook — the Onam tab needs
+ * `useBloomLink`, and every other tab passes `undefined` for it and behaves
+ * exactly as it did before.
+ */
+function Tab({ to, label, Icon }: (typeof TABS)[number]) {
+  const bloom = useBloomLink(to);
+
+  return (
+    <li className="flex-1">
+      {/* `end` on /home only: /events must not stay lit while the user is
+          on /events/:id, but /home has no children to match. */}
+      <NavLink
+        to={to}
+        end={to === "/home"}
+        onClick={to === BLOOM_ROUTE ? bloom : undefined}
+        className="group relative flex size-full flex-col items-center justify-center gap-1"
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && (
+              <motion.span
+                layoutId="bottom-nav-active"
+                transition={{ type: "spring", stiffness: 520, damping: 38 }}
+                className="absolute inset-x-1.5 inset-y-2 border-2 border-ink bg-brand-yellow"
+              />
+            )}
+
+            <Icon
+              className={cn(
+                "relative z-10 size-[1.35rem] transition-transform duration-150",
+                isActive ? "text-ink" : "text-muted",
+                // Presses register on the icon, so the whole tab reads as
+                // the button rather than just the label.
+                "group-active:scale-90",
+              )}
+              strokeWidth={isActive ? 2.5 : 2}
+            />
+            <span
+              className={cn(
+                "relative z-10 font-mono text-[10px] font-black uppercase tracking-[0.14em]",
+                isActive ? "text-ink" : "text-muted",
+              )}
+            >
+              {label}
+            </span>
+          </>
+        )}
+      </NavLink>
+    </li>
+  );
+}
+
 export function BottomNav() {
   return (
     <nav
@@ -39,47 +93,8 @@ export function BottomNav() {
       }}
     >
       <ul className="flex h-[4.25rem] items-stretch">
-        {TABS.map(({ to, label, Icon }) => (
-          <li key={to} className="flex-1">
-            {/* `end` on /home only: /events must not stay lit while the user is
-                on /events/:id, but /home has no children to match. */}
-            <NavLink
-              to={to}
-              end={to === "/home"}
-              className="group relative flex size-full flex-col items-center justify-center gap-1"
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <motion.span
-                      layoutId="bottom-nav-active"
-                      transition={{ type: "spring", stiffness: 520, damping: 38 }}
-                      className="absolute inset-x-1.5 inset-y-2 border-2 border-ink bg-brand-yellow"
-                    />
-                  )}
-
-                  <Icon
-                    className={cn(
-                      "relative z-10 size-[1.35rem] transition-transform duration-150",
-                      isActive ? "text-ink" : "text-muted",
-                      // Presses register on the icon, so the whole tab reads as
-                      // the button rather than just the label.
-                      "group-active:scale-90",
-                    )}
-                    strokeWidth={isActive ? 2.5 : 2}
-                  />
-                  <span
-                    className={cn(
-                      "relative z-10 font-mono text-[10px] font-black uppercase tracking-[0.14em]",
-                      isActive ? "text-ink" : "text-muted",
-                    )}
-                  >
-                    {label}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          </li>
+        {TABS.map((tab) => (
+          <Tab key={tab.to} {...tab} />
         ))}
       </ul>
     </nav>

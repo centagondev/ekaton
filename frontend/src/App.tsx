@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import { useAuthStore } from "@/stores/auth.store";
 import { ProtectedRoute, GuestRoute } from "@/routes/guards";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { BloomTransition } from "@/components/layout/BloomTransition";
 import { AuthModal } from "@/features/auth/AuthModal";
 import { LandingPage } from "@/features/auth/LandingPage";
 import { HomePage } from "@/features/home/HomePage";
@@ -106,6 +107,13 @@ export default function App() {
 
       {/* Auth is a modal — reachable from any screen, never a page. */}
       <AuthModal />
+
+      {/* The Onam page's entrance overlay. It has to live outside <Routes>:
+          Public Speaking is a full-bleed route outside AppLayout, so mounting
+          this in the shell meant the navigation it was covering unmounted it
+          halfway through — the bloom would flash gold and vanish instead of
+          irising open onto the new page. */}
+      <BloomTransition />
     </>
   );
 }

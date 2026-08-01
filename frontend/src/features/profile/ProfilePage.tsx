@@ -1,26 +1,92 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { BadgeCheck, KeyRound, LogOut, RefreshCw } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  KeyRound,
+  Lock,
+  LogOut,
+  RefreshCw,
+} from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
-import { authApi } from "@/lib/api/auth";
-import { setTokens } from "@/lib/storage";
 import { parseApiError } from "@/lib/errors";
 import { PageTransition, staggerContainer, staggerItem } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { Field } from "@/components/ui/Field";
-import { PasswordInput } from "@/components/ui/PasswordInput";
+import { cn } from "@/lib/utils";
+import { ChangePasswordModal } from "./ChangePasswordModal";
+import { LogoutConfirmModal } from "./LogoutConfirmModal";
+
+/**
+ * One row per account action, in the Button press language.
+ *
+ * The page used to render the password form and a full logout section inline —
+ * most of its height spent on things used a handful of times a year. Each is
+ * now a single row that opens a dialog, and the whole page fits above the
+ * fold.
+ */
+function ActionRow({
+  icon: Icon,
+  label,
+  hint,
+  danger = false,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  hint: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-4 border-2 border-ink bg-surface p-4 text-left shadow-brutal",
+        "transition-all duration-150 select-none",
+        // The system's press signature, verbatim from Button: slide toward the
+        // shadow on hover, land flat on press.
+        "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm",
+        "active:translate-x-[5px] active:translate-y-[5px] active:shadow-none",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center border-2 border-ink",
+          danger ? "bg-danger text-white" : "bg-brand-yellow",
+        )}
+        aria-hidden="true"
+      >
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block font-extrabold uppercase tracking-wide",
+            danger ? "text-danger" : "text-ink",
+          )}
+        >
+          {label}
+        </span>
+        <span className="block truncate text-xs text-muted">{hint}</span>
+      </span>
+      <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden="true" />
+    </button>
+  );
+}
 
 export function ProfilePage() {
   const { user, logout, refreshUser } = useAuthStore();
   const navigate = useNavigate();
   const [refreshing, setRefreshing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const reload = async () => {
     setRefreshing(true);
@@ -34,6 +100,8 @@ export function ProfilePage() {
     }
   };
 
+  // Unchanged from the inline version — the dialog only decides *whether* it
+  // runs, never *what* it does.
   const handleLogout = async () => {
     setLoggingOut(true);
     await logout();
@@ -43,7 +111,8 @@ export function ProfilePage() {
   return (
     <PageTransition className="mx-auto max-w-2xl">
       <BackButton fallback="/home" label="Back" className="mb-6" />
-      <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-8">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-5">
+        {/* ------------------------------ identity ----------------------------- */}
         <motion.section
           variants={staggerItem}
           className="border-2 border-ink bg-surface p-6 shadow-brutal sm:p-8"
@@ -78,130 +147,39 @@ export function ProfilePage() {
             </Button>
           </div>
 
-          <p className="mt-4 border-2 border-ink bg-raised px-4 py-2.5 text-xs text-muted">
-            Profile details and availability are managed by the Ekaton team — the
-            backend exposes no endpoint to edit them.
+          {/* A footnote, styled like one — this was a full bordered box, which
+              gave a piece of trivia the same rank as the identity above it. */}
+          <p className="mt-4 flex items-center gap-1.5 text-xs text-muted">
+            <Lock className="size-3.5 shrink-0" aria-hidden="true" />
+            Profile details are managed by the Ekaton team and can't be edited here.
           </p>
         </motion.section>
 
-        <motion.section variants={staggerItem} aria-labelledby="change-password">
-          <h2
-            id="change-password"
-            className="mb-4 flex items-center gap-2 text-lg font-black uppercase tracking-wide"
-          >
-            <KeyRound className="size-5" /> Change password
-          </h2>
-          <ChangePasswordForm />
-        </motion.section>
-
-        <motion.section
-          variants={staggerItem}
-          className="flex items-center justify-between gap-4 border-2 border-ink bg-surface p-5"
-        >
-          <div>
-            <p className="font-bold uppercase tracking-wide">Log out</p>
-            <p className="text-xs text-muted">Ends this session on this device.</p>
-          </div>
-          <Button variant="danger" onClick={() => void handleLogout()} loading={loggingOut}>
-            <LogOut className="size-4" /> Log out
-          </Button>
+        {/* ------------------------------ actions ------------------------------ */}
+        <motion.section variants={staggerItem} aria-label="Account actions" className="space-y-3">
+          <ActionRow
+            icon={KeyRound}
+            label="Change password"
+            hint="Your session stays signed in."
+            onClick={() => setPasswordOpen(true)}
+          />
+          <ActionRow
+            icon={LogOut}
+            label="Log out"
+            hint="Ends this session on this device."
+            danger
+            onClick={() => setLogoutOpen(true)}
+          />
         </motion.section>
       </motion.div>
+
+      <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <LogoutConfirmModal
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={() => void handleLogout()}
+        loading={loggingOut}
+      />
     </PageTransition>
-  );
-}
-
-interface PasswordFormValues {
-  current_password: string;
-  new_password: string;
-  confirm_password: string;
-}
-
-function ChangePasswordForm() {
-  const form = useForm<PasswordFormValues>({
-    defaultValues: { current_password: "", new_password: "", confirm_password: "" },
-  });
-
-  const submit = form.handleSubmit(async (values) => {
-    try {
-      const tokens = await authApi.changePassword(values);
-      // The backend rotates tokens so the session survives the change.
-      setTokens(tokens);
-      form.reset({ current_password: "", new_password: "", confirm_password: "" });
-      toast.success("Password changed.");
-    } catch (error) {
-      const parsed = parseApiError(error);
-      let handled = false;
-      for (const [key, message] of Object.entries(parsed.fields)) {
-        if (key in values) {
-          form.setError(key as keyof PasswordFormValues, { message });
-          handled = true;
-        }
-      }
-      if (!handled) toast.error(parsed.message);
-    }
-  });
-
-  return (
-    <form onSubmit={submit} className="space-y-4 border-2 border-ink bg-surface p-5" noValidate>
-      <Field
-        label="Current password"
-        required
-        error={form.formState.errors.current_password?.message ?? null}
-      >
-        {(id) => (
-          <PasswordInput
-            id={id}
-            autoComplete="current-password"
-            {...form.register("current_password", { required: "Current password is required." })}
-          />
-        )}
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="New password"
-          required
-          error={form.formState.errors.new_password?.message ?? null}
-        >
-          {(id) => (
-            <PasswordInput
-              id={id}
-              autoComplete="new-password"
-              {...form.register("new_password", {
-                required: "New password is required.",
-                minLength: { value: 8, message: "Must be at least 8 characters." },
-                validate: (value) =>
-                  !/^\d+$/.test(value) || "Password cannot be entirely numeric.",
-              })}
-            />
-          )}
-        </Field>
-
-        <Field
-          label="Confirm new password"
-          required
-          error={form.formState.errors.confirm_password?.message ?? null}
-        >
-          {(id) => (
-            <PasswordInput
-              id={id}
-              autoComplete="new-password"
-              {...form.register("confirm_password", {
-                required: "Please confirm your password.",
-                validate: (value) =>
-                  value === form.getValues("new_password") || "Passwords do not match.",
-              })}
-            />
-          )}
-        </Field>
-      </div>
-
-      <div className="flex justify-end">
-        <Button type="submit" loading={form.formState.isSubmitting}>
-          Update password
-        </Button>
-      </div>
-    </form>
   );
 }

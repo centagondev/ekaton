@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WS_URL } from "@/lib/config";
-import { getAccessToken } from "@/lib/storage";
+import { getFreshAccessToken } from "@/lib/api/client";
 import type { SpeakingMessage } from "./api";
 
 type Status = "connecting" | "connected" | "closed";
@@ -56,10 +56,29 @@ export function useSpeakingSocket({
     let retry = 0;
     let attempt = 0;
 
-    const connect = () => {
+    /**
+     * Async because the token is refreshed first when it is spent.
+     *
+     * The access token lives 30 minutes; the handshake is validated before any
+     * application code runs, so an expired one is refused outright and the
+     * backoff below then re-presents that same dead token indefinitely. Asking
+     * for a fresh one here is what turns "Reconnecting…" forever back into a
+     * connection.
+     */
+    const connect = async () => {
       if (disposed) return;
 
-      const token = getAccessToken();
+      const token = await getFreshAccessToken();
+      // The refresh token is gone too: the session is over, and hammering the
+      // socket cannot bring it back. `clearSession` has already fired
+      // SESSION_EXPIRED_EVENT for the auth store to act on.
+      if (!token) {
+        if (!disposed) setStatus("closed");
+        return;
+      }
+      // An await means teardown may have happened while we were waiting.
+      if (disposed) return;
+
       const socket = new WebSocket(`${WS_URL}/ws/public-speaking/?token=${token}`);
       socketRef.current = socket;
 
@@ -124,11 +143,14 @@ export function useSpeakingSocket({
         if (disposed) return;
         setStatus("connecting");
         attempt += 1;
-        retry = window.setTimeout(connect, Math.min(1000 * 2 ** (attempt - 1), 10_000));
+        retry = window.setTimeout(
+          () => void connect(),
+          Math.min(1000 * 2 ** (attempt - 1), 10_000),
+        );
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       disposed = true;

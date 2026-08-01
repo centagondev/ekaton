@@ -1,10 +1,11 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { Avatar } from "@/components/ui/Avatar";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
+import { BLOOM_ROUTE, useBloomLink } from "./bloom.store";
 
 const LINKS = [
   { to: "/home", label: "Home" },
@@ -19,8 +20,16 @@ const LINKS = [
  * that slides between items rather than fading in and out per link.
  */
 function NavItem({ to, label }: { to: string; label: string }) {
+  // Only the Onam route gets the ceremonial entrance; every other link is an
+  // ordinary NavLink and stays instant.
+  const bloom = useBloomLink(to);
+
   return (
-    <NavLink to={to} className="group relative px-3 py-2">
+    <NavLink
+      to={to}
+      onClick={to === BLOOM_ROUTE ? bloom : undefined}
+      className="group relative px-3 py-2"
+    >
       {({ isActive }) => (
         <>
           <span
@@ -56,13 +65,6 @@ function NavItem({ to, label }: { to: string; label: string }) {
  */
 export function Navbar() {
   const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
 
   return (
     <>
@@ -100,14 +102,9 @@ export function Navbar() {
               </span>
             </Link>
 
-            <button
-              onClick={() => void handleLogout()}
-              aria-label="Log out"
-              className="hidden border-2 border-transparent p-2 text-muted transition-all hover:border-ink hover:text-ink md:block"
-            >
-              <LogOut className="size-4" />
-            </button>
-
+            {/* No logout here. It fired instantly with no confirmation one
+                pixel from the profile link, and the profile page now owns
+                logging out — behind a confirm dialog. */}
           </div>
         </div>
       </header>

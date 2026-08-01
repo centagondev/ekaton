@@ -1,3 +1,5 @@
 app_name = "users"
+from django.urls import path
+from .views import MeAPIView
 
-urlpatterns = []
+urlpatterns = [path("me/", MeAPIView.as_view(), name="me"),]
