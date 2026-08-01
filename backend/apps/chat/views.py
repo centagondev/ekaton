@@ -6,13 +6,20 @@ from core.throttles import (
     ReportRateThrottle,
     StartChatRateThrottle,
 )
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from .docs import end_chat_doc, report_doc, start_chat_doc
 from .matchmaking import start_chat
 from .serializers import EndChatSerializer, ReportSerializer
-from .services import create_report, end_private_chat_room, get_private_chat_room
+from .services import (
+    create_report,
+    discard_report_evidence,
+    end_private_chat_room,
+    get_private_chat_room,
+    upload_report_evidence,
+)
 
 
 class StartChatAPIView(APIView):
@@ -98,8 +105,16 @@ class EndChatAPIView(APIView):
 
 
 class ReportAPIView(APIView):
+    """Handle a moderation report filed against an anonymous chat partner.
+
+    Accepts JSON as before, and now multipart as well so the reporter can
+    attach a screenshot. The file is uploaded to Cloudinary and only its URL is
+    persisted — no evidence is ever written to local storage.
+    """
+
     throttle_classes = [ReportRateThrottle]
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @report_doc
     def post(self, request):
@@ -113,12 +128,28 @@ class ReportAPIView(APIView):
         if room is None:
             return error_response(message="Chat room not found", status_code=404)
 
-        create_report(
-            room=room,
-            reporter=request.user,
-            reason=serializer.validated_data["reason"],
-            description=serializer.validated_data.get("description"),
-            evidence_url=serializer.validated_data.get("evidence_url"),
-        )
+        evidence_url = serializer.validated_data.get("evidence_url")
+        evidence_image = serializer.validated_data.get("evidence_image")
+
+        # Ordered after the room check so a report that cannot be filed never
+        # costs an upload in the first place.
+        upload = None
+        if evidence_image is not None:
+            upload = upload_report_evidence(evidence_image)
+            evidence_url = upload["url"]
+
+        try:
+            create_report(
+                room=room,
+                reporter=request.user,
+                reason=serializer.validated_data["reason"],
+                description=serializer.validated_data.get("description"),
+                evidence_url=evidence_url,
+            )
+        except Exception:
+            # A duplicate pending report (or any other rejection) must not
+            # strand the image we just pushed to Cloudinary.
+            discard_report_evidence(upload)
+            raise
 
         return success_response(message="Report submitted successfully")

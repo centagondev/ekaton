@@ -26,7 +26,7 @@ import { byNewest } from "./ordering";
 import { useSpeakingSocket } from "./useSpeakingSocket";
 import { BackgroundStage } from "./components/BackgroundStage";
 import { Nilavilakku, PookalamMandala } from "./components/Pookalam";
-import { PookalamLoader, StorySkeleton } from "./components/PookalamLoader";
+import { PookalamHold, PookalamLoader, StorySkeleton } from "./components/PookalamLoader";
 import { RankingModal } from "./components/RankingModal";
 import { StoryCard } from "./components/StoryCard";
 import { SubmittedDialog } from "./components/SubmittedDialog";
@@ -52,6 +52,43 @@ const VOTE_BATCH_MS = 120;
 /** The banner's intrinsic size — supplied so it can never shift the layout. */
 const BANNER = { width: 2172, height: 324 };
 
+/* --------------------------------- intro --------------------------------- */
+
+/**
+ * Where "this session has been told the story" is remembered.
+ *
+ * `sessionStorage` rather than `localStorage` deliberately: the scope of the
+ * memory should be the scope of the visit. A tab that is closed and reopened,
+ * or a second tab, is a new arrival and gets the full ceremony; a route change
+ * within the one you are already in is not.
+ */
+const INTRO_SEEN_KEY = "ekaton:public-speaking:intro-seen";
+
+/**
+ * Both accessors swallow their errors, and fail in the forgetting direction.
+ *
+ * Storage throws rather than returning null in a few real configurations —
+ * Safari's private mode historically, and any browser where the user has
+ * blocked site data. Treating that as "not seen" means those visitors get the
+ * intro every time, which is exactly what everyone got before this change, so
+ * the failure mode is the old behaviour rather than a broken page.
+ */
+function introSeenThisSession(): boolean {
+  try {
+    return window.sessionStorage.getItem(INTRO_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberIntroSeen(): void {
+  try {
+    window.sessionStorage.setItem(INTRO_SEEN_KEY, "1");
+  } catch {
+    /* Nothing to do but let it play again next time. */
+  }
+}
+
 /* --------------------------------- header --------------------------------- */
 
 /**
@@ -67,43 +104,52 @@ const BANNER = { width: 2172, height: 324 };
  */
 const PILL = "h-11 sm:h-9 shrink-0 rounded-full border border-ink-warm/12 shadow-rest";
 
+/**
+ * The same recipe for the pills nobody taps.
+ *
+ * Connection state and your own handle are readouts, not controls — they never
+ * needed the 44px touch height, and five 44px pills in a 56px bar was most of
+ * what made the phone header feel packed. Sitting at 32px they read as status
+ * beside the two controls rather than competing with them, and the row gets
+ * back the horizontal space it was short of.
+ */
+const PILL_STATIC =
+  "h-8 sm:h-9 shrink-0 rounded-full border border-ink-warm/12 shadow-rest";
+
 /** The label recipe already established across this page. */
 const PILL_LABEL = "font-mono text-[10px] font-bold uppercase tracking-[0.16em]";
 
-/** Connection state, visible in every state of the page rather than only inside
- *  the composer — which is where it used to live, and therefore vanished the
- *  moment you posted and spent the rest of your session voting blind. */
+/**
+ * Connection state — but only when there is something to say about it.
+ *
+ * This used to be a two-sided pill: a breathing green dot for "Live", a
+ * vermilion one for "Reconnecting". The green half is gone. A socket that is
+ * working is the expected case, and reporting it on every screen, forever, was
+ * a permanent indicator of nothing happening — one of two ornaments the phone
+ * header was spending its width on. Silence now means live.
+ *
+ * The warning half stays, and stays at every breakpoint, because that half is
+ * load-bearing: it is the only thing that distinguishes "nobody is posting"
+ * from "you have been disconnected and cannot post". It is also still rendered
+ * outside the composer, which is the fix it originally shipped for — inside,
+ * it vanished the moment you posted and left you voting blind.
+ */
 function ConnectionPill({ connected }: { connected: boolean }) {
+  if (connected) return null;
+
   return (
     <span
       className={cn(
-        PILL,
+        PILL_STATIC,
         PILL_LABEL,
-        "flex items-center gap-1.5 px-3",
-        connected
-          ? "border-leaf/25 bg-leaf/10 text-leaf-deep"
-          : "border-vermilion/30 bg-vermilion/10 text-vermilion-deep",
+        "flex items-center justify-center gap-1.5 px-2.5 sm:px-3",
+        "border-vermilion/30 bg-vermilion/10 text-vermilion-deep",
       )}
       role="status"
     >
-      {connected ? (
-        <>
-          {/* The only thing on this page permitted to loop forever. Leaf, not
-              vermilion — vermilion is reserved for the two states that are
-              genuinely wrong: a dropped socket, and the character counter
-              running out. */}
-          <span className="relative flex size-1.5 shrink-0">
-            <span className="pk-breathe absolute inline-flex size-full rounded-full bg-leaf" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-leaf" />
-          </span>
-          <span className="hidden sm:inline">Live</span>
-        </>
-      ) : (
-        <>
-          <WifiOff className="size-3 shrink-0" aria-hidden="true" />
-          <span className="hidden sm:inline">Reconnecting</span>
-        </>
-      )}
+      <WifiOff className="size-3 shrink-0" aria-hidden="true" />
+      <span className="hidden sm:inline">Reconnecting</span>
+      <span className="sr-only sm:hidden">Reconnecting</span>
     </span>
   );
 }
@@ -126,8 +172,8 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
   }, [reduced]);
 
   return (
-    <div className="flex flex-col items-center py-12 text-center sm:py-16">
-      <div className="relative mb-8 flex h-32 w-52 items-end justify-center">
+    <div className="flex flex-col items-center py-10 text-center sm:py-16">
+      <div className="relative mb-6 flex h-32 w-52 items-end justify-center sm:mb-8">
         <motion.div
           className="absolute bottom-0 left-1/2 size-40 -translate-x-1/2"
           initial={reduced ? false : { scale: 0.4, opacity: 0, rotate: -40 }}
@@ -145,10 +191,12 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
         </div>
       </div>
 
-      <h2 className="font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm">
+      {/* One step down on a phone. At 28px this heading ran to three lines in a
+          360px column, which is a headline behaving like a paragraph. */}
+      <h2 className="font-display text-[23px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm sm:text-[28px]">
         The celebration starts with you
       </h2>
-      <p className="mx-auto mt-2.5 max-w-sm text-[15px] leading-[1.55] text-ink-soft">
+      <p className="mx-auto mt-2 max-w-sm text-[14.5px] leading-[1.55] text-ink-soft sm:mt-2.5 sm:text-[15px]">
         {canPost
           ? "No name suggestions yet — share the first one and get the pookalam growing."
           : "No responses to show right now. Yours will appear here as the room fills up."}
@@ -162,8 +210,8 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
           whileTap={reduced ? undefined : { scale: 0.96 }}
           transition={spring}
           className={cn(
-            "group relative mt-7 flex items-center gap-2 rounded-full border border-amber-deep",
-            "bg-festival-gold px-7 py-3.5 text-sm font-bold text-ink-warm shadow-rest",
+            "group relative mt-6 flex items-center gap-2 rounded-full border border-amber-deep sm:mt-7",
+            "bg-festival-gold px-6 py-3 text-sm font-bold text-ink-warm shadow-rest sm:px-7 sm:py-3.5",
             "transition-transform duration-200 hover:-translate-y-0.5",
           )}
         >
@@ -220,6 +268,33 @@ export function PublicSpeakingPage() {
   const [announcement, setAnnouncement] = useState("");
 
   /**
+   * Whether this session has already watched the intro.
+   *
+   * Read once, at mount, and deliberately never re-read. If this could change
+   * under a mounted page, the loader could be swapped for the silent hold
+   * halfway through a wait — the flag is a fact about how this visit *started*,
+   * not a live value.
+   */
+  const [introSkipped] = useState(introSeenThisSession);
+
+  /**
+   * True once the intro has finished telling itself — or was skipped outright.
+   *
+   * Idempotent, because the loader's failsafe and its own last beat can both
+   * report in — whichever arrives first wins and the second is a no-op, which
+   * is what lets the failsafe be unconditional rather than conditional on the
+   * animation having stalled.
+   */
+  const [introDone, setIntroDone] = useState(introSkipped);
+  const markIntroDone = useCallback(() => {
+    setIntroDone(true);
+    // Written when the story has actually been *told*, not when the page
+    // mounted, so a visitor who navigated away mid-pookalam still gets it in
+    // full next time rather than being charged for a telling they didn't see.
+    rememberIntroSeen();
+  }, []);
+
+  /**
    * The database is the source of truth for whether a discussion is running.
    *
    * `retry` is deliberate: a transport failure (CORS, offline, backend
@@ -242,14 +317,30 @@ export function PublicSpeakingPage() {
 
   /* --------------------------------- join --------------------------------- */
 
+  /**
+   * History is seeded once per visit; whichever of join or state gets there
+   * first claims it, so the wall is never fetched twice on one page load.
+   */
+  const seeded = useRef(false);
+  /** Distinguishes the first verdict from later re-reads, for the notice copy. */
+  const firstVerdict = useRef(true);
+
   const joinMutation = useMutation({
     mutationFn: publicSpeakingApi.join,
     onSuccess: async (result) => {
       setDisplayName(result.display_name);
       // Server-owned, so a refresh restores the locked composer rather than
-      // offering an input the backend would reject.
-      setHasPosted(result.has_posted);
-      setPostedEarlier(result.has_posted);
+      // offering an input the backend would reject. Forward-only, in step with
+      // the state effect below: joining is idempotent and can be re-issued, and
+      // a second reply must never unlock a composer the first one locked.
+      if (result.has_posted) {
+        setHasPosted(true);
+        setPostedEarlier(true);
+      }
+      // Claims the one-shot history load, so the state query answering a moment
+      // later doesn't fetch the same wall a second time.
+      seeded.current = true;
+      firstVerdict.current = false;
       setHistoryLoading(true);
       try {
         setMessages(byNewest(await publicSpeakingApi.messages()));
@@ -268,6 +359,15 @@ export function PublicSpeakingPage() {
    * (storage cleared, or blocked), and gating on localStorage was precisely
    * what let such a browser present itself as a brand new participant and post
    * and vote a second time.
+   *
+   * `gcTime: 0` is the fix for the composer reappearing after a round trip
+   * through another route. The app-wide client keeps results for five minutes,
+   * so a remount used to be served the *previous* visit's snapshot
+   * synchronously — `already_posted: false`, captured before the visitor
+   * posted — and the page rendered a composer from it. Dropping the entry the
+   * moment this page unmounts means a return visit has nothing stale to read
+   * and must wait for the server, which is exactly the guarantee this state is
+   * supposed to provide.
    */
   const stateQuery = useQuery({
     queryKey: ["public-speaking", "state"],
@@ -276,21 +376,53 @@ export function PublicSpeakingPage() {
     retry: (failureCount, error) =>
       parseApiError(error).status === 404 ? false : failureCount < 3,
     staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    // A tab left open behind another one is the other way this drifts: post
+    // from your phone, come back to the laptop, and the composer is still
+    // sitting there. Re-reading on focus closes it.
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
-  // Adopt the server's verdict the moment it lands — before any composer is
-  // rendered, so there is no window in which an already-posted visitor can type.
-  const adopted = useRef(false);
+  /**
+   * True once the server has actually answered — success or failure.
+   *
+   * Nothing that depends on participation renders before this. The composer,
+   * the join gate and the posted notice are all downstream of a verdict this
+   * page does not have yet, and rendering *any* of them on a guess is what
+   * produced the flash.
+   */
+  const stateResolved = stateQuery.isSuccess || stateQuery.isError;
+
+  /**
+   * Adopt the server's verdict — every time it arrives, not only the first.
+   *
+   * This effect used to latch on its first run, which meant a stale first
+   * answer was permanent: the refetch that carried the truth landed and was
+   * discarded. It now folds each response in, and only ever folds *forward* —
+   * `already_posted` and `joined` are one-way doors on the backend (nothing
+   * un-posts an account), so a `false` can only ever be an older read racing a
+   * newer one and is ignored rather than applied.
+   */
   useEffect(() => {
     const state = stateQuery.data;
-    if (!state || adopted.current) return;
-    adopted.current = true;
+    if (!state) return;
+
+    if (state.already_posted) {
+      setHasPosted(true);
+      // Only the first verdict decides whether this is "you posted just now"
+      // or "you posted earlier" — a focus refetch after posting must not
+      // rewrite the fresh confirmation into a returning-visitor greeting.
+      if (firstVerdict.current) setPostedEarlier(true);
+    }
+    firstVerdict.current = false;
 
     if (!state.joined) return;
+    setDisplayName((current) => current ?? state.display_name);
 
-    setDisplayName(state.display_name);
-    setHasPosted(state.already_posted);
-    setPostedEarlier(state.already_posted);
+    if (seeded.current) return;
+    seeded.current = true;
     setHistoryLoading(true);
     void publicSpeakingApi
       .messages()
@@ -656,17 +788,36 @@ export function PublicSpeakingPage() {
   /* -------------------------------- render -------------------------------- */
 
   /**
-   * The loader is a fallback, never a gate.
+   * The loader lifts when both the data and the story are done.
    *
-   * It shows for exactly as long as the query takes and not one millisecond
-   * longer. An earlier version also waited for the animation's own last beat,
-   * which meant a page sitting behind a flower for up to 2.6s — on a database
-   * that already costs ~80ms a query from here, and ~730ms on a cold
-   * connection. Ceremony does not get to bill the user for time the data
-   * wasn't taking anyway; the story simply plays as far as it gets.
+   * It used to lift on the data alone. That was written against a local
+   * backend, where the query took long enough that the pookalam had time to
+   * assemble; deployed, the query answers in tens of milliseconds and the
+   * loader unmounted mid-assembly, so what shipped was the last few frames of
+   * an animation nobody could follow. The story now runs on its own clock —
+   * ~6.5s, the same 6.5s on a phone and a workstation, on a first visit and a
+   * fourth — and `introDone` is the second half of the gate.
+   *
+   * The two conditions are `and`ed, so ceremony and network never add to each
+   * other: a slow query is covered by the story, and a story still running
+   * when the data lands is not cut short by it. The intro is treated as part
+   * of the event rather than as a cost to be minimised, which is the whole
+   * reason this gate exists.
+   *
+   * The gate itself is unchanged. What is new is which screen fills it: the
+   * story on the session's first arrival, a silent hold on every return. On a
+   * return `introDone` is already true, so this reduces to "only while the
+   * query is still out" — which, with the discussion usually still cached, is
+   * normally no frames at all.
+   *
+   * The hold exists because skipping cannot simply mean *not* rendering
+   * something here. Come back after the query's cache has aged out and the
+   * data is genuinely pending again; without a second screen to hand that wait
+   * to, the only thing standing here is the loader, and the intro plays for
+   * the second time on the exact visit this change exists to protect.
    */
-  if (discussionQuery.isPending) {
-    return <PookalamLoader />;
+  if (discussionQuery.isPending || !introDone) {
+    return introSkipped ? <PookalamHold /> : <PookalamLoader onFinished={markIntroDone} />;
   }
 
   if (noDiscussion) {
@@ -764,7 +915,7 @@ export function PublicSpeakingPage() {
                The glass look, none of the glass cost. */
             style={{ backgroundColor: "rgba(255, 251, 240, 0.92)" }}
           >
-            <div className="flex h-full items-center gap-2 px-3 sm:gap-2.5 sm:px-5">
+            <div className="flex h-full items-center gap-1.5 px-3 sm:gap-2.5 sm:px-5">
               {/* ---------------------------- back ---------------------------- */}
               {/*
                 Standalone, far left, and the only link in this bar.
@@ -827,30 +978,13 @@ export function PublicSpeakingPage() {
               >
                 {joined && <ConnectionPill connected={connected} />}
 
-                {joined && displayName && (
-                  <span
-                    className={cn(
-                      PILL,
-                      "flex min-w-0 items-center gap-2 bg-kasavu pl-1.5 pr-1.5 sm:pr-3",
-                    )}
-                  >
-                    {/* An initial block rather than a generic mask icon: below
-                        `sm` the icon carried no information at all, where the
-                        first letter of the handle at least identifies you. */}
-                    <span
-                      aria-hidden="true"
-                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-festival-gold/35 text-[11px] font-black uppercase text-ink-warm sm:size-6"
-                    >
-                      {displayName.charAt(0)}
-                    </span>
-                    <span
-                      className={cn(PILL_LABEL, "hidden max-w-36 truncate text-ink-soft sm:inline")}
-                    >
-                      {displayName}
-                    </span>
-                    <span className="sr-only sm:hidden">You are {displayName}</span>
-                  </span>
-                )}
+                {/* Your own handle used to sit here, as a pill. It is gone
+                    rather than shortened: the name line on your response
+                    already carries it, tagged "(You)", which is both the same
+                    fact and a better place for it — stated where it is
+                    relevant instead of pinned to the top of every screen. That
+                    leaves the bar with the two controls and a warning that only
+                    appears when something is wrong. */}
 
                 {/* Primary action in this cluster, and now present at every
                     breakpoint — it used to disappear below `sm` in favour of a
@@ -948,16 +1082,28 @@ export function PublicSpeakingPage() {
             {/* One width rail, shared with the notice and the composer below.
                 3xl up to laptop; wider from `lg` so a desktop reads as a
                 desktop rather than a stretched phone column. */}
-            <div className="mx-auto w-full max-w-3xl px-4 pb-5 pt-3 sm:px-6 lg:max-w-5xl xl:max-w-6xl">
-              {!joined ? (
+            {/* px-3 on a phone: the rail was giving 32px of its ~360px to side
+                gutters, which is what squeezed responses into narrow columns and
+                pushed the vote pill hard against the text. */}
+            <div className="mx-auto w-full max-w-3xl px-3 pb-4 pt-2.5 sm:px-6 sm:pb-5 sm:pt-3 lg:max-w-5xl xl:max-w-6xl">
+              {!stateResolved ? (
+                /* The verdict is still in flight. Skeletons stand in for it —
+                   never the join gate, and never a composer. Whichever of those
+                   we guessed at would be wrong for half the room, and the wrong
+                   guess here is the one that flashes an input at someone who
+                   has already spent their response. */
+                <div>
+                  <StorySkeleton />
+                </div>
+              ) : !joined ? (
                 /* ----------------------------- join gate ---------------------------- */
                 <motion.div
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
-                  className="flex flex-col items-center gap-7 py-12 text-center sm:py-16"
+                  className="flex flex-col items-center gap-6 py-10 text-center sm:gap-7 sm:py-16"
                 >
-                  <div className="relative flex size-36 items-center justify-center">
+                  <div className="relative flex size-28 items-center justify-center sm:size-36">
                     <motion.div
                       className="absolute inset-0"
                       initial={reduced ? false : { scale: 0.5, opacity: 0, rotate: -50 }}
@@ -967,20 +1113,20 @@ export function PublicSpeakingPage() {
                       <PookalamMandala className="size-full" />
                     </motion.div>
                     <motion.span
-                      className="relative flex size-14 items-center justify-center rounded-full border-2 border-ink-warm bg-cream"
+                      className="relative flex size-12 items-center justify-center rounded-full border-2 border-ink-warm bg-cream sm:size-14"
                       initial={reduced ? false : { scale: 0.7, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ ...spring, delay: 0.3 }}
                     >
-                      <VenetianMask className="size-7" aria-hidden="true" />
+                      <VenetianMask className="size-6 sm:size-7" aria-hidden="true" />
                     </motion.span>
                   </div>
 
                   <div>
-                    <h2 className="font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm">
+                    <h2 className="font-display text-[23px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm sm:text-[28px]">
                       Join anonymously
                     </h2>
-                    <p className="mx-auto mt-2.5 max-w-xs text-[15px] leading-[1.55] text-ink-soft">
+                    <p className="mx-auto mt-2 max-w-xs text-[14.5px] leading-[1.55] text-ink-soft sm:mt-2.5 sm:text-[15px]">
                       No account, no email. You'll be given a random name for this
                       session — share one response, then vote.
                     </p>
@@ -994,7 +1140,7 @@ export function PublicSpeakingPage() {
                     transition={spring}
                     className={cn(
                       "group relative flex items-center gap-2.5 rounded-full border border-amber-deep",
-                      "bg-festival-gold px-8 py-3.5 text-sm font-bold text-ink-warm shadow-rest",
+                      "bg-festival-gold px-7 py-3 text-sm font-bold text-ink-warm shadow-rest sm:px-8 sm:py-3.5",
                       "transition-transform duration-200 hover:-translate-y-0.5",
                       "disabled:pointer-events-none disabled:opacity-60",
                     )}
@@ -1021,7 +1167,7 @@ export function PublicSpeakingPage() {
                   variants={listContainer}
                   initial="hidden"
                   animate="show"
-                  className="flex list-none flex-col gap-2"
+                  className="flex list-none flex-col gap-1.5 sm:gap-2"
                 >
                   <AnimatePresence>
                     {messages.map((message, index) => (
@@ -1056,7 +1202,7 @@ export function PublicSpeakingPage() {
             state only, is what keeps the keyboard case impossible rather than
             merely handled.
           */}
-          {joined && hasPosted && (
+          {stateResolved && joined && hasPosted && (
             <>
               <div
                 className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08] md:pb-[max(0px,calc(env(safe-area-inset-bottom)-var(--chat-keyboard-inset,0px)))]"
@@ -1079,14 +1225,17 @@ export function PublicSpeakingPage() {
                   initial={reduced || postedEarlier ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
-                  className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-4 py-2.5 md:gap-3 md:px-6 md:py-4 lg:max-w-5xl xl:max-w-6xl"
+                  className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-3 py-2.5 md:gap-3 md:px-6 md:py-4 lg:max-w-5xl xl:max-w-6xl"
                 >
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-leaf/25 bg-leaf/10 text-leaf-deep md:size-9">
                     <CheckCircle2 className="size-4 md:size-5" aria-hidden="true" />
                   </span>
                   {/* One quiet line on phones, where the nav below already
-                      carries the visual weight. */}
-                  <p className="min-w-0 truncate text-[12.5px] font-medium text-ink-warm md:hidden">
+                      carries the visual weight. It wraps rather than truncates:
+                      at 360px the longer variant lost its second half to an
+                      ellipsis, which cut the sentence exactly where it says what
+                      to do next. */}
+                  <p className="min-w-0 text-[12.5px] font-medium leading-[1.45] text-ink-warm md:hidden">
                     {postedEarlier
                       ? "You already suggested a name — vote for your favourites!"
                       : "Name submitted — vote for your favourites!"}
@@ -1119,14 +1268,23 @@ export function PublicSpeakingPage() {
             </>
           )}
 
-          {joined && !hasPosted && (
+          {/* The composer is the strictest gate on the page: a resolved verdict,
+              a joined participant, and a response still unspent. Every one of
+              those is server-owned, so there is no arrangement of refresh,
+              back-navigation or restored tab that can put an input in front of
+              someone the backend would refuse. */}
+          {stateResolved && joined && !hasPosted && (
             <div
               className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08]"
               style={composerPaddingStyle}
             >
-              <div className="mx-auto w-full max-w-3xl px-4 pb-3 pt-2 sm:px-6 lg:max-w-5xl xl:max-w-6xl">
-                <div className="mb-1.5 flex h-4 items-center justify-between">
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+              <div className="mx-auto w-full max-w-3xl px-3 pb-2.5 pt-2 sm:px-6 sm:pb-3 lg:max-w-5xl xl:max-w-6xl">
+                {/* A reserved strip, so the composer never jumps when someone
+                    starts typing — but a shorter one on a phone, where it is
+                    empty most of the time and every pixel above the keyboard is
+                    a pixel of transcript. */}
+                <div className="mb-1 flex h-3.5 items-center justify-between sm:mb-1.5 sm:h-4">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ink-soft sm:tracking-[0.16em]">
                     {typingLabel ?? (connected ? "" : "Reconnecting…")}
                   </p>
                   {/* Only once it starts to matter — a counter that is present
@@ -1177,8 +1335,10 @@ export function PublicSpeakingPage() {
                       aria-label="Your answer"
                       autoFocus={!COARSE_POINTER}
                       enterKeyHint="send"
-                      /* 16px minimum — iOS zooms on focus below that. */
-                      className="relative max-h-40 min-h-[3rem] w-full resize-none rounded-pk-md bg-transparent px-4 py-3 text-base text-ink-warm outline-none placeholder:text-ink-soft/85"
+                      /* 16px minimum — iOS zooms on focus below that. The
+                         slightly tighter mobile inset keeps the placeholder off
+                         the border without shrinking the type. */
+                      className="relative max-h-40 min-h-[3rem] w-full resize-none rounded-pk-md bg-transparent px-3.5 py-3 text-base leading-[1.4] text-ink-warm outline-none placeholder:text-ink-soft/85 sm:px-4"
                     />
                   </div>
 
@@ -1189,7 +1349,10 @@ export function PublicSpeakingPage() {
                     whileTap={reduced ? undefined : { scale: 0.94 }}
                     transition={snappy}
                     className={cn(
-                      "group relative flex h-[3rem] w-[3.25rem] shrink-0 items-center justify-center",
+                      // Square at the phone's rest height, so it reads as a
+                      // sibling of the field rather than a wide slab beside it;
+                      // the extra width returns from `sm` up.
+                      "group relative flex h-12 w-12 shrink-0 items-center justify-center sm:w-[3.25rem]",
                       "rounded-pk-md border border-amber-deep bg-festival-gold text-ink-warm shadow-rest",
                       "transition-[transform,opacity] duration-200 hover:-translate-y-0.5",
                       "disabled:pointer-events-none disabled:opacity-45",

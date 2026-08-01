@@ -185,10 +185,15 @@ report_doc = extend_schema(
     - A user cannot report the same chat partner twice while a report is still pending.
     - Rate limited to 5 requests/minute to prevent mass-report abuse.
     ### Request Fields
+    Accepts `application/json` or `multipart/form-data` — the latter is required when attaching an image.
+
     * `room_id`: UUID of the chat room in which the incident occurred.
     * `reason`: The category of the report. Must be one of: `spam`, `harassment`, `abusive_language`, `inappropriate_content`, `fake_identity`, `other`.
     * `description` *(optional)*: A detailed explanation of the incident.
     * `evidence_url` *(optional)*: A valid URL pointing to supporting evidence (e.g. a screenshot).
+    * `evidence_image` *(optional, multipart)*: A single supporting image. Must be a JPEG, PNG, WEBP or GIF of at most 5 MB. It is uploaded to Cloudinary and the resulting URL is stored as `evidence_url` — nothing is written to local storage. When both fields are sent, the uploaded image wins.
+
+    **Failure behaviour**: If the upload cannot complete, the report is not created and a `502` is returned. If the report is rejected after a successful upload (e.g. a duplicate pending report), the uploaded image is deleted again.
     """,
     request=ReportSerializer,
     responses={
@@ -221,6 +226,10 @@ report_doc = extend_schema(
         # 429: Returned when the client exceeds 5 requests per minute.
         429: OpenApiResponse(
             description="Too Many Requests - 5 requests/minute limit exceeded."
+        ),
+        # 502: Returned when the evidence image could not be stored remotely.
+        502: OpenApiResponse(
+            description="Bad Gateway - The evidence image could not be uploaded. The report was not created; the client may retry."
         ),
     },
 )

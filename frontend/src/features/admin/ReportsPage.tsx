@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -26,6 +26,7 @@ import {
   PageHeader,
   SearchBox,
   StatCard,
+  adminListQueryOptions,
   useDebouncedValue,
   type BadgeTone,
   type Column,
@@ -33,6 +34,8 @@ import {
 import { adminApi, type AdminReport, type ReportStatus } from "./api";
 
 const REPORTS_KEY = ["admin", "reports"] as const;
+/** Resolving a report moves `pending_reports_count` on the dashboard. */
+const DASHBOARD_KEY = ["admin", "dashboard"] as const;
 
 const STATUS_TONES: Record<ReportStatus, BadgeTone> = {
   pending: "amber",
@@ -59,9 +62,8 @@ function reasonLabel(reason: ReportReason): string {
   return REPORT_REASONS.find((entry) => entry.value === reason)?.label ?? reason;
 }
 
-/** Reports carry no id (see AdminReport), so rows key on what is unique. */
 function reportKey(report: AdminReport): string {
-  return report.id ?? `${report.room}:${report.reporter.id}:${report.created_at}`;
+  return report.id;
 }
 
 function Party({ name, email }: { name: string; email: string }) {
@@ -86,11 +88,18 @@ function ReportDetailModal({
     mutationFn: ({ id, status }: { id: string; status: ReportStatus }) =>
       adminApi.reports.updateStatus(id, status),
     onSuccess: (updated) => {
-      void queryClient.invalidateQueries({ queryKey: REPORTS_KEY });
       notify.success(`Report marked ${updated.status}.`);
       onClose();
     },
     onError: (error) => notify.error(parseApiError(error).message),
+    // onSettled, not onSuccess: a rejected PATCH must also pull the row back
+    // from the server so the badge can never disagree with the backend. The
+    // page re-derives `selected` from these results, so reopening the report
+    // shows the status the server actually stored.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: REPORTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+    },
   });
 
   return (
@@ -166,41 +175,35 @@ function ReportDetailModal({
             </div>
           </dl>
 
-          {/*
-            Status changes need PATCH /admin/reports/<report_id>/, and the list
-            payload carries no report id today (see AdminReport in api.ts).
-            The controls exist and are fully wired — they appear the moment the
-            backend adds `id` to AdminReportSerializer.
-          */}
-          {report.id !== undefined && (
-            <div className="border-t border-a-line pt-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-a-faint">
-                Set status
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {STATUS_OPTIONS.map((option) => (
-                  <AButton
-                    key={option.value}
-                    variant={report.status === option.value ? "primary" : "secondary"}
-                    size="sm"
-                    disabled={report.status === option.value}
-                    loading={
-                      statusMutation.isPending &&
-                      statusMutation.variables?.status === option.value
-                    }
-                    onClick={() =>
-                      statusMutation.mutate({
-                        id: report.id!,
-                        status: option.value,
-                      })
-                    }
-                  >
-                    {option.label}
-                  </AButton>
-                ))}
-              </div>
+          {/* PATCH /admin/reports/<report_id>/ — the list payload now carries
+              the id, so moderation can resolve a report from here. */}
+          <div className="border-t border-a-line pt-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-a-faint">
+              Set status
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map((option) => (
+                <AButton
+                  key={option.value}
+                  variant={report.status === option.value ? "primary" : "secondary"}
+                  size="sm"
+                  disabled={report.status === option.value}
+                  loading={
+                    statusMutation.isPending &&
+                    statusMutation.variables?.status === option.value
+                  }
+                  onClick={() =>
+                    statusMutation.mutate({
+                      id: report.id,
+                      status: option.value,
+                    })
+                  }
+                >
+                  {option.label}
+                </AButton>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       )}
     </AModal>
@@ -215,7 +218,10 @@ export function AdminReportsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<AdminReport | null>(null);
+  // Only the id is held. Keeping the report object here made the modal a
+  // detached snapshot: after a status change the list refetched but the open
+  // (or reopened) dialog still showed the status captured on the click.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -236,12 +242,42 @@ export function AdminReportsPage() {
         end_date: endDate || undefined,
       }),
     placeholderData: keepPreviousData,
-    retry: 1,
+    ...adminListQueryOptions,
   });
 
   const stats = query.data?.stats;
   const pageData = query.data?.reports;
-  const rows = pageData?.results ?? [];
+  const rows = useMemo(() => pageData?.results ?? [], [pageData]);
+
+  /**
+   * The dialog reads straight from the query results, so every refetch —
+   * a status change, a window refocus — flows into the open modal.
+   *
+   * `rows` is only the current page of the current filter, though, and a
+   * refetch can legitimately push the report being read off it (a newer
+   * report arrives and shifts it to page 2; its new status no longer matches
+   * the active filter). The last payload is therefore held in a ref and used
+   * as the fallback: the sheet keeps showing what the admin opened instead of
+   * vanishing mid-read, while still absorbing every fresh value the moment
+   * one arrives. Only an explicit close clears it.
+   */
+  const lastSelectedRef = useRef<AdminReport | null>(null);
+  const selected = useMemo(() => {
+    if (!selectedId) return null;
+    const fresh = rows.find((report) => report.id === selectedId);
+    if (fresh) lastSelectedRef.current = fresh;
+    return fresh ?? lastSelectedRef.current;
+  }, [rows, selectedId]);
+
+  const openReport = useCallback((report: AdminReport) => {
+    lastSelectedRef.current = report;
+    setSelectedId(report.id);
+  }, []);
+
+  const closeReport = useCallback(() => {
+    setSelectedId(null);
+    lastSelectedRef.current = null;
+  }, []);
 
   const columns = useMemo<Array<Column<AdminReport>>>(
     () => [
@@ -318,7 +354,7 @@ export function AdminReportsPage() {
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search people, reason, description…"
-            busy={query.isFetching && !query.isLoading}
+            busy={query.isPlaceholderData}
             className="col-span-2 w-full lg:w-72"
           />
           <ASelect
@@ -391,7 +427,7 @@ export function AdminReportsPage() {
               rows={rows}
               rowKey={reportKey}
               loading={query.isLoading}
-              onRowClick={setSelected}
+              onRowClick={openReport}
               empty={
                 <AEmpty
                   icon={Flag}
@@ -409,14 +445,14 @@ export function AdminReportsPage() {
                 page={page}
                 count={pageData.count}
                 onPage={setPage}
-                busy={query.isFetching}
+                busy={query.isPlaceholderData}
               />
             )}
           </>
         )}
       </ACard>
 
-      <ReportDetailModal report={selected} onClose={() => setSelected(null)} />
+      <ReportDetailModal report={selected} onClose={closeReport} />
     </PageEnter>
   );
 }

@@ -1,6 +1,7 @@
 import logging
 
 from core.encryption import decrypt_message
+from core.validators import IMAGE_FIELD_ERROR_MESSAGES, ImageUploadValidator
 from rest_framework import serializers
 
 from .models import PrivateChatRoom, PrivateMessage, Report, RevealRequest
@@ -79,6 +80,14 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
 
 
 class ReportSerializer(serializers.Serializer):
+    """Validates a moderation report, with optional evidence.
+
+    Evidence may arrive two ways: as `evidence_url` (an already-hosted link, the
+    original contract) or as `evidence_image`, a multipart file the view uploads
+    to Cloudinary. The model stores a single URL either way — when both are
+    given the uploaded image wins, since it is the one the reporter just picked.
+    """
+
     room_id = serializers.UUIDField()
     reason = serializers.ChoiceField(choices=Report.ReportReason.choices)
     description = serializers.CharField(
@@ -88,6 +97,12 @@ class ReportSerializer(serializers.Serializer):
     evidence_url = serializers.URLField(
         required=False,
         allow_null=True,
+    )
+    evidence_image = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        error_messages=IMAGE_FIELD_ERROR_MESSAGES,
+        validators=[ImageUploadValidator("Evidence image")],
     )
 
 

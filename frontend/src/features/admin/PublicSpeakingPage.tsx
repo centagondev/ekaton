@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -14,6 +14,7 @@ import {
   ABadge,
   AButton,
   ACard,
+  adminListQueryOptions,
   AEmpty,
   ConfirmDialog,
   notify,
@@ -51,6 +52,10 @@ export function AdminPublicSpeakingPage() {
     // Keeps the current rows on screen while a debounced search resolves, so
     // the list doesn't collapse into skeletons on every keystroke.
     placeholderData: keepPreviousData,
+    // Admin freshness: staleTime 0 + refetch on mount/focus/reconnect, so a
+    // moderator returning to the tab sees the wall as it is now. No timer.
+    ...adminListQueryOptions,
+    // Deliberately after the spread so it wins over the shared `retry: 1`.
     // 404 is a real answer ("no discussion right now"), not a flaky request;
     // auth failures are already being redirected by the layout.
     retry: (failureCount, error) => {
@@ -84,11 +89,26 @@ export function AdminPublicSpeakingPage() {
       }
       notify.error(parseApiError(error).message);
     },
+    // onSettled, not onSuccess: a rejected delete rolls back to a snapshot that
+    // may itself be out of date, so both outcomes re-sync from the server.
     onSettled: () => {
       // Every search/sort combination is now stale, not just the visible one.
+      // ["admin","dashboard"] is deliberately NOT invalidated: its counters are
+      // users/events/reports/private chat messages — no dashboard statistic
+      // counts public-speaking responses, so a deletion cannot move one.
       void queryClient.invalidateQueries({ queryKey: SPEAKING_KEY });
     },
   });
+
+  const { mutate: deleteMessage, isPending: deleting } = deleteMutation;
+
+  // Stable identities: `closeTarget` feeds AModal's Escape/scroll-lock effect
+  // dependency list, which would otherwise tear down and re-arm on every
+  // keystroke in the search box while the dialog is open.
+  const closeTarget = useCallback(() => setTarget(null), []);
+  const confirmDelete = useCallback(() => {
+    if (target) deleteMessage(target.id);
+  }, [target, deleteMessage]);
 
   const messages = query.data?.results ?? [];
   const parsedError = query.error ? parseApiError(query.error) : null;
@@ -108,7 +128,7 @@ export function AdminPublicSpeakingPage() {
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search responses or names…"
-            busy={query.isFetching && !query.isLoading}
+            busy={query.isPlaceholderData}
             className="col-span-2 w-full lg:w-72"
           />
           <div
@@ -228,9 +248,9 @@ export function AdminPublicSpeakingPage() {
 
       <ConfirmDialog
         open={target !== null}
-        onClose={() => setTarget(null)}
-        onConfirm={() => target && deleteMutation.mutate(target.id)}
-        busy={deleteMutation.isPending}
+        onClose={closeTarget}
+        onConfirm={confirmDelete}
+        busy={deleting}
         title="Delete this message?"
         confirmLabel="Delete"
         body={

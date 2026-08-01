@@ -62,6 +62,10 @@ class AdminReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = [
+            # The admin panel needs this to address PATCH /admin/reports/<id>/;
+            # without it the moderation UI can list reports but never resolve
+            # one. Display field only — no logic, permission or filter change.
+            "id",
             "room",
             "reporter",
             "reported_user",

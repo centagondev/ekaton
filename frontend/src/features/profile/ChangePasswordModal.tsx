@@ -215,14 +215,25 @@ function ChangePasswordForm({ onClose }: { onClose: () => void }) {
           ))}
       </p>
 
-      <div className="flex justify-end gap-3 pt-1">
-        <Button type="button" variant="secondary" onClick={onClose}>
+      {/* Full-width and stacked on a phone, matching the logout sheet: two
+          short buttons crowded into the bottom-right corner of a full-width
+          sheet are the hardest targets on the page. DOM order keeps Cancel
+          first — `flex-col-reverse` is what lifts the primary action above it
+          on small screens without changing the tab order. */}
+      <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onClose}
+          className="w-full sm:w-auto"
+        >
           Cancel
         </Button>
         <Button
           type="submit"
           loading={form.formState.isSubmitting}
           disabled={!form.formState.isValid}
+          className="w-full sm:w-auto"
         >
           {form.formState.isSubmitting ? "Updating…" : "Update password"}
         </Button>
@@ -233,7 +244,7 @@ function ChangePasswordForm({ onClose }: { onClose: () => void }) {
 
 export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} title="Change password" className="max-w-md">
+    <Modal open={open} onClose={onClose} title="Change password" size="md">
       <ChangePasswordForm onClose={onClose} />
     </Modal>
   );

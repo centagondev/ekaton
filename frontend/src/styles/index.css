@@ -142,6 +142,18 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
+/* On mobile, elastic/rubber-band overscroll (and iOS Safari's safe-area
+   chrome, which auto-tints from the page's actual background) reveals
+   whatever is behind the app's own div — always html/body, no matter how
+   tall the admin container renders. body keeps the product's light canvas by
+   default, so that's what showed through as a white strip at the bottom of
+   the dark admin theme. Themed only while a dark admin root is actually in
+   the document, so the product app and the light admin theme are untouched. */
+html:has([data-admin][data-admin-theme="dark"]),
+body:has([data-admin][data-admin-theme="dark"]) {
+  background-color: #0a101d;
+}
+
 ::selection {
   background: var(--color-brand-yellow);
   color: var(--color-ink);
@@ -288,13 +300,20 @@ body {
   --a-tone-violet-line: rgb(139 92 246 / 0.3);
 }
 
-/* Theme flip feels intentional rather than jarring. Lives in @layer base so
-   any per-element transition-* utility still wins (unlayered rules would
-   silently override Tailwind's layered utilities), and reduced-motion users
-   are covered by the global rule above. */
+/* Theme flip feels intentional rather than jarring — but ONLY during the
+   flip. A permanent `[data-admin] *` transition made the browser compute a
+   transition for every node in the subtree, which is paid on every mount:
+   opening the drawer or a bottom sheet mounts hundreds of elements and each
+   one cost style work before it could paint. That was the single biggest
+   source of admin lag.
+
+   Instead the rule is armed for one animation frame window by
+   useAdminTheme(), which stamps .a-theme-flip on the root and strips it
+   ~220ms later. Components that want their own hover/focus easing already
+   carry Tailwind's transition-colors, so nothing else regressed. */
 @layer base {
-  [data-admin],
-  [data-admin] * {
+  [data-admin].a-theme-flip,
+  [data-admin].a-theme-flip * {
     transition-property: background-color, border-color, color, box-shadow,
       fill, stroke;
     transition-duration: 160ms;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn, initialsOf } from "@/lib/utils";
 
 export function Avatar({
@@ -12,6 +12,18 @@ export function Avatar({
 }) {
   const [broken, setBroken] = useState(false);
 
+  /**
+   * A failure belongs to one URL, not to the component.
+   *
+   * Without this reset, the flag was permanent: uploading a new photo swapped
+   * `src` but kept `broken`, so the avatar stayed on its initials and the new
+   * photo never appeared. That is reachable on every upload after the first —
+   * the backend deletes the old Cloudinary asset before storing the new one, so
+   * the URL still on screen starts 404ing mid-upload, trips `onError`, and the
+   * component never recovers.
+   */
+  useEffect(() => setBroken(false), [src]);
+
   return (
     <div
       aria-hidden="true"
@@ -22,6 +34,9 @@ export function Avatar({
     >
       {src && !broken ? (
         <img
+          // Remount on a new URL so the browser never paints the previous
+          // photo while the next one decodes.
+          key={src}
           src={src}
           alt=""
           loading="lazy"

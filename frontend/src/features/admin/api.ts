@@ -74,17 +74,31 @@ function setAdminTokens(access: string, refresh?: string): void {
   }
 }
 
-/** The admin profile captured at login, for the user menu. */
+/**
+ * The admin profile captured at login, for the user menu.
+ *
+ * Cached in module scope: this is read during render (the users table asks
+ * "is this row me?" on every row), and re-reading localStorage plus parsing
+ * JSON on each of those was a synchronous blocking hit in the render path —
+ * paid again on every keystroke in a search box. The cache is invalidated by
+ * the only two things that can change it: login and logout.
+ */
+let cachedAdminUser: AdminUser | null | undefined;
+
 export function getAdminUser(): AdminUser | null {
-  try {
-    const raw = localStorage.getItem(ADMIN_USER_KEY);
-    return raw ? (JSON.parse(raw) as AdminUser) : null;
-  } catch {
-    return null;
+  if (cachedAdminUser === undefined) {
+    try {
+      const raw = localStorage.getItem(ADMIN_USER_KEY);
+      cachedAdminUser = raw ? (JSON.parse(raw) as AdminUser) : null;
+    } catch {
+      cachedAdminUser = null;
+    }
   }
+  return cachedAdminUser;
 }
 
 function setAdminSession(result: AdminLoginResult): void {
+  cachedAdminUser = result.user;
   try {
     localStorage.setItem(ADMIN_ACCESS_KEY, result.access);
     localStorage.setItem(ADMIN_REFRESH_KEY, result.refresh);
@@ -95,6 +109,7 @@ function setAdminSession(result: AdminLoginResult): void {
 }
 
 export function clearAdminSession(): void {
+  cachedAdminUser = undefined;
   try {
     localStorage.removeItem(ADMIN_ACCESS_KEY);
     localStorage.removeItem(ADMIN_REFRESH_KEY);
@@ -254,17 +269,9 @@ export interface ReportParty {
   email: string;
 }
 
-/**
- * One row from GET /admin/reports/.
- *
- * KNOWN BACKEND GAP — `id` is typed optional because AdminReportSerializer
- * does not include it, yet PATCH /admin/reports/<report_id>/ requires it. The
- * status-change action therefore has nothing to call and stays hidden. Typed
- * this way so the portal lights up the moment the backend adds "id" to the
- * serializer's fields, with zero frontend changes.
- */
+/** One row from GET /admin/reports/. */
 export interface AdminReport {
-  id?: string;
+  id: string;
   room: string;
   reporter: ReportParty;
   reported_user: ReportParty;
@@ -440,7 +447,6 @@ export const adminApi = {
       return data.data;
     },
 
-    /** Unreachable until the list serializer exposes `id` — see AdminReport. */
     async updateStatus(
       reportId: string,
       status: ReportStatus,

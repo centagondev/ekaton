@@ -164,7 +164,7 @@ export function SubmittedDialog({
       title="Response submitted successfully"
       variant="soft"
       chrome={false}
-      className="max-w-md"
+      size="md"
     >
       {/* The clip belongs here, not on the panel: Modal's panel owns
           `overflow-y-auto` so a tall dialog still scrolls on a short phone,

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -34,34 +41,70 @@ const THEME_KEY = "ekaton:admin-theme";
 
 export type AdminTheme = "light" | "dark";
 
+/**
+ * The live theme, cached in module scope.
+ *
+ * Read from storage exactly once per page load. Overlays that re-establish
+ * the token scope (modals, toasts) used to call this on every render, which
+ * put a synchronous localStorage hit in the render path of the very
+ * components that had to feel instant.
+ */
+let currentTheme: AdminTheme | null = null;
+const themeListeners = new Set<(theme: AdminTheme) => void>();
+
 /** Read the persisted theme — dark is the portal's default appearance. */
 export function getStoredAdminTheme(): AdminTheme {
-  try {
-    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
-  } catch {
-    return "dark";
+  if (currentTheme === null) {
+    try {
+      currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+    } catch {
+      currentTheme = "dark";
+    }
   }
+  return currentTheme;
+}
+
+function setAdminTheme(next: AdminTheme): void {
+  currentTheme = next;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* preference simply won't survive a reload */
+  }
+  // Arm the transition rule for the flip only (see .a-theme-flip in
+  // index.css), then disarm so mounts stay cheap.
+  const roots = document.querySelectorAll("[data-admin]");
+  roots.forEach((root) => root.classList.add("a-theme-flip"));
+  window.setTimeout(
+    () => roots.forEach((root) => root.classList.remove("a-theme-flip")),
+    220,
+  );
+  themeListeners.forEach((listener) => listener(next));
 }
 
 /**
  * Theme state for an admin root. The value is persisted so the choice
- * survives reloads and applies to the login screen too. Components don't
- * consume this directly — the root element carries data-admin-theme and CSS
- * does the rest.
+ * survives reloads and applies to the login screen too. Every subscriber
+ * shares one module-level value, so a modal or toast opened after a toggle
+ * can never render in the previous theme.
  */
 export function useAdminTheme(): [AdminTheme, () => void] {
   const [theme, setTheme] = useState<AdminTheme>(getStoredAdminTheme);
-  const toggle = useCallback(() => {
-    setTheme((previous) => {
-      const next = previous === "light" ? "dark" : "light";
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* preference simply won't survive a reload */
-      }
-      return next;
-    });
+
+  useEffect(() => {
+    themeListeners.add(setTheme);
+    // Another admin root (or tab restore) may have changed it before we
+    // subscribed.
+    setTheme(getStoredAdminTheme());
+    return () => {
+      themeListeners.delete(setTheme);
+    };
   }, []);
+
+  const toggle = useCallback(() => {
+    setAdminTheme(getStoredAdminTheme() === "light" ? "dark" : "light");
+  }, []);
+
   return [theme, toggle];
 }
 
@@ -102,18 +145,25 @@ export function ThemeToggle({
   );
 }
 
-/** True below the `sm` breakpoint — drives the modal/bottom-sheet split. */
+/**
+ * True below the `sm` breakpoint — drives the modal/bottom-sheet split.
+ *
+ * One MediaQueryList shared by every caller. Each modal creating its own
+ * listener meant a page with four dialogs paid four subscriptions and four
+ * state updates on every resize.
+ */
+const mobileQuery =
+  typeof window === "undefined" ? null : window.matchMedia("(max-width: 639px)");
+
 export function useIsMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => window.matchMedia("(max-width: 639px)").matches,
+  return useSyncExternalStore(
+    (onChange) => {
+      mobileQuery?.addEventListener("change", onChange);
+      return () => mobileQuery?.removeEventListener("change", onChange);
+    },
+    () => mobileQuery?.matches ?? false,
+    () => false,
   );
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 639px)");
-    const onChange = (event: MediaQueryListEvent) => setMobile(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-  return mobile;
 }
 
 /* --------------------------------- badges --------------------------------- */
@@ -816,13 +866,21 @@ export function AModal({
   wide?: boolean;
 }) {
   const isMobile = useIsMobile();
+  const [theme] = useAdminTheme();
+
+  // Callers pass `onClose={() => setOpen(false)}`, a fresh function per render.
+  // Held in a ref so the effect below hangs on `open` alone — as a dependency
+  // it re-parked the page scroll and re-bound the key listener on every
+  // unrelated re-render behind an open sheet.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Escape closes; page scroll is parked while any modal is up. Removing the
   // scrollbar shifts the desktop layout, so its width is compensated.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     const scrollbar = window.innerWidth - document.documentElement.clientWidth;
@@ -835,40 +893,47 @@ export function AModal({
       document.body.style.overflow = previousOverflow;
       document.body.style.paddingRight = previousPadding;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <AnimatePresence>
       {open && (
         <div
           data-admin
-          data-admin-theme={getStoredAdminTheme()}
+          data-admin-theme={theme}
           className="fixed inset-0 z-50 flex items-end justify-center bg-transparent sm:items-center sm:p-4"
         >
+          {/* No backdrop-blur: blurring a full-screen layer forces the browser
+              to re-composite everything behind it every frame, which is what
+              made sheets visibly stall as they slid up on phones. A flat scrim
+              reads the same and costs nothing. */}
           <motion.button
             type="button"
             aria-label="Close dialog"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.12, ease: "linear" }}
             onClick={onClose}
-            className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]"
+            className="absolute inset-0 cursor-default bg-black/50"
           />
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-label={title}
+            // Transform/opacity only — never width, height or top, so the
+            // whole animation runs on the compositor with no layout work.
             initial={
               isMobile ? { y: "100%" } : { opacity: 0, scale: 0.97, y: 8 }
             }
             animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
-            exit={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.97, y: 8 }}
+            exit={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.98, y: 4 }}
             transition={
               isMobile
-                ? { type: "tween", duration: 0.28, ease: [0.32, 0.72, 0, 1] }
-                : { duration: 0.15, ease: "easeOut" }
+                ? { type: "tween", duration: 0.22, ease: [0.32, 0.72, 0, 1] }
+                : { duration: 0.13, ease: [0.32, 0.72, 0, 1] }
             }
+            style={{ willChange: "transform" }}
             className={cn(
               "relative flex w-full flex-col border-a-line bg-a-surface a-elev-lg",
               // Sheet on phones…
@@ -964,13 +1029,14 @@ function AdminToastCard({
 }) {
   const meta = TOAST_META[kind];
   const Icon = meta.icon;
+  const [theme] = useAdminTheme();
   return (
     // data-admin re-establishes the token scope (the Toaster mounts outside
     // the admin tree); data-admin-toast lets index.css strip the product
     // Toaster's brutalist frame from around this card.
     <div
       data-admin
-      data-admin-theme={getStoredAdminTheme()}
+      data-admin-theme={theme}
       data-admin-toast
       className="bg-transparent"
     >
@@ -1033,6 +1099,41 @@ export const notify = {
   info: (message: string, description?: string) =>
     pushToast("info", message, description),
 };
+
+/* ----------------------------- data freshness ------------------------------ */
+
+/**
+ * Query defaults for every admin list.
+ *
+ * The app-wide QueryClient (main.tsx) sets `refetchOnWindowFocus: false` and
+ * a 30s staleTime — right for the student app, wrong for a moderation console
+ * where the whole job is seeing current state. Those defaults are why admin
+ * data looked stale until a manual reload. Overriding here rather than in the
+ * global client keeps the student app's behavior exactly as it was.
+ *
+ * `staleTime: 0` + focus/mount refetching means: switch to another tab, do
+ * something, come back — the list re-syncs on its own. No polling timer, so
+ * an idle console generates no traffic at all.
+ */
+export const adminListQueryOptions = {
+  staleTime: 0,
+  refetchOnWindowFocus: true,
+  refetchOnMount: "always",
+  refetchOnReconnect: true,
+  retry: 1,
+} as const;
+
+/**
+ * Same idea for the dashboard, but its endpoint is cached 60s server-side —
+ * asking more often than that returns a byte-identical payload, so the
+ * client matches that cadence instead of hammering it.
+ */
+export const adminStatsQueryOptions = {
+  staleTime: 60_000,
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+  retry: 1,
+} as const;
 
 /* ------------------------------- page chrome ------------------------------- */
 

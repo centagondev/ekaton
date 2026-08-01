@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostEnvelope } from "./client";
+import { apiGet, apiPatchForm, apiPost, apiPostEnvelope } from "./client";
 import type {
   ApiEnvelope,
   CheckEmailResult,
@@ -27,6 +27,17 @@ export const authApi = {
    * still an accounts route.
    */
   me: (): Promise<User> => apiGet<User>("/users/me/"),
+
+  /**
+   * Upload a new profile photo. Multipart only — the backend hands the file to
+   * Cloudinary and returns the refreshed user carrying the hosted URL, so the
+   * response alone is enough to update the session.
+   */
+  updateProfilePhoto: (file: File): Promise<User> => {
+    const form = new FormData();
+    form.append("profile_photo", file);
+    return apiPatchForm<User>("/users/me/", form);
+  },
 
   setPassword: (payload: {
     token: string;

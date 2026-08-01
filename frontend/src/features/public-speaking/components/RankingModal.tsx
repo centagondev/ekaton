@@ -3,10 +3,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { EASE_OUT_EXPO, useMotionPrefs } from "@/lib/motion";
-import { cn, formatDateTime, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { SpeakingMessage } from "../api";
 import { byVotes } from "../ordering";
-import { AnonAvatar } from "./StoryCard";
+import { NameLine } from "./StoryCard";
 import { VoteButton } from "./VoteButton";
 
 /**
@@ -41,6 +41,13 @@ const TOP = 10;
 const STAGGER_ROWS = 8;
 const STAGGER_STEP = 0.03;
 
+/** Matches the shared Modal's open and close transitions. */
+const SETTLE_MS = 260;
+const CLOSE_MS = 220;
+
+/** One frozen empty array, so a closed sheet never churns a new one. */
+const EMPTY: readonly SpeakingMessage[] = [];
+
 /**
  * Warm tint for the top three, strongest at rank 1.
  *
@@ -68,6 +75,7 @@ const RankedRow = memo(function RankedRow({
   onUpvote,
   pending,
   rejectedNonce,
+  animateRank,
 }: {
   message: SpeakingMessage;
   index: number;
@@ -75,13 +83,25 @@ const RankedRow = memo(function RankedRow({
   onUpvote: (id: string) => void;
   pending?: boolean;
   rejectedNonce?: number;
+  /**
+   * Whether this row participates in layout projection.
+   *
+   * Off while the sheet is still sliding. `layout` makes Framer measure the
+   * row and correct for every transform between it and the viewport — and
+   * during the open animation the panel above it *is* a moving transform, so
+   * ten rows re-measuring against a target that changes every frame was the
+   * bulk of what made this sheet stutter as it opened on slower phones. The
+   * rank glide it pays for only has anything to animate once the sheet is
+   * open and votes start landing, so nothing is lost by waiting.
+   */
+  animateRank: boolean;
 }) {
   const { reduced } = useMotionPrefs();
   const podium = index < PODIUM;
 
   return (
     <motion.li
-      layout
+      layout={animateRank}
       aria-posinset={index + 1}
       aria-setsize={total}
       initial={reduced ? false : { opacity: 0, y: 6 }}
@@ -100,9 +120,11 @@ const RankedRow = memo(function RankedRow({
         podium && PODIUM_TINT[index],
       )}
     >
-      <div className="flex items-center gap-2.5 px-3.5 py-2.5 sm:px-4">
+      <div className="flex items-center gap-2.5 px-3 py-2.5 sm:px-4">
         {/* Fixed width, tabular figures: the point of a rank column is that
-            every number sits on the same axis down the left edge. */}
+            every number sits on the same axis down the left edge. Untouched by
+            the initial chip's removal — rank is the subject of this list, and
+            it is now the only thing standing to the left of a handle. */}
         <span
           className={cn(
             "w-5 shrink-0 text-right font-mono text-[12px] font-bold tabular-nums",
@@ -112,20 +134,10 @@ const RankedRow = memo(function RankedRow({
           {index + 1}
         </span>
 
-        <AnonAvatar name={message.display_name} size="sm" />
-
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">
-            {message.display_name}
-            {/* Below `sm` the row is too narrow for the handle and the time to
-                coexist without one of them truncating to noise. */}
-            <span className="hidden sm:inline">
-              <span className="mx-1.5 opacity-40">·</span>
-              <time dateTime={message.created_at} title={formatDateTime(message.created_at)}>
-                {timeAgo(message.created_at)}
-              </time>
-            </span>
-          </p>
+          {/* Below `sm` the row is too narrow for the handle and the time to
+              coexist without one of them truncating to noise. */}
+          <NameLine message={message} showTimeFrom="sm" />
           {/* The response is the content of the row; rank and handle are the
               metadata around it. Clamped to two lines — the full text carries
               on the `title`, and the feed is where responses are read in
@@ -167,10 +179,38 @@ export function RankingModal({
   rejections: Readonly<Record<string, number>>;
 }) {
   const [showAll, setShowAll] = useState(false);
+  /** True once the sheet has finished arriving — see `animateRank` on the row. */
+  const [settled, setSettled] = useState(false);
+  /** Keeps the list alive across the closing animation. */
+  const [lingering, setLingering] = useState(false);
 
-  // Ranked here rather than upstream, from the same array the feed renders, so
-  // the existing socket frames keep this live with no extra request.
-  const ranked = useMemo(() => byVotes(messages), [messages]);
+  useEffect(() => {
+    if (!open) {
+      setSettled(false);
+      // The rows must still be there to animate out; `lingering` releases a
+      // beat after the panel has gone, not the instant `open` flips.
+      const release = window.setTimeout(() => setLingering(false), CLOSE_MS);
+      return () => window.clearTimeout(release);
+    }
+
+    setLingering(true);
+    // Deliberately matched to the panel's own open transition: the rows join
+    // the layout system on the far side of it rather than fighting it.
+    const timer = window.setTimeout(() => setSettled(true), SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  /**
+   * Ranked here rather than upstream, from the same array the feed renders, so
+   * the existing socket frames keep this live with no extra request.
+   *
+   * Gated on visibility because this component stays mounted for the life of
+   * the page while `messages` changes on every vote frame the room produces —
+   * so without the guard a closed sheet re-sorted the whole room, tens of
+   * times a minute, for a list nobody was looking at.
+   */
+  const live = open || lingering;
+  const ranked = useMemo(() => (live ? byVotes(messages) : EMPTY), [live, messages]);
   const visible = showAll ? ranked : ranked.slice(0, TOP);
   const hidden = ranked.length - visible.length;
 
@@ -238,6 +278,7 @@ export function RankingModal({
                     onUpvote={onUpvote}
                     pending={pendingVotes.has(message.id)}
                     rejectedNonce={rejections[message.id] ?? 0}
+                    animateRank={settled}
                   />
                 ))}
               </AnimatePresence>

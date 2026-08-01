@@ -5,72 +5,54 @@ import { cn, formatDateTime, timeAgo } from "@/lib/utils";
 import type { SpeakingMessage } from "../api";
 import { VoteButton } from "./VoteButton";
 
-/* --------------------------------- avatar --------------------------------- */
+/* -------------------------------- identity -------------------------------- */
 
 /**
- * Deterministic warm-palette chip: the same anonymous name gets the same colour
- * everywhere it appears, so a voice stays recognisable between the feed and
- * the ranking.
+ * The name line, shared by the feed and the ranking so the two can never drift.
  *
- * The hash is unchanged from the version this replaces — only the palette
- * moved, from the app's yellow/lime/lavender to four tones taken out of the
- * banner. Lavender in particular read as UI chrome borrowed from a different
- * product once it sat under Onam artwork.
+ * There used to be a coloured initial chip in front of this — a deterministic
+ * gradient square carrying one letter. It went because it was decoration
+ * pretending to be identification: two responses from "Anonymous Falcon" and
+ * "Anonymous Fox" drew the same "F" in tones a reader has no way to decode, and
+ * the handle itself, spelled out immediately to its right, already said the
+ * thing precisely. What it reliably did cost was ~38px off the front of every
+ * row on a phone, which is width the response itself needed.
  *
- * This chip is where the page keeps its brutalist accent: a crisp 2px ink
- * border, deliberately, so the design still reads as *this* product rather
- * than as a soft template.
+ * With the chip gone, the handle carries identity alone, so it takes the weight
+ * the chip was holding: a step up in size and to full ink, against the
+ * timestamp beside it in the same mono caption at the softer tone. The
+ * uppercase micro-label is this page's voice and stays.
  */
-const AVATAR_TONES = [
-  "bg-gradient-to-br from-festival-gold to-amber-deep",
-  "bg-gradient-to-br from-kasavu to-[#efe0bd]",
-  "bg-gradient-to-br from-leaf to-leaf-deep text-cream",
-  "bg-gradient-to-br from-[#ffe480] to-festival-gold",
-] as const;
-
-function avatarTone(name: string): string {
-  let hash = 0;
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) | 0;
-  }
-  return AVATAR_TONES[Math.abs(hash) % AVATAR_TONES.length];
-}
-
-/**
- * Size is a prop rather than a className override.
- *
- * `cn` is a plain string joiner with no Tailwind conflict resolution, so
- * passing `size-8` alongside the built-in `size-9` ships both classes and lets
- * stylesheet order pick the winner — which is to say, silently ignores the
- * caller. An enum can't be overruled by accident.
- */
-const AVATAR_SIZES = {
-  sm: "size-7 text-xs",
-  md: "size-9 text-sm",
-} as const;
-
-export function AnonAvatar({
-  name,
-  size = "md",
-  className,
+export function NameLine({
+  message,
+  showTimeFrom = "always",
 }: {
-  name: string;
-  size?: keyof typeof AVATAR_SIZES;
-  className?: string;
+  message: SpeakingMessage;
+  /** The ranking's rows are too narrow to hold handle and time below `sm`. */
+  showTimeFrom?: "always" | "sm";
 }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex shrink-0 select-none items-center justify-center rounded-pk-sm",
-        "border-2 border-ink-warm font-black uppercase text-ink-warm",
-        AVATAR_SIZES[size],
-        avatarTone(name),
-        className,
+    <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-soft sm:tracking-[0.14em]">
+      <span className="text-[11px] font-black text-ink-warm">{message.display_name}</span>
+      {/* Your own response, named as such. `is_own` is the same server-owned
+          flag that stops you voting for it, so this can never label someone
+          else's response as yours. Deliberately quiet — normal case, a step
+          down, and the soft tone: it is an annotation on the handle, not a
+          second handle. */}
+      {message.is_own && (
+        <span className="ml-1 text-[9.5px] font-semibold normal-case tracking-normal text-ink-soft/70">
+          (You)
+        </span>
       )}
-    >
-      {name.charAt(0)}
-    </span>
+      <span className={cn(showTimeFrom === "sm" && "hidden sm:inline")}>
+        <span className="mx-1.5 opacity-40">·</span>
+        {/* Relative time, exact stamp on hover — HH:MM was ambiguous on a wall
+            that spans days. */}
+        <time dateTime={message.created_at} title={formatDateTime(message.created_at)}>
+          {timeAgo(message.created_at)}
+        </time>
+      </span>
+    </p>
   );
 }
 
@@ -138,7 +120,7 @@ function StoryCardBase({
       <div
         className={cn(
           "relative rounded-pk-md border border-ink-warm/[0.07] bg-kasavu/80",
-          "px-3 py-2.5 transition-colors duration-200 sm:px-3.5",
+          "px-3 py-2.5 transition-colors duration-200 sm:px-3.5 sm:py-3",
           "hover:bg-kasavu",
         )}
       >
@@ -154,22 +136,27 @@ function StoryCardBase({
           />
         )}
 
-        <div className="relative flex items-center gap-2.5 sm:gap-3">
-          <AnonAvatar name={message.display_name} size="sm" className="self-start sm:mt-0.5" />
+        {/*
+          Top-aligned on a phone, centred from `sm`.
 
+          Centring works when a response is one line — everything sits on the
+          same optical row. On a 360px screen most of them wrap to three or
+          four, and centring then floats the heart against the middle of a
+          paragraph, anchored to nothing. Aligning it to the name line gives the
+          row a single top edge to read from and lets the text run its full
+          height beneath.
+        */}
+        <div className="relative flex items-start gap-2 sm:items-center sm:gap-3">
+          {/* No leading column any more: the text starts at the card's own
+              padding edge, which is the ~38px of extra measure the response
+              gained when the initial chip went. */}
           <div className="min-w-0 flex-1">
-            <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-soft">
-              <span className="text-ink-warm">{message.display_name}</span>
-              <span className="mx-1.5 opacity-40">·</span>
-              {/* Relative time, exact stamp on hover — HH:MM was ambiguous on
-                  a wall that spans days. */}
-              <time dateTime={message.created_at} title={formatDateTime(message.created_at)}>
-                {timeAgo(message.created_at)}
-              </time>
-            </p>
+            <NameLine message={message} />
             {/* The response is the point of the row: the largest, heaviest
-                thing in it, directly under the meta line. */}
-            <p className="mt-0.5 break-words text-[15px] font-medium leading-[1.5] text-ink-warm">
+                thing in it, directly under the name line. The gap widens by
+                2px so the jump from 10px caption to 15px body reads as a step
+                rather than as two lines that happen to touch. */}
+            <p className="mt-1 break-words text-[15px] font-medium leading-[1.5] text-ink-warm">
               {message.content}
             </p>
           </div>

@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { AnimatePresence, motion } from "framer-motion";
@@ -9,6 +17,7 @@ import {
   Eye,
   Flag,
   Hand,
+  ImagePlus,
   Reply,
   SendHorizonal,
   SkipForward,
@@ -22,15 +31,18 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Textarea } from "@/components/ui/Field";
 import { Avatar } from "@/components/ui/Avatar";
+import { ImageViewer } from "@/components/ui/ImageViewer";
+import { Spinner } from "@/components/ui/Spinner";
 import { SwipeToReply } from "@/components/ui/SwipeToReply";
 import { cn, formatTime } from "@/lib/utils";
+import { IMAGE_ACCEPT, MAX_IMAGE_LABEL, formatBytes, validateImageFile } from "@/lib/images";
 import {
   COARSE_POINTER,
   chatSurfaceStyle,
   composerPaddingStyle,
   useChatViewport,
 } from "@/lib/useChatViewport";
-import type { ReportReason } from "@/types/api";
+import type { ReportReason, RevealedUser } from "@/types/api";
 
 const MAX_LENGTH = 500;
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
@@ -39,6 +51,38 @@ const GROUP_WINDOW_MS = 2 * 60 * 1000;
 const JUMP_FLASH_MS = 1400;
 
 /* --------------------------------- pieces --------------------------------- */
+
+/**
+ * The partner's avatar once identities are revealed.
+ *
+ * Becomes a button only when there is a photo to open — an avatar showing
+ * initials has nothing to view full-screen. Before a reveal this never renders,
+ * so anonymity is unchanged.
+ */
+function RevealedAvatar({
+  user,
+  className,
+  onView,
+}: {
+  user: RevealedUser;
+  className?: string;
+  onView: () => void;
+}) {
+  if (!user.profile_photo) {
+    return <Avatar name={user.full_name} src={null} className={className} />;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onView}
+      aria-label={`View ${user.full_name}'s photo`}
+      className="block transition-transform duration-150 hover:scale-105 active:scale-95"
+    >
+      <Avatar name={user.full_name} src={user.profile_photo} className={className} />
+    </button>
+  );
+}
 
 function OnlineDot({ online, className }: { online: boolean; className?: string }) {
   return (
@@ -241,6 +285,16 @@ export function ChatRoomPage() {
 
   const [draft, setDraft] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
+  /**
+   * Stable identity on purpose: Modal keys its focus/scroll-lock effect on
+   * `onClose`, so a fresh closure every render would yank focus back to the
+   * trigger each time the report form re-renders.
+   */
+  const closeReport = useCallback(() => setReportOpen(false), []);
+  /** Full-screen view of the revealed partner's photo. */
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const openPhoto = useCallback(() => setPhotoOpen(true), []);
+  const closePhoto = useCallback(() => setPhotoOpen(false), []);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -521,7 +575,7 @@ export function ChatRoomPage() {
 
             <div className="relative shrink-0">
               {reveal.user ? (
-                <Avatar name={reveal.user.full_name} src={reveal.user.profile_photo} />
+                <RevealedAvatar user={reveal.user} onView={openPhoto} />
               ) : (
                 <motion.div
                   initial={false}
@@ -666,9 +720,9 @@ export function ChatRoomPage() {
             <div className="flex items-center gap-4">
               <div className="relative shrink-0">
                 {reveal.user ? (
-                  <Avatar
-                    name={reveal.user.full_name}
-                    src={reveal.user.profile_photo}
+                  <RevealedAvatar
+                    user={reveal.user}
+                    onView={openPhoto}
                     className="size-14 text-xl"
                   />
                 ) : (
@@ -935,11 +989,13 @@ export function ChatRoomPage() {
             animate={{ scale: 1, rotate: 0, opacity: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 18, delay: 0.1 }}
           >
-            <Avatar
-              name={reveal.user?.full_name}
-              src={reveal.user?.profile_photo}
-              className="size-24 text-3xl shadow-brutal-sm"
-            />
+            {reveal.user && (
+              <RevealedAvatar
+                user={reveal.user}
+                onView={openPhoto}
+                className="size-24 text-3xl shadow-brutal-sm"
+              />
+            )}
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -995,7 +1051,17 @@ export function ChatRoomPage() {
         </div>
       </Modal>
 
-      <ReportModal roomId={roomId} open={reportOpen} onClose={() => setReportOpen(false)} />
+      <ReportModal roomId={roomId} open={reportOpen} onClose={closeReport} />
+
+      {/* Only ever reachable once `reveal.user` exists, so no photo can leak
+          out of an anonymous chat. */}
+      <ImageViewer
+        open={photoOpen && Boolean(reveal.user?.profile_photo)}
+        src={reveal.user?.profile_photo ?? null}
+        alt={`${reveal.user?.full_name ?? "Partner"}'s profile photo`}
+        caption={reveal.user?.full_name}
+        onClose={closePhoto}
+      />
 
       {/* ----------------------- match sync barrier ----------------------- */}
       <AnimatePresence>
@@ -1142,6 +1208,111 @@ interface ReportFormValues {
   description: string;
 }
 
+/**
+ * The optional screenshot attached to a report.
+ *
+ * The file itself is held by the parent rather than react-hook-form: the
+ * preview, the removal and the busy state are all local UI concerns, and
+ * registering a `File` with the form buys nothing.
+ */
+function EvidencePicker({
+  id,
+  file,
+  preview,
+  busy,
+  onPick,
+  onRemove,
+}: {
+  id: string;
+  file: File | null;
+  preview: string | null;
+  busy: boolean;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = event.target.files?.[0];
+    // Lets the same file be re-picked after a removal or a rejection.
+    event.target.value = "";
+    if (picked) onPick(picked);
+  };
+
+  return (
+    <>
+      {/* Carries the Field's id so its label stays wired to the real control —
+          and so clicking "Evidence" opens the picker. */}
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="sr-only"
+        // The visible buttons below are the tab stops; a screen-reader-only
+        // input would otherwise sit inside the dialog's focus trap.
+        tabIndex={-1}
+        disabled={busy}
+        onChange={handleChange}
+      />
+
+      {file && preview ? (
+        <div className="flex items-center gap-3 border-2 border-ink bg-surface p-2">
+          <span className="relative size-14 shrink-0 overflow-hidden border-2 border-ink bg-raised">
+            <img src={preview} alt="" className="size-full object-cover" />
+            <AnimatePresence>
+              {busy && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 grid place-items-center bg-ink/70 text-white"
+                >
+                  <Spinner className="size-5" />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-ink">{file.name}</span>
+            <span className="block text-xs text-muted">
+              {busy ? "Uploading…" : formatBytes(file.size)}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={busy}
+            aria-label="Remove screenshot"
+            className={cn(
+              "grid size-8 shrink-0 place-items-center border-2 border-transparent text-muted",
+              "transition-colors hover:border-ink hover:text-danger",
+              "disabled:pointer-events-none disabled:opacity-40",
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className={cn(
+            "flex w-full items-center justify-center gap-2 border-2 border-dashed border-ink bg-raised",
+            "px-4 py-3 text-sm font-extrabold uppercase tracking-wide text-ink",
+            "transition-colors hover:bg-brand-lavender disabled:pointer-events-none disabled:opacity-50",
+          )}
+        >
+          <ImagePlus className="size-4" />
+          Add a screenshot
+        </button>
+      )}
+    </>
+  );
+}
+
 function ReportModal({
   roomId,
   open,
@@ -1155,16 +1326,55 @@ function ReportModal({
     defaultValues: { reason: "spam", description: "" },
   });
 
+  const [evidence, setEvidence] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  // One object URL per selected file, released the moment it stops being shown.
+  useEffect(() => {
+    if (!evidence) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(evidence);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [evidence]);
+
+  const pickEvidence = useCallback((file: File) => {
+    const problem = validateImageFile(file, "Evidence image");
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setEvidence(file);
+  }, []);
+
+  const submitting = form.formState.isSubmitting;
+
+  // Read through a ref so the guard does not cost `handleClose` its identity —
+  // see the note on `closeReport` above.
+  const submittingRef = useRef(submitting);
+  submittingRef.current = submitting;
+
+  /** Closing mid-upload would orphan the request, so it is refused until done. */
+  const handleClose = useCallback(() => {
+    if (!submittingRef.current) onClose();
+  }, [onClose]);
+
   const submit = form.handleSubmit(async (values) => {
+    // handleSubmit already ignores re-entry while `isSubmitting`, so the file
+    // cannot be uploaded twice by a double tap.
     if (!roomId) return;
     try {
       await chatApi.report({
         room_id: roomId,
         reason: values.reason,
         description: values.description,
+        evidence_image: evidence,
       });
       toast.success("Report submitted. Thanks for keeping campus safe.");
       form.reset();
+      setEvidence(null);
       onClose();
     } catch (error) {
       toast.error(parseApiError(error).message);
@@ -1172,11 +1382,11 @@ function ReportModal({
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="Report this chat">
+    <Modal open={open} onClose={handleClose} title="Report this chat">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Reason" required>
           {(id) => (
-            <Select id={id} {...form.register("reason")}>
+            <Select id={id} {...form.register("reason")} disabled={submitting}>
               {REPORT_REASONS.map((reason) => (
                 <option key={reason.value} value={reason.value}>
                   {reason.label}
@@ -1187,14 +1397,31 @@ function ReportModal({
         </Field>
         <Field label="Details" hint="Optional — anything that helps us review.">
           {(id) => (
-            <Textarea id={id} placeholder="What happened?" {...form.register("description")} />
+            <Textarea
+              id={id}
+              placeholder="What happened?"
+              disabled={submitting}
+              {...form.register("description")}
+            />
+          )}
+        </Field>
+        <Field label="Evidence" hint={`Optional — one image, ${MAX_IMAGE_LABEL} max.`}>
+          {(id) => (
+            <EvidencePicker
+              id={id}
+              file={evidence}
+              preview={preview}
+              busy={submitting}
+              onPick={pickEvidence}
+              onRemove={() => setEvidence(null)}
+            />
           )}
         </Field>
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="danger" loading={form.formState.isSubmitting}>
+          <Button type="submit" variant="danger" loading={submitting}>
             Submit report
           </Button>
         </div>
