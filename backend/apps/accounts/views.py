@@ -171,21 +171,6 @@ class LogoutAPIView(APIView):
         return success_response(message="Logged out successfully")
 
 
-class MeAPIView(APIView):
-    """API endpoint to retrieve the authenticated user's profile."""
-
-    permission_classes = [IsAuthenticated]
-
-    @me_doc
-    def get(self, request):
-        """Handle GET request for the current user's profile."""
-
-        return success_response(
-            message="Profile retrieved successfully.",
-            data=UserSerializer(request.user).data,
-        )
-
-
 class TokenRefreshAPIView(TokenRefreshView):
     """API endpoint to refresh an access token, with a dedicated rate limit."""
 
