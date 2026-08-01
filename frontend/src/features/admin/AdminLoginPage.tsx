@@ -2,10 +2,16 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { parseApiError } from "@/lib/errors";
-import { AButton, AField, AInput } from "./ui";
+import {
+  AButton,
+  AField,
+  AInput,
+  ThemeToggle,
+  notify,
+  useAdminTheme,
+} from "./ui";
 import { adminApi, getAdminToken } from "./api";
 
 interface FormValues {
@@ -21,12 +27,13 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 export function AdminLoginPage() {
   const navigate = useNavigate();
+  const [theme, toggleTheme] = useAdminTheme();
   const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<FormValues>({ defaultValues: { email: "", password: "" } });
 
   // A live admin session skips the form. If the token is actually stale, the
-  // first dashboard request 401s and the layout returns here cleanly.
+  // first request refreshes or fails, and the layout returns here cleanly.
   if (getAdminToken()) return <Navigate to="/admin/dashboard" replace />;
 
   const submit = form.handleSubmit(async (values) => {
@@ -37,16 +44,30 @@ export function AdminLoginPage() {
       const { status, message } = parseApiError(error);
       // The backend distinguishes "wrong password" from "not a staff account",
       // and echoing that verbatim would let anyone enumerate which addresses
-      // are admins. Every 401 gets one fixed sentence.
-      toast.error(status === 401 ? "Invalid email or password." : message);
+      // are admins. Every generic 401 gets one fixed sentence; a suspended
+      // staff account's message passes through untouched.
+      notify.error(
+        status === 401 && !message.toLowerCase().includes("suspended")
+          ? "Invalid email or password."
+          : message,
+      );
     }
   });
 
   return (
     <div
       data-admin
-      className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 py-12"
+      data-admin-theme={theme}
+      className="relative flex min-h-dvh items-center justify-center bg-a-canvas px-4 py-12 text-a-ink"
+      style={{
+        paddingTop: "max(3rem, env(safe-area-inset-top))",
+        paddingBottom: "max(3rem, env(safe-area-inset-bottom))",
+      }}
     >
+      <div className="absolute right-4 top-4">
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -54,18 +75,18 @@ export function AdminLoginPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+          <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-a-accent text-white a-elev-md">
             <ShieldCheck className="size-5" />
           </span>
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900">
+          <h1 className="text-xl font-semibold tracking-tight text-a-ink">
             Ekaton Admin
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-a-muted">
             Sign in with a staff account to continue
           </p>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-a-line bg-a-surface p-5 a-elev-md sm:p-6">
           <form onSubmit={submit} className="space-y-4" noValidate>
             <AField label="Email" error={form.formState.errors.email?.message}>
               {(id) => (
@@ -97,7 +118,7 @@ export function AdminLoginPage() {
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     placeholder="••••••••"
-                    paddingClass="pl-3 pr-10"
+                    paddingClass="pl-3 pr-11"
                     {...form.register("password", {
                       required: "Password is required.",
                     })}
@@ -106,7 +127,7 @@ export function AdminLoginPage() {
                     type="button"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     onClick={() => setShowPassword((previous) => !previous)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-2 text-a-faint transition-colors hover:text-a-text"
                   >
                     {showPassword ? (
                       <EyeOff className="size-4" />
@@ -128,7 +149,7 @@ export function AdminLoginPage() {
           </form>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
+        <p className="mt-4 text-center text-xs text-a-faint">
           Restricted area — all actions are logged.
         </p>
       </motion.div>

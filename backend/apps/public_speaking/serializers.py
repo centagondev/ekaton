@@ -19,7 +19,8 @@ class PublicSpeakingMessageSerializer(serializers.ModelSerializer):
     Exposes only the anonymous display name. There is no participant id, no
     session token and no user object in the payload, so nothing here can be
     used to correlate two messages back to a person beyond the pseudonym they
-    were given.
+    were given. (Moderation gets AdminPublicSpeakingMessageSerializer below —
+    never hand that one to a participant-facing endpoint.)
     """
 
     display_name = serializers.CharField(
@@ -43,3 +44,26 @@ class PublicSpeakingMessageSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class AdminPublicSpeakingMessageSerializer(PublicSpeakingMessageSerializer):
+    """
+    Moderation view of a message: everything the participant serializer
+    exposes, plus the real account name behind the pseudonym.
+
+    Staff-only by construction — only apps.public_speaking.admin_views (which
+    sits behind IsAdminUser) instantiates it, so the anonymity guarantee for
+    participants is untouched: their endpoints keep using the parent class.
+    `real_name` is null for legacy participants created before login became
+    mandatory (their `user` FK is null).
+    """
+
+    real_name = serializers.SerializerMethodField()
+
+    class Meta(PublicSpeakingMessageSerializer.Meta):
+        fields = [*PublicSpeakingMessageSerializer.Meta.fields, "real_name"]
+        read_only_fields = fields
+
+    def get_real_name(self, obj):
+        user = getattr(obj.participant, "user", None)
+        return user.full_name if user else None

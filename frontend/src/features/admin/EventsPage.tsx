@@ -6,7 +6,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import {
   Ban,
   CalendarDays,
@@ -35,6 +34,8 @@ import {
   AToggle,
   ConfirmDialog,
   DataTable,
+  notify,
+  PageEnter,
   PageHeader,
   SearchBox,
   StatCard,
@@ -113,21 +114,21 @@ function OwnerPicker({
     return (
       <AField label="Owner" error={error}>
         {() => (
-          <div className="flex items-center gap-2.5 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2">
-            <span className="flex size-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold text-white">
+          <div className="flex items-center gap-2.5 rounded-lg border border-a-line-strong bg-a-raised px-3 py-2">
+            <span className="flex size-7 items-center justify-center rounded-full bg-a-accent text-[11px] font-semibold text-white">
               {initialsOf(value.full_name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-900">
+              <p className="truncate text-sm font-medium text-a-ink">
                 {value.full_name}
               </p>
-              <p className="truncate text-xs text-gray-500">{value.email}</p>
+              <p className="truncate text-xs text-a-muted">{value.email}</p>
             </div>
             <button
               type="button"
               aria-label="Clear owner"
               onClick={() => onChange(null)}
-              className="rounded p-1 text-gray-400 hover:text-gray-600"
+              className="-m-1 rounded-md p-2 text-a-faint transition-colors hover:text-a-text"
             >
               <X className="size-4" />
             </button>
@@ -151,14 +152,14 @@ function OwnerPicker({
             placeholder="Search users by name or email…"
             busy={query.isFetching}
           />
-          <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-gray-200">
+          <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-a-line">
             {query.isLoading ? (
               <div className="space-y-2 p-3">
                 <ASkeleton className="h-4 w-2/3" />
                 <ASkeleton className="h-4 w-1/2" />
               </div>
             ) : candidates.length === 0 ? (
-              <p className="px-3 py-4 text-center text-sm text-gray-500">
+              <p className="px-3 py-4 text-center text-sm text-a-muted">
                 No active users match.
               </p>
             ) : (
@@ -167,16 +168,16 @@ function OwnerPicker({
                   key={user.id}
                   type="button"
                   onClick={() => onChange(user)}
-                  className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-gray-50"
+                  className="flex min-h-11 w-full items-center gap-2.5 border-b border-a-line/70 px-3 py-2 text-left transition-colors last:border-0 hover:bg-a-raised sm:min-h-0"
                 >
-                  <span className="flex size-6 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-600">
+                  <span className="flex size-6 items-center justify-center rounded-full bg-a-raised text-[10px] font-semibold text-a-muted">
                     {initialsOf(user.full_name)}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-gray-900">
+                    <span className="block truncate text-sm font-medium text-a-ink">
                       {user.full_name}
                     </span>
-                    <span className="block truncate text-xs text-gray-500">
+                    <span className="block truncate text-xs text-a-muted">
                       {user.email}
                     </span>
                   </span>
@@ -230,7 +231,7 @@ function EventFields({
           />
         )}
       </AField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <AField label="Venue" error={form.formState.errors.venue?.message}>
           {(id) => (
             <AInput
@@ -319,7 +320,7 @@ function CreateEventModal({
       }),
     onSuccess: (event) => {
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
-      toast.success(`“${event.name}” created.`);
+      notify.success(`“${event.name}” created.`);
       form.reset();
       setOwner(null);
       setAnonymous(false);
@@ -332,7 +333,7 @@ function CreateEventModal({
         return;
       }
       const message = applyEventFieldErrors(error, form);
-      if (message) toast.error(message);
+      if (message) notify.error(message);
     },
   });
 
@@ -355,11 +356,19 @@ function CreateEventModal({
           onChange={setAnonymous}
           label="Anonymous chat (participants get aliases)"
         />
-        <div className="flex justify-end gap-2 pt-1">
-          <AButton variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+          <AButton
+            variant="secondary"
+            onClick={onClose}
+            className="w-full sm:w-auto"
+          >
             Cancel
           </AButton>
-          <AButton type="submit" loading={mutation.isPending}>
+          <AButton
+            type="submit"
+            loading={mutation.isPending}
+            className="w-full sm:w-auto"
+          >
             Create event
           </AButton>
         </div>
@@ -410,12 +419,12 @@ function EditEventModal({
     },
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
-      toast.success(`“${updated.name}” updated.`);
+      notify.success(`“${updated.name}” updated.`);
       onClose();
     },
     onError: (error) => {
       const message = applyEventFieldErrors(error, form);
-      if (message) toast.error(message);
+      if (message) notify.error(message);
     },
   });
 
@@ -433,11 +442,19 @@ function EditEventModal({
             onChange={setAnonymous}
             label="Anonymous chat (rejected once participants have joined)"
           />
-          <div className="flex justify-end gap-2 pt-1">
-            <AButton variant="secondary" onClick={onClose}>
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+            <AButton
+              variant="secondary"
+              onClick={onClose}
+              className="w-full sm:w-auto"
+            >
               Cancel
             </AButton>
-            <AButton type="submit" loading={mutation.isPending}>
+            <AButton
+              type="submit"
+              loading={mutation.isPending}
+              className="w-full sm:w-auto"
+            >
               Save changes
             </AButton>
           </div>
@@ -488,7 +505,7 @@ function EventDetailModal({
         <div className="space-y-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="break-words text-base font-semibold text-a-ink">
                 {event.name}
               </h3>
               <ABadge tone={STATUS_TONES[event.status]} className="capitalize">
@@ -500,45 +517,45 @@ function EventDetailModal({
                 </ABadge>
               )}
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              {event.venue} · {bannerLabel(event.banner)}
+            <p className="mt-1 text-sm text-a-muted">
+              <span className="break-words">{event.venue}</span> · {bannerLabel(event.banner)}
             </p>
           </div>
 
-          <p className="whitespace-pre-wrap break-words rounded-lg bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-700">
+          <p className="whitespace-pre-wrap break-words rounded-lg bg-a-raised/70 px-3 py-2.5 text-sm leading-relaxed text-a-text">
             {event.description}
           </p>
 
           <dl className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
             <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
-              <dt className="text-gray-500">Owner</dt>
-              <dd className="text-right font-medium text-gray-900 sm:text-left">
+              <dt className="shrink-0 text-a-muted">Owner</dt>
+              <dd className="min-w-0 text-right font-medium text-a-ink sm:text-left">
                 {event.owner.full_name}
-                <span className="block text-xs font-normal text-gray-500">
+                <span className="block break-all text-xs font-normal text-a-muted">
                   {event.owner.email}
                 </span>
               </dd>
             </div>
             <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
-              <dt className="text-gray-500">Participants</dt>
-              <dd className="font-medium text-gray-900">
+              <dt className="text-a-muted">Participants</dt>
+              <dd className="font-medium text-a-ink">
                 {event.participant_count}
               </dd>
             </div>
             <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
-              <dt className="text-gray-500">Ends</dt>
-              <dd className="font-medium text-gray-900">
+              <dt className="text-a-muted">Ends</dt>
+              <dd className="font-medium text-a-ink">
                 {formatDateTime(event.end_time)}
                 {event.status === "active" && (
-                  <span className="block text-xs font-normal text-gray-500">
+                  <span className="block text-xs font-normal text-a-muted">
                     {timeUntil(event.end_time)}
                   </span>
                 )}
               </dd>
             </div>
             <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
-              <dt className="text-gray-500">Created</dt>
-              <dd className="font-medium text-gray-900">
+              <dt className="text-a-muted">Created</dt>
+              <dd className="font-medium text-a-ink">
                 {formatDateTime(event.created_at)}
               </dd>
             </div>
@@ -546,11 +563,19 @@ function EventDetailModal({
 
           {/* The backend only lets active events be edited or cancelled. */}
           {event.status === "active" && (
-            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-              <AButton variant="secondary" onClick={() => onEdit(event)}>
+            <div className="flex flex-col-reverse gap-2 border-t border-a-line pt-4 sm:flex-row sm:justify-end">
+              <AButton
+                variant="secondary"
+                onClick={() => onEdit(event)}
+                className="w-full sm:w-auto"
+              >
                 <Pencil className="size-3.5" /> Edit
               </AButton>
-              <AButton variant="danger" onClick={() => onCancelEvent(event)}>
+              <AButton
+                variant="danger"
+                onClick={() => onCancelEvent(event)}
+                className="w-full sm:w-auto"
+              >
                 <Ban className="size-3.5" /> Cancel event
               </AButton>
             </div>
@@ -603,11 +628,11 @@ export function AdminEventsPage() {
     mutationFn: (event: AdminEventDetail) => adminApi.events.cancel(event.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
-      toast.success("Event cancelled.");
+      notify.success("Event cancelled.");
       setCancelling(null);
       setDetailId(null);
     },
-    onError: (error) => toast.error(parseApiError(error).message),
+    onError: (error) => notify.error(parseApiError(error).message),
   });
 
   const stats = query.data?.stats;
@@ -621,10 +646,10 @@ export function AdminEventsPage() {
         header: "Event",
         render: (event) => (
           <div className="min-w-0">
-            <p className="max-w-56 truncate font-medium text-gray-900">
+            <p className="max-w-56 truncate font-medium text-a-ink">
               {event.name}
             </p>
-            <p className="max-w-56 truncate text-xs text-gray-500">
+            <p className="max-w-56 truncate text-xs text-a-muted">
               {event.venue}
             </p>
           </div>
@@ -634,7 +659,9 @@ export function AdminEventsPage() {
         key: "owner",
         header: "Owner",
         render: (event) => (
-          <span className="max-w-40 truncate text-gray-600">{event.owner}</span>
+          <span className="block max-w-40 truncate text-a-text">
+            {event.owner}
+          </span>
         ),
       },
       {
@@ -658,7 +685,7 @@ export function AdminEventsPage() {
         header: "Participants",
         className: "text-right",
         render: (event) => (
-          <span className="tabular-nums text-gray-600">
+          <span className="tabular-nums text-a-text">
             {event.participant_count}
           </span>
         ),
@@ -668,7 +695,7 @@ export function AdminEventsPage() {
         header: "Ends",
         render: (event) => (
           <span
-            className="whitespace-nowrap text-gray-500"
+            className="whitespace-nowrap text-a-muted"
             title={formatDateTime(event.end_time)}
           >
             {event.status === "active"
@@ -682,7 +709,7 @@ export function AdminEventsPage() {
         header: "Created",
         render: (event) => (
           <span
-            className="whitespace-nowrap text-gray-500"
+            className="whitespace-nowrap text-a-muted"
             title={formatDateTime(event.created_at)}
           >
             {timeAgo(event.created_at)}
@@ -694,7 +721,7 @@ export function AdminEventsPage() {
   );
 
   return (
-    <>
+    <PageEnter>
       <PageHeader
         title="Events"
         description="Campus events and their chats."
@@ -705,7 +732,7 @@ export function AdminEventsPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Total" value={stats?.total_events} icon={CalendarDays} loading={query.isLoading} />
         <StatCard label="Active" value={stats?.active_events} icon={CheckCircle2} tone="green" loading={query.isLoading} />
         <StatCard label="Ended" value={stats?.ended_events} icon={Clock3} tone="gray" loading={query.isLoading} />
@@ -714,19 +741,19 @@ export function AdminEventsPage() {
       </div>
 
       <ACard>
-        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-a-line p-3 sm:flex sm:flex-wrap sm:items-center">
           <SearchBox
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Search name, venue, owner…"
             busy={query.isFetching && !query.isLoading}
-            className="w-full sm:w-64"
+            className="col-span-2 w-full lg:w-64"
           />
           <ASelect
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             aria-label="Filter by status"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All statuses</option>
             <option value="active">Active</option>
@@ -737,7 +764,7 @@ export function AdminEventsPage() {
             value={anonymous}
             onChange={(event) => setAnonymous(event.target.value)}
             aria-label="Filter by chat mode"
-            widthClass="w-auto"
+            widthClass="w-full sm:w-auto"
           >
             <option value="">All chat modes</option>
             <option value="true">Anonymous</option>
@@ -747,8 +774,8 @@ export function AdminEventsPage() {
             value={ordering}
             onChange={(event) => setOrdering(event.target.value)}
             aria-label="Sort events"
-            widthClass="w-auto"
-            className="ml-auto"
+            widthClass="w-full sm:w-auto"
+            className="col-span-2 sm:ml-auto"
           >
             {ORDERINGS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -824,12 +851,12 @@ export function AdminEventsPage() {
         confirmLabel="Cancel event"
         body={
           <p>
-            <span className="font-medium text-gray-900">{cancelling?.name}</span>{" "}
+            <span className="break-words font-medium text-a-ink">{cancelling?.name}</span>{" "}
             will be marked cancelled and every participant is removed. This
             cannot be undone.
           </p>
         }
       />
-    </>
+    </PageEnter>
   );
 }

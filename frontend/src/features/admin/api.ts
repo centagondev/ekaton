@@ -350,6 +350,9 @@ export interface AdminMessage {
   id: string;
   content: string;
   display_name: string;
+  /** The account behind the pseudonym — admin endpoint only; null for
+      legacy participants created before login was mandatory. */
+  real_name: string | null;
   upvote_count: number;
   has_upvoted: boolean;
   is_own: boolean;
