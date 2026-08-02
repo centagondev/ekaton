@@ -1,7 +1,9 @@
-import { memo, type ReactElement } from "react";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { Gender } from "@/types/api";
+import maleAvatar from "./assets/avatar-male.png";
+import femaleAvatar from "./assets/avatar-female.png";
 import "./typing-indicator.css";
 
 /**
@@ -12,17 +14,23 @@ import "./typing-indicator.css";
  */
 export type TypingVariant = "anonymous" | Gender;
 
-const SKIN = "#f2c19a";
-const BLUSH = "#f79a8c";
-
 /* ------------------------------- characters -------------------------------
-   Hand-drawn flat SVGs in the Bitmoji register: big rounded head, dot eyes,
-   open smile — but inked with the app's 2.5px black outlines so they sit in
-   the brutalist system instead of beside it. `currentColor` is the tile's
-   text-ink, so the linework always matches the border around it.
+   Two registers, on purpose.
 
-   Each face is a static element (module scope): referencing the same node
-   every render means React never diffs the SVG subtree while the loops run.
+   BEFORE a reveal the character is drawn here as a flat SVG, inked with the
+   app's 2.5px black outlines so it sits inside the brutalist system rather
+   than beside it — and, more importantly, so an anonymous partner is a
+   *symbol* rather than a person. `currentColor` is the tile's text-ink, so the
+   linework always matches the border around it.
+
+   AFTER a reveal the character is the supplied Bitmoji portrait, imported as a
+   real asset so Vite fingerprints and compresses it. Both are trimmed to their
+   own artwork and share a render height, so neither is stretched and the two
+   genders read at the same scale.
+
+   The anonymous face is a static element (module scope): referencing the same
+   node every render means React never diffs the SVG subtree while the loops
+   run.
 --------------------------------------------------------------------------- */
 
 /** Hooded incognito figure: white hood, shadowed face, two bright eyes. */
@@ -47,88 +55,10 @@ const ANONYMOUS_FACE = (
   </g>
 );
 
-/** Shared face furniture for the revealed characters: brows, eyes, blush, smile. */
-function RevealedFeatures({ dy = 0 }: { dy?: number }) {
-  return (
-    <g transform={dy ? `translate(0 ${dy})` : undefined}>
-      <path
-        d="M22.8 28.8c1.8-1.5 4.2-1.5 6 0M35.2 28.8c1.8-1.5 4.2-1.5 6 0"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <g className="ti-eyes">
-        <circle cx="26" cy="34.5" r="2.3" fill="currentColor" />
-        <circle cx="38" cy="34.5" r="2.3" fill="currentColor" />
-      </g>
-      <circle cx="21.5" cy="39" r="1.9" fill={BLUSH} opacity="0.55" />
-      <circle cx="42.5" cy="39" r="1.9" fill={BLUSH} opacity="0.55" />
-      <path
-        d="M26.5 41.5c1.7 2.6 4 3.9 5.5 3.9s3.8-1.3 5.5-3.9"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </g>
-  );
-}
-
-const MALE_FACE = (
-  <g className="ti-head">
-    <rect
-      x="15"
-      y="13.5"
-      width="34"
-      height="37"
-      rx="15"
-      fill={SKIN}
-      stroke="currentColor"
-      strokeWidth="2.5"
-    />
-    {/* short-crop hair: outer arch down to the brow line, inner arch for the forehead */}
-    <path
-      d="M14.5 30C14.5 17.5 22 10.5 32 10.5S49.5 17.5 49.5 30h-5.2c0-6.5-4.6-9.8-12.3-9.8S19.7 23.5 19.7 30Z"
-      fill="currentColor"
-    />
-    <RevealedFeatures />
-  </g>
-);
-
-const FEMALE_FACE = (
-  <g className="ti-head">
-    {/* hair behind the face, framing both sides */}
-    <path
-      d="M32 9C19 9 12 17.5 12 30v14c0 4 3 7 7 7h26c4 0 7-3 7-7V30C52 17.5 45 9 32 9Z"
-      fill="currentColor"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinejoin="round"
-    />
-    <rect
-      x="17.5"
-      y="15.5"
-      width="29"
-      height="33"
-      rx="13.5"
-      fill={SKIN}
-      stroke="currentColor"
-      strokeWidth="2.5"
-    />
-    {/* fringe */}
-    <path
-      d="M17.5 28c.6-8 6.2-12.5 14.5-12.5S45.9 20 46.5 28c-4.3-4.6-9-5.6-14.5-5.6S21.8 23.4 17.5 28Z"
-      fill="currentColor"
-    />
-    <RevealedFeatures dy={0.5} />
-  </g>
-);
-
-const FACES: Record<TypingVariant, ReactElement> = {
-  anonymous: ANONYMOUS_FACE,
-  male: MALE_FACE,
-  female: FEMALE_FACE,
+/** The supplied Bitmoji portraits, one per revealed gender. */
+const AVATARS: Record<Gender, string> = {
+  male: maleAvatar,
+  female: femaleAvatar,
 };
 
 /** Tile colors stay in the brand set; lavender is the app's anonymity color. */
@@ -186,11 +116,36 @@ export const TypingIndicator = memo(function TypingIndicator({
           TILE_BG[character],
         )}
       >
-        {/* One svg, three interchangeable faces — keyed so a mid-typing reveal
-            swaps the character cleanly instead of morphing paths. */}
-        <svg key={character} viewBox="0 0 64 64" className="size-full" aria-hidden>
-          {FACES[character]}
-        </svg>
+        {/* Sized in absolute units rather than `size-full`.
+            A percentage height on a replaced element (svg/img) inside a flex
+            box is the one thing here whose resolution genuinely differs
+            between engines — Chrome measures it against the tile's content
+            box, others can treat that box as indefinite and collapse the child
+            to nothing, which leaves the speech bubble sitting on its own with
+            no character beside it. size-9/size-11 IS the tile's content box
+            (48 and 56, less the 2px border and 1 unit of padding on each
+            side), so every browser lands on the same pixels. */}
+        {character === "anonymous" ? (
+          <svg viewBox="0 0 64 64" className="size-9 lg:size-11" aria-hidden>
+            {ANONYMOUS_FACE}
+          </svg>
+        ) : (
+          /* Keyed so a mid-typing reveal swaps the portrait outright instead of
+             leaving the previous one up while the new file decodes. */
+          <img
+            key={character}
+            src={AVATARS[character]}
+            alt=""
+            aria-hidden
+            draggable={false}
+            decoding="async"
+            /* object-contain, never object-cover: the two portraits have
+               different aspect ratios and cropping to fill would cut the top
+               of someone's head off. Letterboxing inside the tile keeps both
+               whole and undistorted at every size. */
+            className="ti-head-img size-9 object-contain lg:size-11"
+          />
+        )}
       </div>
 
       <div className="ti-float relative mb-3 border-2 border-ink bg-surface px-3.5 py-2.5 shadow-brutal-sm">
