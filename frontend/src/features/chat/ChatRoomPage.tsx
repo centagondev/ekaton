@@ -27,6 +27,7 @@ import {
 import { chatApi, REPORT_REASONS } from "@/lib/api/chat";
 import { parseApiError } from "@/lib/errors";
 import { useChatSocket, type ChatMessage } from "./useChatSocket";
+import { TypingIndicator, type TypingVariant } from "./TypingIndicator";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Textarea } from "@/components/ui/Field";
@@ -49,6 +50,16 @@ const GROUP_WINDOW_MS = 2 * 60 * 1000;
 
 /** How long a jumped-to message stays highlighted. */
 const JUMP_FLASH_MS = 1400;
+
+/**
+ * How long to hold the connecting cover open before accepting that the other
+ * side is not coming. Long enough for a slow phone to load the room, short
+ * enough that nobody sits in front of a frozen-looking screen.
+ */
+const PARTNER_WAIT_MS = 12_000;
+
+/** Shown when a room is given up on because its second seat never filled. */
+const PARTNER_GONE_NOTICE = "The other user is no longer available.";
 
 /* --------------------------------- pieces --------------------------------- */
 
@@ -97,31 +108,6 @@ function OnlineDot({ online, className }: { online: boolean; className?: string 
         )}
       />
     </span>
-  );
-}
-
-/** iMessage-grade typing bubble: three dots on a staggered wave. */
-function TypingBubble() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 4, scale: 0.9 }}
-      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-      className="mt-3 w-fit origin-bottom-left border-2 border-ink bg-surface px-4 py-3"
-      aria-label="Stranger is typing"
-    >
-      <div className="flex items-center gap-1">
-        {[0, 1, 2].map((dot) => (
-          <motion.span
-            key={dot}
-            className="size-1.5 bg-ink/70"
-            animate={{ y: [0, -4, 0], opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: 1.2, repeat: Infinity, delay: dot * 0.16, ease: "easeInOut" }}
-          />
-        ))}
-      </div>
-    </motion.div>
   );
 }
 
@@ -521,13 +507,20 @@ export function ChatRoomPage() {
   const online = status === "connected";
   const revealPending = reveal.phase === "outgoing" || revealClicking;
   const partnerName = reveal.user?.full_name ?? "Stranger";
+  /**
+   * `reveal.user` only exists after reveal_success, so this is "anonymous"
+   * for the entire pre-reveal life of the room — the gendered character can
+   * never render early. Older servers that omit gender degrade to anonymous.
+   */
+  const typingVariant: TypingVariant = reveal.user?.gender ?? "anonymous";
 
   /**
    * Both clients hold the chat closed until each has proof the other is in the
    * room, so the conversation opens for both at the same instant instead of
-   * whoever polled first entering early. `stranded` is a safety valve only —
-   * it never delays the happy path, it just prevents being trapped here if the
-   * other side never actually connects.
+   * whoever polled first entering early. `stranded` is the safety valve for
+   * the case the barrier cannot survive on its own: a partner who was matched
+   * but never arrives, because they cancelled their search in the same instant
+   * the queue handed them over.
    *
    * The timer keys on `partnerPresent` ALONE, deliberately. Keying it on the
    * socket status as well restarted the countdown when the socket opened, so
@@ -536,7 +529,7 @@ export function ChatRoomPage() {
   const [stranded, setStranded] = useState(false);
   useEffect(() => {
     if (partnerPresent) return;
-    const timer = window.setTimeout(() => setStranded(true), 12_000);
+    const timer = window.setTimeout(() => setStranded(true), PARTNER_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [partnerPresent]);
 
@@ -551,7 +544,14 @@ export function ChatRoomPage() {
    * same wait and belongs under the same cover.
    */
   const connecting = status === "connecting";
-  const waitingForPartner = !stranded && (connecting || (online && !partnerPresent));
+  /**
+   * No `stranded` term here on purpose. Running out of patience used to drop
+   * the cover and reveal the room behind it — an empty transcript, a live
+   * composer and a header reading "Online", with nothing to explain any of it.
+   * That was the "app is frozen" report. Being stranded now ends the room
+   * instead (see below), so the cover simply stays up until we leave.
+   */
+  const waitingForPartner = connecting || (online && !partnerPresent);
   const connectPhase: ConnectPhase = partnerPresent
     ? "connected"
     : online
@@ -664,13 +664,53 @@ export function ChatRoomPage() {
           ? skipRequestedRef.current
             ? "Skipped. Finding someone new…"
             : "Stranger skipped to a new chat."
-          : "Stranger disconnected.";
+          : // "Disconnected" would be a lie about someone who was never here.
+            // A room that ends before its second seat is ever proven filled is
+            // a partner who walked away between the match and the room.
+            partnerPresent
+            ? "Stranger disconnected."
+            : PARTNER_GONE_NOTICE;
 
   useEffect(() => {
     if (!exitNotice) return;
     // replace: the dead room must not sit in history behind /home.
     navigate("/home", { replace: true, state: { autostart: true, notice: exitNotice } });
   }, [exitNotice, navigate]);
+
+  /**
+   * Give up on a room whose second participant never arrived.
+   *
+   * The room is ended through the REST call rather than by letting the socket
+   * close on unmount do it. Both end the room, but only this one is finished
+   * before we navigate — and /home starts searching the moment it mounts,
+   * while `start/` hands back any room that is still ACTIVE. Racing the
+   * teardown is what produced the search → connecting → chat → search loop:
+   * the very first poll of the new search found this room still open and
+   * marched straight back into it.
+   *
+   * `endRequestedRef` claims the exit so the generic notice above cannot fire
+   * a second, competing navigation once our own end broadcast lands.
+   */
+  const strandedHandled = useRef(false);
+  useEffect(() => {
+    if (!stranded || strandedHandled.current || endRequestedRef.current) return;
+    if (status === "ended" || status === "error") return;
+
+    strandedHandled.current = true;
+    endRequestedRef.current = true;
+
+    void (async () => {
+      try {
+        if (roomId) await chatApi.end(roomId);
+      } catch {
+        // Already ended, or never really there — leaving is right either way.
+      }
+      navigate("/home", {
+        replace: true,
+        state: { autostart: true, notice: PARTNER_GONE_NOTICE },
+      });
+    })();
+  }, [stranded, status, roomId, navigate]);
 
   // The typing debounce outlives the component if you navigate away mid-word.
   useEffect(() => () => window.clearTimeout(typingStopRef.current), []);
@@ -958,7 +998,7 @@ export function ChatRoomPage() {
                 </p>
               </div>
             </div>
-            {/* Reveal payload carries only name + batch + photo — no email. */}
+            {/* Reveal payload carries only name + batch + gender + photo — no email. */}
             {reveal.user?.batch && (
               <p className="mt-3 inline-block bg-brand-yellow px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                 Batch {reveal.user.batch}
@@ -1040,7 +1080,9 @@ export function ChatRoomPage() {
                 ))}
               </div>
 
-              <AnimatePresence>{partnerTyping && <TypingBubble key="typing" />}</AnimatePresence>
+              <AnimatePresence>
+                {partnerTyping && <TypingIndicator key="typing" variant={typingVariant} />}
+              </AnimatePresence>
               <div ref={bottomRef} className="h-px" />
             </div>
           </div>
@@ -1221,7 +1263,7 @@ export function ChatRoomPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
           >
-            {/* Reveal payload carries only name + batch + photo — no email. */}
+            {/* Reveal payload carries only name + batch + gender + photo — no email. */}
             <p className="text-2xl font-black">{reveal.user?.full_name}</p>
             {reveal.user?.batch && (
               <p className="mt-2 inline-block bg-brand-yellow px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.2em]">

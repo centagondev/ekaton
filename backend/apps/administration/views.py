@@ -210,6 +210,7 @@ class AdminUpdateUserAPIView(APIView):
         user = update_user(
             user_id=user_id,
             data=serializer.validated_data,
+            current_user=request.user,
         )
 
         logger.info(

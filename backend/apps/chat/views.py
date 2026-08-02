@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from .docs import cancel_chat_search_doc, end_chat_doc, report_doc, start_chat_doc
-from .matchmaking import remove_user_from_queue, start_chat
+from .matchmaking import release_unjoined_room, remove_user_from_queue, start_chat
 from .serializers import EndChatSerializer, ReportSerializer
 from .services import (
     create_report,
@@ -74,8 +74,13 @@ class CancelChatSearchAPIView(APIView):
         """Drop the current user's waiting-queue entry.
 
         Idempotent: a user who is not queued (never was, or was claimed a
-        moment ago) is simply left alone. A room that already exists is not
-        touched — ending a chat is what ``/chat/end/`` is for.
+        moment ago) is simply left alone.
+
+        "Claimed a moment ago" is the case that matters. The claim already
+        created a room, and this caller is not going to open it, so the room is
+        released here as well and its other participant is told at once instead
+        of being left to stare at a chat nobody joins. A conversation the caller
+        is actually sitting in is never affected — see ``release_unjoined_room``.
 
         Args:
             request: The incoming HTTP request. No body parameters required.
@@ -84,6 +89,18 @@ class CancelChatSearchAPIView(APIView):
             A success response.
         """
         remove_user_from_queue(request.user)
+
+        room = release_unjoined_room(request.user)
+
+        if room is not None:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{room.id}",
+                {
+                    "type": "chat_ended",
+                },
+            )
+
         return success_response(message="Search cancelled.")
 
 

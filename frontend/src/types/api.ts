@@ -102,6 +102,11 @@ export interface RevealedUser {
   id: string;
   full_name: string;
   batch: string;
+  /**
+   * Optional so a client updated ahead of the server degrades to the
+   * anonymous typing avatar instead of breaking.
+   */
+  gender?: Gender;
   profile_photo: string | null;
 }
 

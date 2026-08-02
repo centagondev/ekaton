@@ -1,5 +1,5 @@
 import io
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from apps.chat.models import PrivateChatRoom, Report
 from django.contrib.auth import get_user_model
@@ -197,3 +197,105 @@ class ReportEvidenceUploadTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         upload.assert_not_called()
+
+
+class CancelChatSearchTests(APITestCase):
+    """Covers what leaving the waiting queue has to clean up besides the queue.
+
+    A queued user stays claimable until their removal actually lands, and a
+    claim creates the room there and then — so a cancel can arrive a moment
+    after someone has already been matched with the caller. The caller is never
+    going to open that room, which used to leave their partner sitting in it
+    alone with no explanation.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.url = reverse("cancel-chat-search")
+        self.user = self.create_user("canceller@example.com", "Canceller One")
+        self.partner = self.create_user("waiter@example.com", "Waiter Two")
+        self.client.force_authenticate(user=self.user)
+
+    def create_user(self, email, full_name):
+        return get_user_model().objects.create_user(
+            email=email,
+            password="StrongPass123!",
+            full_name=full_name,
+            batch="2024",
+            gender="male",
+            is_verified=True,
+        )
+
+    def cancel(self, *, joined):
+        """POST the cancel with the caller's socket slot present or absent.
+
+        Returns the response and the `group_send` stub, so a test can assert on
+        what the other participant was (or was not) told.
+        """
+        redis = MagicMock()
+        redis.exists.return_value = 1 if joined else 0
+
+        # async_to_sync awaits whatever group_send returns, so it has to be an
+        # async callable rather than a plain MagicMock attribute.
+        group_send = AsyncMock()
+
+        with (
+            patch("apps.chat.matchmaking.redis_client", redis),
+            patch("apps.chat.views.get_channel_layer") as get_channel_layer,
+        ):
+            get_channel_layer.return_value.group_send = group_send
+            response = self.client.post(self.url, {}, format="json")
+
+        return response, group_send
+
+    def test_room_the_caller_never_joined_is_ended_and_announced(self):
+        room = PrivateChatRoom.objects.create(
+            user_one=self.partner,
+            user_two=self.user,
+            status=PrivateChatRoom.Status.ACTIVE,
+        )
+
+        response, group_send = self.cancel(joined=False)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        room.refresh_from_db()
+        self.assertEqual(room.status, PrivateChatRoom.Status.ENDED)
+        self.assertIsNotNone(room.closed_at)
+
+        group_send.assert_awaited_once()
+        self.assertEqual(group_send.call_args.args[0], f"chat_{room.id}")
+        self.assertEqual(group_send.call_args.args[1], {"type": "chat_ended"})
+
+    def test_conversation_the_caller_is_sitting_in_is_left_alone(self):
+        room = PrivateChatRoom.objects.create(
+            user_one=self.partner,
+            user_two=self.user,
+            status=PrivateChatRoom.Status.ACTIVE,
+        )
+
+        response, group_send = self.cancel(joined=True)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        room.refresh_from_db()
+        self.assertEqual(room.status, PrivateChatRoom.Status.ACTIVE)
+        group_send.assert_not_awaited()
+
+    def test_cancel_without_any_room_stays_a_plain_success(self):
+        response, group_send = self.cancel(joined=False)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        group_send.assert_not_awaited()
+
+    def test_already_ended_room_is_not_re_announced(self):
+        room = PrivateChatRoom.objects.create(
+            user_one=self.partner,
+            user_two=self.user,
+            status=PrivateChatRoom.Status.ENDED,
+        )
+
+        response, group_send = self.cancel(joined=False)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        room.refresh_from_db()
+        self.assertEqual(room.status, PrivateChatRoom.Status.ENDED)
+        group_send.assert_not_awaited()
