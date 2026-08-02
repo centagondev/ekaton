@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { COARSE_POINTER } from "@/lib/useChatViewport";
 
 type Step = "email" | "password" | "sent";
 
@@ -153,7 +154,12 @@ export function AuthModal() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@campus.edu"
-                  autoFocus={step === "email"}
+                  /* Never on touch: the native autoFocus fires on mount,
+                     which throws the keyboard over the sheet while it is
+                     still sliding in. The Modal already parks focus on the
+                     panel for coarse pointers; the keyboard should appear
+                     only when the user taps the field. */
+                  autoFocus={step === "email" && !COARSE_POINTER}
                   disabled={step === "password"}
                   {...emailForm.register("email", {
                     required: "Email is required.",

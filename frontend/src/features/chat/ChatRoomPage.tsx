@@ -492,7 +492,6 @@ export function ChatRoomPage() {
   const [flashId, setFlashId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const nearBottomRef = useRef(true);
   const typingSentRef = useRef(false);
@@ -560,8 +559,18 @@ export function ChatRoomPage() {
 
   /* ----------------------------- scroll behaviour ---------------------------- */
 
+  /**
+   * Scroll the transcript itself to its true bottom rather than
+   * `scrollIntoView` on a sentinel: aligning the sentinel's border box left
+   * the container's own bottom padding scrolled out of view, so the typing
+   * indicator (and the last bubble) sat flush against the overflow clip edge
+   * — its entrance/exit transforms and shadow were visibly cut off once the
+   * thread was long enough to scroll.
+   */
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior });
   }, []);
 
   /**
@@ -673,9 +682,14 @@ export function ChatRoomPage() {
 
   useEffect(() => {
     if (!exitNotice) return;
+    // An open report form outlives the room: navigating now would unmount the
+    // modal and throw away everything the reporter has typed, and the report
+    // endpoint accepts ended rooms — so the exit waits. Closing or submitting
+    // the report flips `reportOpen` and this effect resumes the normal exit.
+    if (reportOpen) return;
     // replace: the dead room must not sit in history behind /home.
     navigate("/home", { replace: true, state: { autostart: true, notice: exitNotice } });
-  }, [exitNotice, navigate]);
+  }, [exitNotice, reportOpen, navigate]);
 
   /**
    * Give up on a room whose second participant never arrived.
@@ -1083,7 +1097,6 @@ export function ChatRoomPage() {
               <AnimatePresence>
                 {partnerTyping && <TypingIndicator key="typing" variant={typingVariant} />}
               </AnimatePresence>
-              <div ref={bottomRef} className="h-px" />
             </div>
           </div>
 

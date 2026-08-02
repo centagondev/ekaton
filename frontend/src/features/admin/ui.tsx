@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { lockBodyScroll } from "@/lib/scrollLock";
 
 /**
  * The admin portal's design system — deliberately separate from the product's.
@@ -935,15 +936,13 @@ export function AModal({
       if (event.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
-    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
-    const previousOverflow = document.body.style.overflow;
-    const previousPadding = document.body.style.paddingRight;
-    document.body.style.overflow = "hidden";
-    if (scrollbar > 0) document.body.style.paddingRight = `${scrollbar}px`;
+    // Shared, reference-counted lock (see scrollLock.ts) — private snapshots
+    // restored out of unmount order used to leave the body unscrollable.
+    // The scrollbar compensation lives there too.
+    const unlock = lockBodyScroll();
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
-      document.body.style.paddingRight = previousPadding;
+      unlock();
     };
   }, [open]);
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { lockBodyScroll } from "./scrollLock";
 
 /**
  * True on touch devices. Chat inputs skip `autoFocus` here: throwing the
@@ -37,17 +38,20 @@ export function useChatViewport(onViewportChange?: () => void) {
   useEffect(() => {
     // The page itself must never scroll: only the transcript does. Without this
     // iOS bounces the whole document when you drag past the last message.
+    // The overflow lock is shared and reference-counted (see scrollLock.ts):
+    // a dialog above this surface holds a lock of its own, so whichever
+    // releases last restores the true pre-chat style — regardless of unmount
+    // order. Overscroll stays a plain snapshot: this hook is its only writer.
     const { body } = document;
-    const previousOverflow = body.style.overflow;
+    const unlock = lockBodyScroll();
     const previousOverscroll = body.style.overscrollBehavior;
-    body.style.overflow = "hidden";
     body.style.overscrollBehavior = "none";
 
     const viewport = window.visualViewport;
     const root = document.documentElement;
 
     const restore = () => {
-      body.style.overflow = previousOverflow;
+      unlock();
       body.style.overscrollBehavior = previousOverscroll;
       root.style.removeProperty("--chat-viewport-height");
       root.style.removeProperty("--chat-viewport-offset");
