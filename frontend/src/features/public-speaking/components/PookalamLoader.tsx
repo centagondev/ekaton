@@ -332,25 +332,25 @@ export function StorySkeleton({ count = 4 }: { count?: number }) {
      * The geometry below is the card's: same radius, same border, same
      * padding, no leading column, name line over body with the vote pill right.
      */
-    <ul className="flex list-none flex-col gap-1.5 sm:gap-2" aria-hidden="true">
+    <ul className="flex list-none flex-col gap-2.5 sm:gap-3" aria-hidden="true">
       {Array.from({ length: count }, (_, index) => (
         <li
           key={index}
-          className="relative overflow-hidden rounded-pk-md border border-ink-warm/[0.07] bg-kasavu/80 px-3 py-2.5 sm:px-3.5 sm:py-3"
+          className="relative overflow-hidden border-2 border-ink/15 bg-surface px-3 py-2.5 sm:px-3.5 sm:py-3"
         >
           <span
-            className="pk-shimmer absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-festival-gold/25 to-transparent"
+            className="pk-shimmer absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-brand-yellow/30 to-transparent"
             style={{ ["--pk-delay" as string]: `${index * 0.14}s` }}
           />
           <div className="flex items-start gap-2 sm:items-center sm:gap-3">
             <div className="min-w-0 flex-1">
-              <span className="block h-2.5 w-24 rounded-full bg-ink-warm/[0.07]" />
+              <span className="block h-2.5 w-24 bg-ink/[0.07]" />
               <span
-                className="mt-2 block h-3 rounded-full bg-ink-warm/[0.07]"
+                className="mt-2 block h-3 bg-ink/[0.07]"
                 style={{ width: `${[86, 64, 92, 72][index % 4]}%` }}
               />
             </div>
-            <span className="h-8 w-14 shrink-0 rounded-full bg-ink-warm/[0.06]" />
+            <span className="h-8 w-14 shrink-0 bg-ink/[0.06]" />
           </div>
         </li>
       ))}

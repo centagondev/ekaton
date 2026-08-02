@@ -138,32 +138,22 @@ export function VoteButton({
             : `Vote for this response. ${message.upvote_count} ${message.upvote_count === 1 ? "vote" : "votes"}`
       }
       className={cn(
-        "relative flex shrink-0 items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 sm:gap-1.5 sm:px-3",
+        "relative flex shrink-0 items-center justify-center gap-1 border-2 px-2.5 py-1.5 sm:gap-1.5 sm:px-3",
         // min-h keeps the tap target at 44px on touch without inflating it on
-        // desktop, where the pill would look chunky. The width is what gives on
+        // desktop, where the chip would look chunky. The width is what gives on
         // a phone instead: same target, ~14px less of it taken out of the line
         // the response has to share with it.
         "min-h-11 sm:min-h-0",
         "transition-colors duration-200",
         inert
-          ? "cursor-not-allowed border-ink-warm/10 bg-ink-warm/[0.04] text-ink-soft"
+          ? "cursor-not-allowed border-ink/20 bg-raised text-muted"
           : voted
-            ? "border-amber-deep bg-festival-gold text-ink-warm"
-            : "border-ink-warm/15 bg-kasavu text-ink-warm hover:border-amber-deep",
+            ? "border-ink bg-brand-yellow text-ink"
+            : "border-ink bg-surface text-ink hover:bg-brand-yellow/20",
         pending && "cursor-progress",
         className,
       )}
     >
-      {/* Voted-state inner glow, pre-rendered and crossfaded — never a
-          box-shadow transition. */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300",
-          voted ? "opacity-100" : "opacity-0",
-        )}
-        style={{ boxShadow: "inset 0 1px 6px rgba(169,122,6,0.35)" }}
-      />
 
       {/* The heart. Outline always; the gold is a rectangle rising inside a
           heart-shaped clip, which is what gives it the liquid read. */}

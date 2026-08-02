@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, SendHorizonal, Trophy, VenetianMask, WifiOff } from "lucide-react";
+import { ArrowLeft, CheckCircle2, SendHorizonal, Trophy, VenetianMask } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -92,67 +92,48 @@ function rememberIntroSeen(): void {
 /* --------------------------------- header --------------------------------- */
 
 /**
- * One pill recipe, used by every control in the bar.
+ * The two boxed controls in the bar — Back and Ranking — share one recipe:
+ * square, 2px ink border, hard offset shadow, the same press interaction as
+ * the app's `Button` component. Everything in this design system that can be
+ * tapped is built from this contract; a back control that opted out of it —
+ * tried, in an earlier pass — was the thing that read as un-brutalist, not a
+ * missing box around it.
  *
- * The previous version had four different heights (44 / 26 / 26 / 34px) and
- * four different border alphas (/10, /12, /25, /30) sitting on one line, which
- * is what made the cluster read as assorted rather than as a set. Height,
- * radius, border and label treatment are now decided once, here.
+ * What tells them apart is fill, not chrome: Ranking is the bar's one
+ * *action* and carries the brand yellow; Back is wayfinding and stays on
+ * plain white, so it reads as present-but-secondary rather than competing for
+ * the same tap. Same border, same shadow, same rules — a quieter fill, not a
+ * quieter system.
  *
  * `h-11` below `sm` is the 44px touch target; `sm:h-9` is the slimmer desktop
- * proportion, where a 44px pill in a 64px bar looks heavy.
+ * proportion, where a 44px chip in a 64px bar looks heavy.
  */
-const PILL = "h-11 sm:h-9 shrink-0 rounded-full border border-ink-warm/12 shadow-rest";
+const PILL = "h-11 sm:h-9 shrink-0 border-2 border-ink shadow-brutal-sm";
 
-/**
- * The same recipe for the pills nobody taps.
- *
- * Connection state and your own handle are readouts, not controls — they never
- * needed the 44px touch height, and five 44px pills in a 56px bar was most of
- * what made the phone header feel packed. Sitting at 32px they read as status
- * beside the two controls rather than competing with them, and the row gets
- * back the horizontal space it was short of.
- */
-const PILL_STATIC =
-  "h-8 sm:h-9 shrink-0 rounded-full border border-ink-warm/12 shadow-rest";
+/** The press interaction already established on every other control here. */
+const PILL_PRESS = cn(
+  "transition-all duration-150 select-none",
+  "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none",
+  "active:translate-x-[3px] active:translate-y-[3px]",
+);
 
 /** The label recipe already established across this page. */
 const PILL_LABEL = "font-mono text-[10px] font-bold uppercase tracking-[0.16em]";
 
-/**
- * Connection state — but only when there is something to say about it.
+/*
+ * There is deliberately no connection readout in the header any more.
  *
- * This used to be a two-sided pill: a breathing green dot for "Live", a
- * vermilion one for "Reconnecting". The green half is gone. A socket that is
- * working is the expected case, and reporting it on every screen, forever, was
- * a permanent indicator of nothing happening — one of two ornaments the phone
- * header was spending its width on. Silence now means live.
+ * The old "Reconnecting" pill was gated on `joined && !connected` — and a
+ * socket is *always* briefly disconnected in the moments right after joining,
+ * so the pill blinked into the bar on every page load and again on every
+ * transient reconnect. A status indicator that mostly reports a handshake in
+ * progress reads as a bug, not as status.
  *
- * The warning half stays, and stays at every breakpoint, because that half is
- * load-bearing: it is the only thing that distinguishes "nobody is posting"
- * from "you have been disconnected and cannot post". It is also still rendered
- * outside the composer, which is the fix it originally shipped for — inside,
- * it vanished the moment you posted and left you voting blind.
+ * Disconnection still reports itself where it is actionable, through the same
+ * `status` value this header was reading: the composer's reserved status line
+ * says "Reconnecting…", and a vote on a closed socket explains itself with a
+ * toast. The socket logic itself is untouched.
  */
-function ConnectionPill({ connected }: { connected: boolean }) {
-  if (connected) return null;
-
-  return (
-    <span
-      className={cn(
-        PILL_STATIC,
-        PILL_LABEL,
-        "flex items-center justify-center gap-1.5 px-2.5 sm:px-3",
-        "border-vermilion/30 bg-vermilion/10 text-vermilion-deep",
-      )}
-      role="status"
-    >
-      <WifiOff className="size-3 shrink-0" aria-hidden="true" />
-      <span className="hidden sm:inline">Reconnecting</span>
-      <span className="sr-only sm:hidden">Reconnecting</span>
-    </span>
-  );
-}
 
 /* ------------------------------- empty state ------------------------------- */
 
@@ -162,7 +143,7 @@ function ConnectionPill({ connected }: { connected: boolean }) {
  * appearance of the motif rather than an apology for missing content.
  */
 function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean }) {
-  const { reduced, spring } = useMotionPrefs();
+  const { reduced } = useMotionPrefs();
   const [lit, setLit] = useState(reduced);
 
   useEffect(() => {
@@ -193,10 +174,10 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
 
       {/* One step down on a phone. At 28px this heading ran to three lines in a
           360px column, which is a headline behaving like a paragraph. */}
-      <h2 className="font-display text-[23px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm sm:text-[28px]">
+      <h2 className="text-2xl font-black leading-[1.1] tracking-tight text-ink sm:text-3xl">
         The celebration starts with you
       </h2>
-      <p className="mx-auto mt-2 max-w-sm text-[14.5px] leading-[1.55] text-ink-soft sm:mt-2.5 sm:text-[15px]">
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-[1.55] text-muted sm:mt-2.5 sm:text-[15px]">
         {canPost
           ? "No name suggestions yet — share the first one and get the pookalam growing."
           : "No responses to show right now. Yours will appear here as the room fills up."}
@@ -204,23 +185,19 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
 
       {/* Offered only when there is actually a composer to send them to. */}
       {canPost && (
-        <motion.button
+        <button
           type="button"
           onClick={onStart}
-          whileTap={reduced ? undefined : { scale: 0.96 }}
-          transition={spring}
           className={cn(
-            "group relative mt-6 flex items-center gap-2 rounded-full border border-amber-deep sm:mt-7",
-            "bg-festival-gold px-6 py-3 text-sm font-bold text-ink-warm shadow-rest sm:px-7 sm:py-3.5",
-            "transition-transform duration-200 hover:-translate-y-0.5",
+            "mt-6 flex items-center gap-2 border-2 border-ink bg-brand-yellow sm:mt-7",
+            "px-6 py-3 text-sm font-extrabold uppercase tracking-wide text-ink shadow-brutal sm:px-7 sm:py-3.5",
+            "transition-all duration-150 select-none",
+            "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm",
+            "active:translate-x-[5px] active:translate-y-[5px] active:shadow-none",
           )}
         >
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
-          />
-          <span className="relative">Share the first response</span>
-        </motion.button>
+          Share the first response
+        </button>
       )}
     </div>
   );
@@ -229,7 +206,7 @@ function EmptyWall({ onStart, canPost }: { onStart: () => void; canPost: boolean
 /* ---------------------------------- page ---------------------------------- */
 
 export function PublicSpeakingPage() {
-  const { reduced, spring, snappy } = useMotionPrefs();
+  const { reduced, spring } = useMotionPrefs();
 
   const [messages, setMessages] = useState<SpeakingMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -860,7 +837,7 @@ export function PublicSpeakingPage() {
      */
     <MotionConfig reducedMotion="user">
       <div
-        className="theme-pookalam fixed inset-x-0 flex flex-col overflow-hidden"
+        className="fixed inset-x-0 flex flex-col overflow-hidden bg-canvas text-ink"
         style={chatSurfaceStyle}
       >
         <BackgroundStage />
@@ -886,7 +863,7 @@ export function PublicSpeakingPage() {
               "pointer-events-none absolute inset-0 transition-opacity duration-300",
               scrolled ? "opacity-100" : "opacity-0",
             )}
-            style={{ boxShadow: "0 10px 26px rgba(169,122,6,0.16)" }}
+            style={{ boxShadow: "0 10px 26px rgba(10,10,10,0.14)" }}
           />
 
           {/*
@@ -903,28 +880,23 @@ export function PublicSpeakingPage() {
           <nav
             aria-label="Discussion"
             className={cn(
-              "relative border-b border-ink-warm/[0.07] transition-[height] duration-300 ease-out",
+              "relative border-b-2 border-ink bg-surface transition-[height] duration-300 ease-out",
               "h-14",
               scrolled ? "sm:h-14" : "sm:h-16",
             )}
-            /* Translucent cream, deliberately without `backdrop-filter`. The
-               bar does not overlap the feed — it is a flex sibling above its
-               own scroll container — so a blur would sample nothing but the
-               static background gradient behind it: visually identical to a
-               flat tint, and a full-width re-blur every frame anything moved.
-               The glass look, none of the glass cost. */
-            style={{ backgroundColor: "rgba(255, 251, 240, 0.92)" }}
           >
-            <div className="flex h-full items-center gap-1.5 px-3 sm:gap-2.5 sm:px-5">
+            <div className="flex h-full items-center gap-2.5 px-3 sm:gap-4 sm:px-6 lg:px-8">
               {/* ---------------------------- back ---------------------------- */}
               {/*
                 Standalone, far left, and the only link in this bar.
 
-                It used to be fused into the logo pill — one element that meant
-                both "leave" and "Ekaton". That was done to avoid two screen
-                reader stops pointing at the same route; splitting them is
-                better on both counts, because the wordmark beside it is now
-                plain text rather than a second link to the same place.
+                Built from the same PILL contract as Ranking — 2px ink border,
+                hard offset shadow, the identical press interaction — so it
+                reads as native chrome in this design system rather than an
+                import from somewhere quieter. Hierarchy comes from fill, not
+                from opting out of the border: plain white keeps it a half-step
+                behind Ranking's brand yellow without ever looking unfinished
+                beside it.
               */}
               <motion.div
                 initial={reduced ? false : { opacity: 0, x: -12 }}
@@ -937,17 +909,15 @@ export function PublicSpeakingPage() {
                   className={cn(
                     PILL,
                     PILL_LABEL,
-                    "group flex items-center gap-2 bg-kasavu px-3 text-ink-warm sm:px-3.5",
-                    "transition-[transform,background-color,border-color] duration-200 ease-out",
-                    "hover:border-amber-deep/40 hover:bg-festival-gold/20 hover:-translate-y-px",
-                    "active:scale-95",
+                    PILL_PRESS,
+                    "group flex items-center gap-1.5 bg-surface px-2.5 text-ink sm:px-3",
                   )}
                 >
                   <ArrowLeft
-                    className="size-4 shrink-0 transition-transform duration-200 ease-out group-hover:-translate-x-[3px]"
+                    className="size-4 shrink-0 transition-transform duration-200 ease-out group-hover:-translate-x-[3px] sm:size-3.5"
                     aria-hidden="true"
                   />
-                  {/* Icon-only below `sm`; the pill keeps its 44px height, so
+                  {/* Icon-only below `sm`; the chip keeps its 44px height, so
                       the target never shrinks with the label. */}
                   <span className="hidden sm:inline">Back</span>
                 </Link>
@@ -964,7 +934,7 @@ export function PublicSpeakingPage() {
                 transition={{ duration: DURATION.entrance, delay: 0.07, ease: EASE_OUT_EXPO }}
               >
                 <LogoMark className="size-7 shrink-0" />
-                <span className="hidden text-[15px] font-black uppercase leading-none tracking-[-0.02em] text-ink-warm sm:inline">
+                <span className="hidden text-[15px] font-black uppercase leading-none tracking-[-0.02em] text-ink sm:inline">
                   Ekaton
                 </span>
               </motion.div>
@@ -976,33 +946,26 @@ export function PublicSpeakingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: DURATION.entrance, delay: 0.14, ease: EASE_OUT_EXPO }}
               >
-                {joined && <ConnectionPill connected={connected} />}
+                {/* Your own handle used to sit here, as a pill, and the
+                    "Reconnecting" indicator after it. Both are gone: the
+                    handle is carried on your own response, tagged "(You)",
+                    and the connection story is told at the composer — see the
+                    note above the PILL recipe. The cluster is just the one
+                    action now. */}
 
-                {/* Your own handle used to sit here, as a pill. It is gone
-                    rather than shortened: the name line on your response
-                    already carries it, tagged "(You)", which is both the same
-                    fact and a better place for it — stated where it is
-                    relevant instead of pinned to the top of every screen. That
-                    leaves the bar with the two controls and a warning that only
-                    appears when something is wrong. */}
-
-                {/* Primary action in this cluster, and now present at every
+                {/* Primary action in this cluster, and present at every
                     breakpoint — it used to disappear below `sm` in favour of a
                     separately styled button floating over the feed, which was
                     two controls for one job. */}
-                <motion.button
+                <button
                   type="button"
                   onClick={() => setRankingOpen(true)}
-                  whileTap={reduced ? undefined : { scale: 0.95 }}
-                  whileHover={reduced ? undefined : { scale: 1.03 }}
-                  transition={snappy}
                   aria-label="Responses ranked by votes"
                   className={cn(
                     PILL,
                     PILL_LABEL,
-                    "group flex items-center gap-2 bg-festival-gold/25 px-3 text-ink-warm sm:px-3.5",
-                    "transition-[background-color,border-color] duration-200 ease-out",
-                    "hover:border-amber-deep/50 hover:bg-festival-gold/55",
+                    PILL_PRESS,
+                    "group flex items-center gap-2 bg-brand-yellow px-3 text-ink sm:px-3.5",
                   )}
                 >
                   <Trophy
@@ -1010,7 +973,7 @@ export function PublicSpeakingPage() {
                     aria-hidden="true"
                   />
                   <span className="hidden sm:inline">Ranking</span>
-                </motion.button>
+                </button>
               </motion.div>
             </div>
           </nav>
@@ -1026,7 +989,7 @@ export function PublicSpeakingPage() {
               it: a gold hairline, a soft glow beneath, and an entrance that
               makes it the first thing to arrive. */}
           <motion.div
-            className="relative overflow-hidden border-y border-amber-deep/25 bg-festival-gold"
+            className="relative overflow-hidden border-b-2 border-ink bg-festival-gold"
             initial={reduced ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
@@ -1047,10 +1010,15 @@ export function PublicSpeakingPage() {
                  object-cover zooms into the centred text/badge/pill band and
                  lets the boat and sadhya art at the edges run off-canvas, which
                  reads far better on a phone than the whole strip shrunk down.
-                 From `sm` up there's enough width to show the full artwork.
-                 Capped at its own intrinsic width so an ultra-wide display gets
-                 a centred poster rather than an upscaled, softened one. */
-              className="mx-auto block h-24 w-full max-w-[2172px] object-cover object-center sm:h-auto"
+
+                 From `sm` up the height is capped rather than left to the
+                 ratio: at its natural size the strip ate ~215px of a laptop
+                 viewport before the first response could appear. object-contain
+                 scales the whole artwork down proportionally into the shorter
+                 box, and the letterboxing is invisible because the container's
+                 gold is sampled from the artwork's own background — the strip
+                 reads as one printed band either way, just shorter. */
+              className="mx-auto block h-24 w-full object-cover object-center sm:h-28 sm:object-contain lg:h-32"
             />
             {/* Soft warmth falling out of the bottom edge, tying the artwork to
                 the page rather than letting it sit on top as a sticker. */}
@@ -1085,7 +1053,7 @@ export function PublicSpeakingPage() {
             {/* px-3 on a phone: the rail was giving 32px of its ~360px to side
                 gutters, which is what squeezed responses into narrow columns and
                 pushed the vote pill hard against the text. */}
-            <div className="mx-auto w-full max-w-3xl px-3 pb-4 pt-2.5 sm:px-6 sm:pb-5 sm:pt-3 lg:max-w-5xl xl:max-w-6xl">
+            <div className="mx-auto w-full max-w-3xl px-3 pb-4 pt-3 sm:px-6 sm:pb-6 sm:pt-5 lg:max-w-5xl xl:max-w-6xl">
               {!stateResolved ? (
                 /* The verdict is still in flight. Skeletons stand in for it —
                    never the join gate, and never a composer. Whichever of those
@@ -1113,7 +1081,7 @@ export function PublicSpeakingPage() {
                       <PookalamMandala className="size-full" />
                     </motion.div>
                     <motion.span
-                      className="relative flex size-12 items-center justify-center rounded-full border-2 border-ink-warm bg-cream sm:size-14"
+                      className="relative flex size-12 items-center justify-center border-2 border-ink bg-brand-yellow shadow-brutal-sm sm:size-14"
                       initial={reduced ? false : { scale: 0.7, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ ...spring, delay: 0.3 }}
@@ -1123,36 +1091,30 @@ export function PublicSpeakingPage() {
                   </div>
 
                   <div>
-                    <h2 className="font-display text-[23px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm sm:text-[28px]">
+                    <h2 className="text-2xl font-black leading-[1.1] tracking-tight text-ink sm:text-3xl">
                       Join anonymously
                     </h2>
-                    <p className="mx-auto mt-2 max-w-xs text-[14.5px] leading-[1.55] text-ink-soft sm:mt-2.5 sm:text-[15px]">
+                    <p className="mx-auto mt-2 max-w-xs text-sm leading-[1.55] text-muted sm:mt-2.5 sm:text-[15px]">
                       No account, no email. You'll be given a random name for this
                       session — share one response, then vote.
                     </p>
                   </div>
 
-                  <motion.button
+                  <button
                     type="button"
                     onClick={() => joinMutation.mutate()}
                     disabled={joinMutation.isPending}
-                    whileTap={reduced ? undefined : { scale: 0.96 }}
-                    transition={spring}
                     className={cn(
-                      "group relative flex items-center gap-2.5 rounded-full border border-amber-deep",
-                      "bg-festival-gold px-7 py-3 text-sm font-bold text-ink-warm shadow-rest sm:px-8 sm:py-3.5",
-                      "transition-transform duration-200 hover:-translate-y-0.5",
-                      "disabled:pointer-events-none disabled:opacity-60",
+                      "flex items-center gap-2.5 border-2 border-ink bg-brand-yellow",
+                      "px-7 py-3 text-sm font-extrabold uppercase tracking-wide text-ink shadow-brutal sm:px-8 sm:py-3.5",
+                      "transition-all duration-150 select-none",
+                      "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm",
+                      "active:translate-x-[5px] active:translate-y-[5px] active:shadow-none",
+                      "disabled:pointer-events-none disabled:opacity-50",
                     )}
                   >
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
-                    />
-                    <span className="relative">
-                      {joinMutation.isPending ? "Joining…" : "Join discussion"}
-                    </span>
-                  </motion.button>
+                    {joinMutation.isPending ? "Joining…" : "Join discussion"}
+                  </button>
                 </motion.div>
               ) : historyLoading && messages.length === 0 ? (
                 /* Skeletons, not a spinner — and not the empty state, which is
@@ -1167,7 +1129,7 @@ export function PublicSpeakingPage() {
                   variants={listContainer}
                   initial="hidden"
                   animate="show"
-                  className="flex list-none flex-col gap-1.5 sm:gap-2"
+                  className="flex list-none flex-col gap-2.5 sm:gap-3"
                 >
                   <AnimatePresence>
                     {messages.map((message, index) => (
@@ -1205,7 +1167,7 @@ export function PublicSpeakingPage() {
           {stateResolved && joined && hasPosted && (
             <>
               <div
-                className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08] md:pb-[max(0px,calc(env(safe-area-inset-bottom)-var(--chat-keyboard-inset,0px)))]"
+                className="relative z-10 shrink-0 border-t-2 border-ink bg-surface md:pb-[max(0px,calc(env(safe-area-inset-bottom)-var(--chat-keyboard-inset,0px)))]"
                 style={{
                   // Sides only. The bottom inset belongs to whichever element
                   // actually meets the home indicator: below `md` that is the
@@ -1227,7 +1189,7 @@ export function PublicSpeakingPage() {
                   transition={{ duration: DURATION.entrance, ease: EASE_OUT_EXPO }}
                   className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-3 py-2.5 md:gap-3 md:px-6 md:py-4 lg:max-w-5xl xl:max-w-6xl"
                 >
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-leaf/25 bg-leaf/10 text-leaf-deep md:size-9">
+                  <span className="flex size-6 shrink-0 items-center justify-center border-2 border-ink bg-brand-lime text-ink md:size-9">
                     <CheckCircle2 className="size-4 md:size-5" aria-hidden="true" />
                   </span>
                   {/* One quiet line on phones, where the nav below already
@@ -1235,18 +1197,18 @@ export function PublicSpeakingPage() {
                       at 360px the longer variant lost its second half to an
                       ellipsis, which cut the sentence exactly where it says what
                       to do next. */}
-                  <p className="min-w-0 text-[12.5px] font-medium leading-[1.45] text-ink-warm md:hidden">
+                  <p className="min-w-0 text-[12.5px] font-bold leading-[1.45] text-ink md:hidden">
                     {postedEarlier
                       ? "You already suggested a name — vote for your favourites!"
                       : "Name submitted — vote for your favourites!"}
                   </p>
                   <div className="hidden min-w-0 text-left md:block">
-                    <p className="font-display text-[15px] font-extrabold tracking-[-0.01em] text-ink-warm">
+                    <p className="text-[15px] font-black tracking-tight text-ink">
                       {postedEarlier
                         ? "You already suggested a name for our Onam celebration."
                         : "Your name suggestion has been submitted."}
                     </p>
-                    <p className="mt-0.5 text-[13px] text-ink-soft">
+                    <p className="mt-0.5 text-[13px] text-muted">
                       {postedEarlier
                         ? "Thank you for taking part — now vote for the names you love."
                         : "Now vote for the names you love."}
@@ -1275,16 +1237,16 @@ export function PublicSpeakingPage() {
               someone the backend would refuse. */}
           {stateResolved && joined && !hasPosted && (
             <div
-              className="pk-surface relative z-10 shrink-0 border-t border-ink-warm/[0.08]"
+              className="relative z-10 shrink-0 border-t-2 border-ink bg-surface"
               style={composerPaddingStyle}
             >
-              <div className="mx-auto w-full max-w-3xl px-3 pb-2.5 pt-2 sm:px-6 sm:pb-3 lg:max-w-5xl xl:max-w-6xl">
+              <div className="mx-auto w-full max-w-3xl px-3 pb-2.5 pt-2 sm:px-6 sm:pb-4 sm:pt-2.5 lg:max-w-5xl xl:max-w-6xl">
                 {/* A reserved strip, so the composer never jumps when someone
                     starts typing — but a shorter one on a phone, where it is
                     empty most of the time and every pixel above the keyboard is
                     a pixel of transcript. */}
                 <div className="mb-1 flex h-3.5 items-center justify-between sm:mb-1.5 sm:h-4">
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ink-soft sm:tracking-[0.16em]">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted sm:tracking-[0.16em]">
                     {typingLabel ?? (connected ? "" : "Reconnecting…")}
                   </p>
                   {/* Only once it starts to matter — a counter that is present
@@ -1298,7 +1260,7 @@ export function PublicSpeakingPage() {
                         exit={{ opacity: 0 }}
                         className={cn(
                           "font-mono text-[10px] font-bold tabular-nums",
-                          remaining <= 40 ? "text-vermilion-deep" : "text-ink-soft",
+                          remaining <= 40 ? "text-danger" : "text-muted",
                         )}
                       >
                         {remaining}
@@ -1310,15 +1272,10 @@ export function PublicSpeakingPage() {
                 <form onSubmit={submit} className="flex items-end gap-2">
                   <div
                     className={cn(
-                      "group relative flex flex-1 items-end rounded-pk-md border border-ink-warm/12 bg-cream",
-                      "transition-colors duration-200 focus-within:border-amber-deep",
+                      "group relative flex flex-1 items-end border-2 border-ink bg-surface",
+                      "transition-all duration-150 focus-within:shadow-brutal-sm",
                     )}
                   >
-                    {/* Focus glow, crossfaded. */}
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-pk-md opacity-0 shadow-glow transition-opacity duration-200 group-focus-within:opacity-100"
-                    />
                     <textarea
                       ref={inputRef}
                       rows={1}
@@ -1338,30 +1295,26 @@ export function PublicSpeakingPage() {
                       /* 16px minimum — iOS zooms on focus below that. The
                          slightly tighter mobile inset keeps the placeholder off
                          the border without shrinking the type. */
-                      className="relative max-h-40 min-h-[3rem] w-full resize-none rounded-pk-md bg-transparent px-3.5 py-3 text-base leading-[1.4] text-ink-warm outline-none placeholder:text-ink-soft/85 sm:px-4"
+                      className="relative max-h-40 min-h-[3rem] w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.4] text-ink outline-none placeholder:text-muted/60 sm:px-4"
                     />
                   </div>
 
-                  <motion.button
+                  <button
                     type="submit"
                     disabled={!draft.trim() || !connected || sending}
                     aria-label="Send"
-                    whileTap={reduced ? undefined : { scale: 0.94 }}
-                    transition={snappy}
                     className={cn(
                       // Square at the phone's rest height, so it reads as a
                       // sibling of the field rather than a wide slab beside it;
                       // the extra width returns from `sm` up.
                       "group relative flex h-12 w-12 shrink-0 items-center justify-center sm:w-[3.25rem]",
-                      "rounded-pk-md border border-amber-deep bg-festival-gold text-ink-warm shadow-rest",
-                      "transition-[transform,opacity] duration-200 hover:-translate-y-0.5",
-                      "disabled:pointer-events-none disabled:opacity-45",
+                      "border-2 border-ink bg-brand-yellow text-ink shadow-brutal",
+                      "transition-all duration-150 select-none",
+                      "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm",
+                      "active:translate-x-[5px] active:translate-y-[5px] active:shadow-none",
+                      "disabled:pointer-events-none disabled:opacity-50",
                     )}
                   >
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-pk-md opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
-                    />
                     {sending ? (
                       // Three petal dots rather than a spinner — the wait belongs
                       // to the same family as everything else on the page.
@@ -1369,7 +1322,7 @@ export function PublicSpeakingPage() {
                         {[0, 1, 2].map((dot) => (
                           <motion.span
                             key={dot}
-                            className="block size-1.5 rounded-full bg-ink-warm"
+                            className="block size-1.5 rounded-full bg-ink"
                             animate={reduced ? undefined : { opacity: [0.25, 1, 0.25] }}
                             transition={{
                               duration: 0.9,
@@ -1383,7 +1336,7 @@ export function PublicSpeakingPage() {
                     ) : (
                       <SendHorizonal className="relative size-4" aria-hidden="true" />
                     )}
-                  </motion.button>
+                  </button>
                 </form>
               </div>
             </div>
