@@ -67,6 +67,18 @@ class StartChatRateThrottle(UserRateThrottle):
     scope = "start_chat"
 
 
+class CancelChatSearchRateThrottle(UserRateThrottle):
+    """Rate limiter for leaving the matchmaking queue.
+
+    Fired by the client whenever the app goes to the background, so a user who
+    alt-tabs repeatedly must not be throttled out of releasing their slot.
+    Matched to the start_chat budget: a leave can never outnumber the starts
+    that preceded it.
+    """
+
+    scope = "cancel_chat_search"
+
+
 class ReportRateThrottle(UserRateThrottle):
     """Rate limiter for the report endpoint. Scoped to authenticated users."""
 

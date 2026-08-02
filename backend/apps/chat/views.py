@@ -2,6 +2,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from core.responses import error_response, success_response
 from core.throttles import (
+    CancelChatSearchRateThrottle,
     ChatEndRateThrottle,
     ReportRateThrottle,
     StartChatRateThrottle,
@@ -10,8 +11,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from .docs import end_chat_doc, report_doc, start_chat_doc
-from .matchmaking import start_chat
+from .docs import cancel_chat_search_doc, end_chat_doc, report_doc, start_chat_doc
+from .matchmaking import remove_user_from_queue, start_chat
 from .serializers import EndChatSerializer, ReportSerializer
 from .services import (
     create_report,
@@ -49,6 +50,41 @@ class StartChatAPIView(APIView):
         """
         result = start_chat(request.user)
         return success_response(message=result["message"], data=result)
+
+
+class CancelChatSearchAPIView(APIView):
+    """Handle a request to leave the anonymous chat waiting queue.
+
+    The counterpart to the enqueue that ``start_chat`` performs when no partner
+    was available. Matchmaking itself is untouched: this only releases the
+    caller's own slot so an absent user cannot be handed to somebody who is
+    present. Without it a queue entry lingers until its liveness marker expires,
+    a window long enough for a partner to be matched into a room nobody is
+    sitting in.
+
+    Allowed methods: POST
+    Authentication: Required (JWT)
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [CancelChatSearchRateThrottle]
+
+    @cancel_chat_search_doc
+    def post(self, request):
+        """Drop the current user's waiting-queue entry.
+
+        Idempotent: a user who is not queued (never was, or was claimed a
+        moment ago) is simply left alone. A room that already exists is not
+        touched — ending a chat is what ``/chat/end/`` is for.
+
+        Args:
+            request: The incoming HTTP request. No body parameters required.
+
+        Returns:
+            A success response.
+        """
+        remove_user_from_queue(request.user)
+        return success_response(message="Search cancelled.")
 
 
 class EndChatAPIView(APIView):

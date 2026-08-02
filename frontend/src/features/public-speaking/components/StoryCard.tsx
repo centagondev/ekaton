@@ -32,15 +32,15 @@ export function NameLine({
   showTimeFrom?: "always" | "sm";
 }) {
   return (
-    <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-ink-soft sm:tracking-[0.14em]">
-      <span className="text-[11px] font-black text-ink-warm">{message.display_name}</span>
+    <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted sm:tracking-[0.14em]">
+      <span className="text-[11px] font-black text-ink">{message.display_name}</span>
       {/* Your own response, named as such. `is_own` is the same server-owned
           flag that stops you voting for it, so this can never label someone
           else's response as yours. Deliberately quiet — normal case, a step
           down, and the soft tone: it is an annotation on the handle, not a
           second handle. */}
       {message.is_own && (
-        <span className="ml-1 text-[9.5px] font-semibold normal-case tracking-normal text-ink-soft/70">
+        <span className="ml-1 text-[9.5px] font-semibold normal-case tracking-normal text-muted/70">
           (You)
         </span>
       )}
@@ -119,9 +119,9 @@ function StoryCardBase({
     >
       <div
         className={cn(
-          "relative rounded-pk-md border border-ink-warm/[0.07] bg-kasavu/80",
+          "relative border-2 border-ink bg-surface shadow-brutal-sm",
           "px-3 py-2.5 transition-colors duration-200 sm:px-3.5 sm:py-3",
-          "hover:bg-kasavu",
+          "hover:bg-raised",
         )}
       >
         {/* Arrival wash — a card that landed while you were watching glows
@@ -129,7 +129,7 @@ function StoryCardBase({
         {fresh && (
           <motion.span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-pk-md bg-festival-gold"
+            className="pointer-events-none absolute inset-0 bg-brand-yellow"
             initial={{ opacity: reduced ? 0.1 : 0.28 }}
             animate={{ opacity: 0 }}
             transition={{ duration: reduced ? 0.4 : 1.5, ease: "easeOut" }}
@@ -156,7 +156,7 @@ function StoryCardBase({
                 thing in it, directly under the name line. The gap widens by
                 2px so the jump from 10px caption to 15px body reads as a step
                 rather than as two lines that happen to touch. */}
-            <p className="mt-1 break-words text-[15px] font-medium leading-[1.5] text-ink-warm">
+            <p className="mt-1 break-words text-[15px] font-medium leading-[1.5] text-ink">
               {message.content}
             </p>
           </div>

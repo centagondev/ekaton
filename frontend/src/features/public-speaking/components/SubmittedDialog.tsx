@@ -162,7 +162,7 @@ export function SubmittedDialog({
       open={open}
       onClose={onClose}
       title="Response submitted successfully"
-      variant="soft"
+      variant="brutal"
       chrome={false}
       size="md"
     >
@@ -188,7 +188,7 @@ export function SubmittedDialog({
           <div className="relative mx-auto mb-6 size-[86px]">
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 rounded-full bg-leaf/10"
+              className="absolute inset-0 rounded-full bg-online/10"
               initial={reduced ? false : { scale: 0.6, opacity: 0 }}
               animate={{ scale: [0.6, 1.12, 1], opacity: 1 }}
               transition={{ duration: 0.7, delay: 0.45, ease: EASE_OUT_EXPO }}
@@ -199,7 +199,7 @@ export function SubmittedDialog({
                 cy="50"
                 r="34"
                 fill="none"
-                stroke="var(--color-leaf)"
+                stroke="var(--color-online)"
                 strokeWidth="4"
                 strokeLinecap="round"
                 initial={reduced ? { pathLength: 1 } : { pathLength: 0 }}
@@ -210,7 +210,7 @@ export function SubmittedDialog({
               <motion.path
                 d="M34 51.5 45.5 63 67 40"
                 fill="none"
-                stroke="var(--color-leaf-deep)"
+                stroke="var(--color-ink)"
                 strokeWidth="5.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -222,7 +222,7 @@ export function SubmittedDialog({
           </div>
 
           <motion.h2
-            className="font-display text-[26px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-warm"
+            className="text-2xl font-black leading-[1.15] tracking-tight text-ink sm:text-[26px]"
             initial={reduced ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DURATION.entrance, delay: 0.3, ease: EASE_OUT_EXPO }}
@@ -231,7 +231,7 @@ export function SubmittedDialog({
           </motion.h2>
 
           <motion.p
-            className="mx-auto mt-2.5 max-w-[19rem] text-[15px] leading-[1.55] text-ink-soft"
+            className="mx-auto mt-2.5 max-w-[19rem] text-[15px] leading-[1.55] text-muted"
             initial={reduced ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DURATION.entrance, delay: 0.38, ease: EASE_OUT_EXPO }}
@@ -250,8 +250,8 @@ export function SubmittedDialog({
               type="button"
               onClick={onClose}
               className={cn(
-                "rounded-full border border-transparent px-5 py-3 text-sm font-bold text-ink-soft",
-                "transition-colors hover:border-ink-warm/12 hover:bg-kasavu hover:text-ink-warm",
+                "border-2 border-transparent px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-muted",
+                "transition-colors hover:border-ink hover:text-ink",
               )}
             >
               Close
@@ -261,17 +261,14 @@ export function SubmittedDialog({
               type="button"
               onClick={onClose}
               className={cn(
-                "group relative flex items-center justify-center gap-2.5 rounded-full",
-                "border border-amber-deep bg-festival-gold px-6 py-3",
-                "text-sm font-bold text-ink-warm shadow-rest",
-                "transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0",
+                "group relative flex items-center justify-center gap-2.5",
+                "border-2 border-ink bg-brand-yellow px-6 py-3",
+                "text-sm font-extrabold uppercase tracking-wide text-ink shadow-brutal",
+                "transition-all duration-150 select-none",
+                "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm",
+                "active:translate-x-[5px] active:translate-y-[5px] active:shadow-none",
               )}
             >
-              {/* Pre-rendered glow, crossfaded on hover. */}
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-glow transition-opacity duration-200 group-hover:opacity-100"
-              />
               <span className="relative">Continue exploring</span>
 
               {/* The auto-close clock, drawn as a draining ring inside the
@@ -307,7 +304,7 @@ export function SubmittedDialog({
           </motion.div>
 
           {!reduced && (
-            <p className="mt-3.5 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft">
+            <p className="mt-3.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
               {paused ? "Paused" : "Closes automatically"}
             </p>
           )}

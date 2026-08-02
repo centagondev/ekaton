@@ -2,7 +2,6 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { EASE_OUT_EXPO, useMotionPrefs } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { SpeakingMessage } from "../api";
 import { byVotes } from "../ordering";
@@ -31,16 +30,6 @@ import { VoteButton } from "./VoteButton";
 const PODIUM = 3;
 const TOP = 10;
 
-/**
- * Rows past this arrive instantly.
- *
- * A per-row delay that keeps climbing makes a long list feel like it is loading
- * rather than opening; eight rows is roughly one screen, which is all the
- * reader is waiting on.
- */
-const STAGGER_ROWS = 8;
-const STAGGER_STEP = 0.03;
-
 /** Matches the shared Modal's open and close transitions. */
 const SETTLE_MS = 260;
 const CLOSE_MS = 220;
@@ -56,9 +45,9 @@ const EMPTY: readonly SpeakingMessage[] = [];
  * itself; a badge would be the third telling of the same fact.
  */
 const PODIUM_TINT = [
-  "bg-festival-gold/[0.13]",
-  "bg-festival-gold/[0.08]",
-  "bg-festival-gold/[0.05]",
+  "bg-brand-yellow/25",
+  "bg-brand-yellow/15",
+  "bg-brand-yellow/[0.07]",
 ] as const;
 
 /* ----------------------------------- row ---------------------------------- */
@@ -96,7 +85,6 @@ const RankedRow = memo(function RankedRow({
    */
   animateRank: boolean;
 }) {
-  const { reduced } = useMotionPrefs();
   const podium = index < PODIUM;
 
   return (
@@ -104,19 +92,17 @@ const RankedRow = memo(function RankedRow({
       layout={animateRank}
       aria-posinset={index + 1}
       aria-setsize={total}
-      initial={reduced ? false : { opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{
-        duration: 0.22,
-        ease: EASE_OUT_EXPO,
-        delay: index < STAGGER_ROWS ? index * STAGGER_STEP : 0,
-      }}
+      /* No entrance animation on rows, deliberately. The list is fully painted
+         on the sheet's very first frame and rides in with it — a per-row
+         fade/stagger made an instant local sort read as content loading, which
+         is exactly the "this sheet is slow" impression. The rank glide
+         (`layout`, gated on `animateRank`) is the only motion rows own. */
+      exit={{ opacity: 0, transition: { duration: 0.12 } }}
       className={cn(
-        "border-b border-ink-warm/[0.06] last:border-b-0",
+        "border-b border-ink/10 last:border-b-0",
         // Colour only. A dense list that lifts or scales under the cursor
         // reads as a card grid pretending to be a list.
-        "transition-colors duration-200 hover:bg-festival-gold/[0.07]",
+        "transition-colors duration-200 hover:bg-brand-yellow/10",
         podium && PODIUM_TINT[index],
       )}
     >
@@ -128,7 +114,7 @@ const RankedRow = memo(function RankedRow({
         <span
           className={cn(
             "w-5 shrink-0 text-right font-mono text-[12px] font-bold tabular-nums",
-            podium ? "text-ink-warm" : "text-ink-soft/70",
+            podium ? "text-ink" : "text-muted/70",
           )}
         >
           {index + 1}
@@ -144,7 +130,7 @@ const RankedRow = memo(function RankedRow({
               full. */}
           <p
             title={message.content}
-            className="mt-0.5 line-clamp-2 break-words text-[13.5px] leading-[1.45] text-ink-warm"
+            className="mt-0.5 line-clamp-2 break-words text-[13.5px] leading-[1.45] text-ink"
           >
             {message.content}
           </p>
@@ -224,7 +210,7 @@ export function RankingModal({
       open={open}
       onClose={onClose}
       title="Ranking"
-      variant="soft"
+      variant="brutal"
       /* `chrome={false}` so the panel becomes a flex column that owns its own
          scrolling: a header that stays put while the list moves under it needs
          the scroll on the list, not on the panel.
@@ -237,12 +223,12 @@ export function RankingModal({
       className="flex max-h-[76dvh]! w-full max-w-[480px]! flex-col overflow-hidden!"
     >
       {/* ---------------------------- header ---------------------------- */}
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-ink-warm/[0.08] px-4 py-3 sm:px-5">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b-2 border-ink px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h2 className="font-display text-[17px] font-extrabold leading-tight tracking-[-0.02em] text-ink-warm">
+          <h2 className="text-lg font-black uppercase tracking-wide text-ink">
             Ranking
           </h2>
-          <p className="mt-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+          <p className="mt-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-muted">
             Every response, most hearted first.
           </p>
         </div>
@@ -250,14 +236,14 @@ export function RankingModal({
           type="button"
           onClick={onClose}
           aria-label="Close dialog"
-          className="-mr-1 shrink-0 rounded-full border border-transparent p-1.5 text-ink-soft transition-colors hover:border-ink-warm/15 hover:bg-kasavu hover:text-ink-warm"
+          className="-mr-1 shrink-0 border-2 border-transparent p-1.5 text-muted transition-colors hover:border-ink hover:text-ink"
         >
           <X className="size-5" />
         </button>
       </div>
 
       {ranked.length === 0 ? (
-        <p className="px-5 py-12 text-center text-sm text-ink-soft">
+        <p className="px-5 py-12 text-center text-sm text-muted">
           No responses yet — be the first to share.
         </p>
       ) : (
@@ -290,10 +276,12 @@ export function RankingModal({
                   type="button"
                   onClick={() => setShowAll(true)}
                   className={cn(
-                    "flex min-h-11 w-full items-center justify-center gap-2 rounded-pk-md",
-                    "border border-ink-warm/10 bg-kasavu px-4",
-                    "font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-warm",
-                    "transition-colors hover:border-amber-deep hover:bg-festival-gold/15",
+                    "flex min-h-11 w-full items-center justify-center gap-2",
+                    "border-2 border-ink bg-surface px-4 shadow-brutal-sm",
+                    "font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink",
+                    "transition-all duration-150 select-none",
+                    "hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none",
+                    "active:translate-x-[3px] active:translate-y-[3px]",
                   )}
                 >
                   Show all {ranked.length} responses
@@ -308,11 +296,11 @@ export function RankingModal({
               cream ground — nothing here animates or repaints on scroll. */}
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-cream to-transparent"
+            className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-surface to-transparent"
           />
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-cream to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-surface to-transparent"
           />
         </div>
       )}

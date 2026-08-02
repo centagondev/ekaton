@@ -1,4 +1,6 @@
 import { apiPost, apiPostForm } from "./client";
+import { API_URL } from "../config";
+import { getAccessToken } from "../storage";
 import type { ReportPayload, ReportReason, StartChatResult } from "@/types/api";
 
 export const chatApi = {
@@ -8,6 +10,47 @@ export const chatApi = {
    * "matched" or "active" with a room_id.
    */
   start: (): Promise<StartChatResult> => apiPost<StartChatResult>("/chat/start/"),
+
+  /**
+   * Release the waiting-queue slot. Idempotent, and never rejects — a failed
+   * leave must not surface as an error to a user who has already looked away.
+   *
+   * Deliberately NOT on the axios instance. This is sent while the page is
+   * being hidden or unloaded, where an ordinary XHR is cancelled the moment the
+   * document is torn down or the phone freezes the tab. `keepalive` hands the
+   * request to the browser's network stack, which completes it independently of
+   * the page — the same guarantee `sendBeacon` gives, except beacons cannot
+   * carry an `Authorization` header, and this endpoint needs the JWT.
+   *
+   * The token is read straight from storage rather than through the refresh
+   * path: awaiting a refresh is exactly the kind of async work a freezing tab
+   * never gets to finish. A user who just clicked "Start chat" has a fresh
+   * token by definition, and in the rare stale case the server-side liveness
+   * TTL is still there as the backstop.
+   */
+  leaveQueue: (): void => {
+    const token = getAccessToken();
+    if (!token) return;
+
+    void fetch(`${API_URL}/chat/cancel/`, {
+      method: "POST",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: "{}",
+    })
+      .then((res) => {
+        // Swallowed in production, but a leave that silently 404s or 401s
+        // looks exactly like the feature not being implemented at all. Say so
+        // in dev rather than leaving it to be diagnosed from the queue.
+        if (!res.ok && import.meta.env.DEV) {
+          console.warn(`[matchmaking] leave queue failed: ${res.status}`);
+        }
+      })
+      .catch(() => {});
+  },
 
   end: (roomId: string): Promise<null> =>
     apiPost<null>("/chat/end/", { room_id: roomId }),

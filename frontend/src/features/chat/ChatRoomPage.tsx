@@ -260,6 +260,205 @@ function EmptyConversation({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
+/* --------------------------- match / connect ------------------------------ */
+
+/**
+ * The three real states of getting two strangers into one room. Every one of
+ * them is read off the socket — nothing here runs on a timer, so the overlay
+ * can never claim progress that has not actually happened.
+ */
+type ConnectPhase = "connecting" | "linked" | "connected";
+
+const PHASE_COPY: Record<ConnectPhase, string> = {
+  connecting: "Opening secure line",
+  linked: "Waiting for them to join",
+  connected: "Connected",
+};
+
+/** Filled segments per phase — a segmented bar reads as brutalist, not glossy. */
+const PHASE_STEP: Record<ConnectPhase, number> = {
+  connecting: 1,
+  linked: 2,
+  connected: 3,
+};
+
+/** One anonymous participant. Slides in from its side, then breathes inward. */
+function PeerTile({ side, label, live }: { side: -1 | 1; label: string; live: boolean }) {
+  return (
+    <motion.div
+      className="flex shrink-0 flex-col items-center gap-1.5"
+      initial={{ x: side * 56, opacity: 0, rotate: side * 8 }}
+      animate={{ x: 0, opacity: 1, rotate: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    >
+      <motion.div
+        className={cn(
+          "flex size-14 items-center justify-center border-2 border-ink shadow-brutal-sm sm:size-16",
+          live ? "bg-brand-lime" : "bg-brand-yellow",
+        )}
+        // Leaning toward each other while they wait, snapping level on connect.
+        animate={live ? { x: side * -4, rotate: 0 } : { x: [0, side * -3, 0] }}
+        transition={
+          live
+            ? { type: "spring", stiffness: 400, damping: 18 }
+            : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }
+        }
+      >
+        <VenetianMask className="size-7 sm:size-8" />
+      </motion.div>
+      <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-muted">
+        {label}
+      </span>
+    </motion.div>
+  );
+}
+
+/**
+ * Match-found / connecting cover.
+ *
+ * Shown from the moment the room mounts until the partner's first frame proves
+ * they are in the room, and gone the instant it lands — the "connected" state
+ * plays entirely inside the exit transition, so nothing is held back to let an
+ * animation finish.
+ */
+const ConnectingOverlay = memo(function ConnectingOverlay({ phase }: { phase: ConnectPhase }) {
+  const live = phase === "connected";
+  const step = PHASE_STEP[phase];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-40 flex items-center justify-center bg-canvas p-4"
+      role="status"
+      aria-live="polite"
+      aria-label="Match found, connecting you both"
+    >
+      <motion.div
+        initial={{ scale: 0.94, y: 12 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 1.04 }}
+        transition={{ type: "spring", stiffness: 300, damping: 24 }}
+        className="flex w-full max-w-sm flex-col items-center gap-5 border-2 border-ink bg-surface px-5 py-7 text-center shadow-brutal-lg sm:px-8 sm:py-8"
+      >
+        <motion.span
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 16 }}
+          className="border-2 border-ink bg-brand-lime px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.25em]"
+        >
+          Match found
+        </motion.span>
+
+        {/* ---- the two of you, and the line being drawn between you ---- */}
+        {/* Centred with a bounded rail rather than justify-between: letting the
+            rail take all the width pushed the two of you to opposite edges of
+            the card, which read as a gap to be filled instead of a link. */}
+        <div className="flex w-full items-center justify-center gap-3 pt-1 sm:gap-4">
+          <PeerTile side={-1} label="You" live={live} />
+
+          <div className="relative mb-5 h-8 w-24 shrink-0 sm:w-32">
+            {/* Rail. Grows out from the centre on mount so the link reads as
+                being established rather than having always been there. */}
+            <motion.span
+              className="absolute left-0 top-1/2 h-[2px] w-full -translate-y-1/2 bg-ink"
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+            />
+
+            {/* Packets crossing the link, alternating direction so it reads as
+                a two-way connection rather than a one-way loader. */}
+            {!live &&
+              [0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="absolute top-1/2 size-1.5 -translate-y-1/2 bg-ink"
+                  animate={{
+                    left: i % 2 === 0 ? ["0%", "100%"] : ["100%", "0%"],
+                    opacity: [0, 1, 1, 0],
+                  }}
+                  transition={{
+                    duration: 1.4,
+                    repeat: Infinity,
+                    delay: i * 0.45,
+                    ease: "linear",
+                  }}
+                />
+              ))}
+
+            {/* Centre node: a diamond, pulsing while it waits, locking to lime
+                the moment both sides are proven present. */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              {!live && (
+                <motion.span
+                  className="absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-ink"
+                  animate={{ scale: [1, 2.2], opacity: [0.5, 0] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                />
+              )}
+              <motion.span
+                className={cn(
+                  "block size-4 rotate-45 border-2 border-ink",
+                  live ? "bg-brand-lime" : "bg-brand-yellow",
+                )}
+                animate={live ? { scale: 1.35 } : { scale: [1, 1.15, 1] }}
+                transition={
+                  live
+                    ? { type: "spring", stiffness: 400, damping: 12 }
+                    : { duration: 1.4, repeat: Infinity, ease: "easeInOut" }
+                }
+              />
+            </div>
+          </div>
+
+          <PeerTile side={1} label="Them" live={live} />
+        </div>
+
+        <div>
+          <h2 className="text-xl font-black uppercase leading-tight sm:text-2xl">
+            Connecting you both
+          </h2>
+          <p className="mt-1.5 text-sm text-muted">Opening the chat for both of you at once…</p>
+        </div>
+
+        {/* ---- honest, stage-based progress ---- */}
+        <div className="w-full">
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map((segment) => (
+              <div
+                key={segment}
+                className="h-2 flex-1 overflow-hidden border-2 border-ink bg-canvas"
+              >
+                <motion.span
+                  className={cn("block h-full", live ? "bg-brand-lime" : "bg-brand-yellow")}
+                  initial={false}
+                  animate={{ scaleX: segment <= step ? 1 : 0 }}
+                  style={{ originX: 0 }}
+                  transition={{ duration: 0.35, ease: "easeOut" }}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted">
+            <motion.span
+              key={phase}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              {PHASE_COPY[phase]}
+            </motion.span>
+            <span className="tabular-nums">{`0${step}/03`}</span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+});
+
 /* ---------------------------------- page ---------------------------------- */
 
 export function ChatRoomPage() {
@@ -329,15 +528,35 @@ export function ChatRoomPage() {
    * whoever polled first entering early. `stranded` is a safety valve only —
    * it never delays the happy path, it just prevents being trapped here if the
    * other side never actually connects.
+   *
+   * The timer keys on `partnerPresent` ALONE, deliberately. Keying it on the
+   * socket status as well restarted the countdown when the socket opened, so
+   * the real budget was the wait plus a fresh 12s rather than 12s in total.
    */
   const [stranded, setStranded] = useState(false);
   useEffect(() => {
-    if (!online || partnerPresent) return;
+    if (partnerPresent) return;
     const timer = window.setTimeout(() => setStranded(true), 12_000);
     return () => window.clearTimeout(timer);
-  }, [online, partnerPresent]);
+  }, [partnerPresent]);
 
-  const waitingForPartner = online && !partnerPresent && !stranded;
+  /**
+   * Cover the socket handshake too, not just the wait for the partner.
+   *
+   * This used to be `online && !partnerPresent`, so between mount and the
+   * socket opening the overlay was absent and the full chat rendered behind it
+   * — an empty thread, a live composer and a "Connecting…" header — before the
+   * overlay slammed over the top of it a moment later. That flash of a chat the
+   * user could not yet use was the flicker; the connect phase is part of the
+   * same wait and belongs under the same cover.
+   */
+  const connecting = status === "connecting";
+  const waitingForPartner = !stranded && (connecting || (online && !partnerPresent));
+  const connectPhase: ConnectPhase = partnerPresent
+    ? "connected"
+    : online
+      ? "linked"
+      : "connecting";
 
   /* ----------------------------- scroll behaviour ---------------------------- */
 
@@ -1065,69 +1284,7 @@ export function ChatRoomPage() {
 
       {/* ----------------------- match sync barrier ----------------------- */}
       <AnimatePresence>
-        {waitingForPartner && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.02 }}
-            transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-40 flex items-center justify-center bg-canvas p-4"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex w-full max-w-sm flex-col items-center gap-6 border-2 border-ink bg-surface px-8 py-10 text-center shadow-brutal-lg">
-              <motion.span
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 300, damping: 16 }}
-                className="border-2 border-ink bg-brand-lime px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.25em]"
-              >
-                Match found
-              </motion.span>
-
-              <div className="relative flex items-center justify-center">
-                {[0, 1].map((ring) => (
-                  <motion.span
-                    key={ring}
-                    className="absolute size-20 border-2 border-ink"
-                    initial={{ scale: 1, opacity: 0.45 }}
-                    animate={{ scale: 1.75, opacity: 0 }}
-                    transition={{
-                      duration: 1.8,
-                      repeat: Infinity,
-                      delay: ring * 0.9,
-                      ease: "easeOut",
-                    }}
-                  />
-                ))}
-                <motion.div
-                  animate={{ scale: [1, 1.06, 1] }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                  className="relative flex size-20 items-center justify-center border-2 border-ink bg-brand-yellow shadow-brutal-sm"
-                >
-                  <VenetianMask className="size-9" />
-                </motion.div>
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-black uppercase leading-tight">
-                  Connecting you both
-                </h2>
-                <p className="mt-1.5 text-sm text-muted">
-                  Opening the chat for both of you at once…
-                </p>
-              </div>
-
-              <div className="h-1.5 w-40 overflow-hidden border-2 border-ink bg-canvas">
-                <motion.div
-                  className="h-full w-1/3 bg-brand-lime"
-                  animate={{ x: ["-110%", "330%"] }}
-                  transition={{ duration: 1.3, repeat: Infinity, ease: "easeInOut" }}
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {waitingForPartner && <ConnectingOverlay phase={connectPhase} />}
       </AnimatePresence>
 
       {/* --------------------------- ended / error veil -------------------------- */}

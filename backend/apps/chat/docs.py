@@ -32,9 +32,10 @@ Maintenance
 
 Exports
 -------
-- ``start_chat_doc`` → StartChatAPIView.post
-- ``end_chat_doc``   → EndChatAPIView.post
-- ``report_doc``     → ReportAPIView.post
+- ``start_chat_doc``          → StartChatAPIView.post
+- ``cancel_chat_search_doc``  → CancelChatSearchAPIView.post
+- ``end_chat_doc``            → EndChatAPIView.post
+- ``report_doc``              → ReportAPIView.post
 """
 
 from drf_spectacular.utils import (
@@ -45,7 +46,12 @@ from drf_spectacular.utils import (
 )
 from rest_framework import serializers as rf_serializers
 
-from .serializers import EndChatSerializer, ReportSerializer, StartChatSerializer
+from .serializers import (
+    CancelChatSearchSerializer,
+    EndChatSerializer,
+    ReportSerializer,
+    StartChatSerializer,
+)
 
 # ---------------------------------------------------------------------------
 # Start Anonymous Chat
@@ -111,6 +117,62 @@ start_chat_doc = extend_schema(
         # 401: Returned when the request has no valid access token in the Authorization header.
         401: OpenApiResponse(
             description="Unauthorized - Missing or invalid access token."
+        ),
+    },
+)
+
+
+# ---------------------------------------------------------------------------
+# Cancel Chat Search
+# Endpoint : POST /chat/cancel/
+
+cancel_chat_search_doc = extend_schema(
+    tags=["Chat"],
+    summary="Cancel Chat Search",
+    description="""
+    Remove the current user from the anonymous chat waiting queue.
+
+    **Purpose**: Releases the caller's queue slot so they cannot be matched while
+    they are not actually at the app. Matchmaking itself is unchanged — this only
+    undoes the enqueue that `POST /chat/start/` performs when nobody was available.
+
+    **When frontend should call it**:
+    - The user taps 'Cancel search'.
+    - The app goes to the background while searching (tab switch, minimise,
+      screen lock, app switch). The client sends this as a `keepalive` request so
+      it still completes after the page is hidden.
+
+    **Authentication requirement**: Bearer Authentication (JWT required).
+
+    **Security behaviour**: Authenticated user only, and the queue entry is keyed
+    by the authenticated user — a caller can never dequeue anybody else.
+
+    **Idempotent**: Calling it when the user is not queued is a no-op and still
+    returns `200`. If a partner claimed the caller a moment earlier, the room has
+    already been created and stands; the next `POST /chat/start/` returns it with
+    status `active`.
+    """,
+    request=CancelChatSearchSerializer,
+    responses={
+        # 200: The user is no longer in the waiting queue (whether or not they
+        # were in it when the call arrived).
+        200: OpenApiResponse(
+            response=inline_serializer(
+                "CancelChatSearchResponse",
+                fields={"message": rf_serializers.CharField()},
+            ),
+            description="The caller is not in the waiting queue.",
+            examples=[
+                OpenApiExample("Success", value={"message": "Search cancelled."})
+            ],
+        ),
+        # 401: Returned when the request has no valid access token in the Authorization header.
+        401: OpenApiResponse(
+            description="Unauthorized - Missing or invalid access token."
+        ),
+        # 429: Returned when the client exceeds 30 requests per minute.
+        429: OpenApiResponse(
+            description="Too Many Requests - 30 requests/minute limit exceeded."
         ),
     },
 )

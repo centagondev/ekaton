@@ -115,6 +115,16 @@ class StartChatSerializer(serializers.Serializer):
     pass
 
 
+class CancelChatSearchSerializer(serializers.Serializer):
+    """Serializer for the Cancel Chat Search endpoint.
+
+    No input fields are required — the queue entry is keyed by the
+    authenticated user, which the view reads off the request.
+    """
+
+    pass
+
+
 class EndChatSerializer(serializers.Serializer):
     """Serializer for the End Chat endpoint.
 
