@@ -61,6 +61,9 @@ const PARTNER_WAIT_MS = 12_000;
 /** Shown when a room is given up on because its second seat never filled. */
 const PARTNER_GONE_NOTICE = "The other user is no longer available.";
 
+/** Shown after any skip the user asked for, in-chat or from the cover. */
+const SKIP_NOTICE = "Skipped. Finding someone new…";
+
 /* --------------------------------- pieces --------------------------------- */
 
 /**
@@ -133,7 +136,10 @@ const Bubble = memo(function Bubble({
   return (
     <motion.div
       id={`chat-message-${message.id}`}
-      layout="position"
+      // No `layout` animation: it re-measured and re-sprang every earlier
+      // bubble each time a message landed, which is the transcript-wide
+      // shudder on send. The entrance below is transform-only, so it never
+      // moves anything but the new bubble itself.
       initial={{ opacity: 0, y: 14, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 480, damping: 34 }}
@@ -307,7 +313,13 @@ function PeerTile({ side, label, live }: { side: -1 | 1; label: string; live: bo
  * plays entirely inside the exit transition, so nothing is held back to let an
  * animation finish.
  */
-const ConnectingOverlay = memo(function ConnectingOverlay({ phase }: { phase: ConnectPhase }) {
+const ConnectingOverlay = memo(function ConnectingOverlay({
+  phase,
+  onSkip,
+}: {
+  phase: ConnectPhase;
+  onSkip: () => void;
+}) {
   const live = phase === "connected";
   const step = PHASE_STEP[phase];
 
@@ -440,6 +452,17 @@ const ConnectingOverlay = memo(function ConnectingOverlay({ phase }: { phase: Co
             <span className="tabular-nums">{`0${step}/03`}</span>
           </div>
         </div>
+
+        {/* The manual way out of a wait that never resolves — the other side
+            may have cancelled, gone offline, or closed the tab. Behaves
+            exactly like Skip inside the chat. Gone the instant the match is
+            proven, so a successful connection cannot be skipped by a stray
+            tap during the exit animation. */}
+        {!live && (
+          <Button variant="secondary" onClick={onSkip} className="w-full">
+            <SkipForward className="size-4" /> Skip to next
+          </Button>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -611,7 +634,12 @@ export function ChatRoomPage() {
 
   useEffect(() => {
     if (messages.length === 0) return;
-    if (nearBottomRef.current || messages[messages.length - 1]?.isOwn) scrollToBottom();
+    // Own sends pin instantly: the bubble is already laid out when this
+    // effect runs, so an "auto" scroll lands in the same frame and nothing
+    // visibly travels. Smooth-scrolling one's own message raced the entrance
+    // animation and read as the chat jumping, worst on small screens.
+    if (messages[messages.length - 1]?.isOwn) scrollToBottom("auto");
+    else if (nearBottomRef.current) scrollToBottom();
     else setUnseen((count) => count + 1);
   }, [messages, scrollToBottom]);
 
@@ -671,7 +699,7 @@ export function ChatRoomPage() {
         ? "Chat ended — it went quiet for too long."
         : endInfo?.kind === "skipped"
           ? skipRequestedRef.current
-            ? "Skipped. Finding someone new…"
+            ? SKIP_NOTICE
             : "Stranger skipped to a new chat."
           : // "Disconnected" would be a lie about someone who was never here.
             // A room that ends before its second seat is ever proven filled is
@@ -721,10 +749,32 @@ export function ChatRoomPage() {
       }
       navigate("/home", {
         replace: true,
-        state: { autostart: true, notice: PARTNER_GONE_NOTICE },
+        state: {
+          autostart: true,
+          // The same exit serves two stories: the timer giving up on a
+          // partner who never came, and the user skipping from the cover.
+          // Each gets its own words.
+          notice: skipRequestedRef.current ? SKIP_NOTICE : PARTNER_GONE_NOTICE,
+        },
       });
     })();
   }, [stranded, status, roomId, navigate]);
+
+  /**
+   * Manual exit from the connecting cover — pure reuse, no cleanup of its
+   * own. With the socket open this is exactly the in-chat skip (same frame,
+   * same server-side teardown, same exit notice). Before the socket opens a
+   * skip frame cannot be delivered, so it declares the room stranded instead,
+   * which runs the existing give-up path: end the room over REST — so no
+   * orphaned room can be handed back to the next search — then return to
+   * matchmaking. Both paths are already guarded against running twice.
+   */
+  const skipFromConnecting = useCallback(() => {
+    if (skipRequestedRef.current || endRequestedRef.current) return;
+    skipRequestedRef.current = true;
+    if (online) skipChat();
+    else setStranded(true);
+  }, [online, skipChat]);
 
   // The typing debounce outlives the component if you navigate away mid-word.
   useEffect(() => () => window.clearTimeout(typingStopRef.current), []);
@@ -1371,7 +1421,9 @@ export function ChatRoomPage() {
 
       {/* ----------------------- match sync barrier ----------------------- */}
       <AnimatePresence>
-        {waitingForPartner && <ConnectingOverlay phase={connectPhase} />}
+        {waitingForPartner && (
+          <ConnectingOverlay phase={connectPhase} onSkip={skipFromConnecting} />
+        )}
       </AnimatePresence>
 
       {/* --------------------------- ended / error veil -------------------------- */}

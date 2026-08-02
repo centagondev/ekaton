@@ -167,7 +167,7 @@ export function EventDetailPage() {
 
       <div className="mx-auto max-w-3xl">
         <div className="border-2 border-ink bg-surface shadow-brutal">
-          <EventBannerArt banner={event.banner} className="h-36 sm:h-44" />
+          <EventBannerArt banner={event.banner} natural />
           <div className="p-6 sm:p-8">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>

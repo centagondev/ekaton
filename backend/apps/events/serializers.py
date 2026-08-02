@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -161,10 +163,27 @@ class BaseEventSerializer(serializers.ModelSerializer):
 class CreateEventSerializer(BaseEventSerializer):
     """
     Serializer for creating a new event.
+
+    An event starts the moment it is created, so the 24-hour cap is anchored
+    at "now". The cap lives on the create serializer only: updates keep the
+    base future-only check, and the frontend anchors an edit's window at the
+    event's original ``created_at`` instead.
     """
+
+    MAX_DURATION = timedelta(hours=24)
 
     class Meta(BaseEventSerializer.Meta):
         pass
+
+    def validate_end_time(self, value):
+        value = super().validate_end_time(value)
+
+        if value > timezone.now() + self.MAX_DURATION:
+            raise serializers.ValidationError(
+                "Events can run for at most 24 hours — pick an earlier end time."
+            )
+
+        return value
 
 
 class UpdateEventSerializer(BaseEventSerializer):

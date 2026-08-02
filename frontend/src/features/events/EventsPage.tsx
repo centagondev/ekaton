@@ -1,23 +1,32 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { CalendarDays, MapPin, Plus, Timer, Users } from "lucide-react";
+import { CalendarDays, MapPin, Plus, Timer } from "lucide-react";
 import { eventsApi } from "@/lib/api/events";
 import { PageTransition, staggerContainer, staggerItem } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDateTime, timeUntil } from "@/lib/utils";
-import { EventBannerArt, EventFormModal } from "./event-shared";
+import { formatDateTime } from "@/lib/utils";
+import { EVENT_BANNER_RATIO, EventBannerArt, EventFormModal } from "./event-shared";
 
 export function EventsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const query = useQuery({ queryKey: ["events"], queryFn: eventsApi.list });
 
   const events = query.data ?? [];
-  const [featured, ...rest] = events;
+
+  // Newest first. The list endpoint's ordering is its own business, so the
+  // page sorts rather than trusting whatever order it arrives in.
+  const ordered = useMemo(
+    () =>
+      [...events].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ),
+    [events],
+  );
 
   return (
     <PageTransition>
@@ -36,13 +45,10 @@ export function EventsPage() {
       </div>
 
       {query.isLoading && (
-        <div className="space-y-6">
-          <Skeleton className="h-44 w-full" />
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <Skeleton key={index} className="h-64" />
-            ))}
-          </div>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} className="h-64" />
+          ))}
         </div>
       )}
 
@@ -64,72 +70,53 @@ export function EventsPage() {
         />
       )}
 
-      {featured && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <Link
-            to={`/events/${featured.id}`}
-            className="block border-2 border-ink bg-brand-yellow shadow-brutal transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm"
-          >
-            <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
-              <div className="min-w-0">
-                <span className="mb-3 inline-block -rotate-1 border-2 border-ink bg-brand-lime px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-[0.2em]">
-                  ● Latest event
-                </span>
-                <h2 className="text-3xl font-black leading-tight sm:text-4xl">{featured.name}</h2>
-                <div className="mt-3 flex flex-wrap gap-4 font-mono text-[11px] font-bold uppercase tracking-wider">
-                  <span className="flex items-center gap-1.5">
-                    <Timer className="size-3.5" /> Ends {timeUntil(featured.end_time)}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="size-3.5" /> {featured.venue}
-                  </span>
-                  {featured.is_anonymous_chat && (
-                    <span className="flex items-center gap-1.5">
-                      <Users className="size-3.5" /> Anonymous
-                    </span>
-                  )}
-                </div>
-              </div>
-              <span className="shrink-0 border-2 border-ink bg-ink px-6 py-3 text-sm font-extrabold uppercase tracking-wide text-white">
-                Join Now
-              </span>
-            </div>
-          </Link>
-        </motion.div>
-      )}
-
       <motion.div
         variants={staggerContainer}
         initial="hidden"
         animate="show"
         className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {rest.map((event) => (
-          <motion.div key={event.id} variants={staggerItem} whileHover={{ x: 2, y: 2 }}>
+        {/*
+          min-w-0 on each item: a grid item defaults to min-width:auto, so a
+          long venue would widen its column past the grid instead of being
+          truncated by the card.
+        */}
+        {ordered.map((event) => (
+          <motion.div
+            key={event.id}
+            variants={staggerItem}
+            whileHover={{ x: 2, y: 2 }}
+            className="min-w-0"
+          >
             <Link
               to={`/events/${event.id}`}
               className="flex h-full flex-col border-2 border-ink bg-surface shadow-brutal transition-shadow hover:shadow-brutal-sm"
             >
-              <EventBannerArt banner={event.banner} className="h-32" />
+              <EventBannerArt banner={event.banner} className={EVENT_BANNER_RATIO} />
               <div className="flex flex-1 flex-col p-5">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge tone="lime">Live</Badge>
                   {event.is_anonymous_chat && <Badge tone="lavender">Anonymous</Badge>}
                 </div>
-                <h2 className="mb-2 text-xl font-black leading-snug">{event.name}</h2>
+                {/*
+                  Every card is the same height, so the text that varies in
+                  length is capped: two lines for the name, one for the venue
+                  and host. Long values are clipped, not allowed to grow a card
+                  taller than its neighbours.
+                */}
+                <h2 className="mb-2 line-clamp-2 min-h-14 text-xl font-black leading-snug">
+                  {event.name}
+                </h2>
                 <div className="space-y-1 font-mono text-[11px] uppercase tracking-wider text-muted">
                   <p className="flex items-center gap-1.5">
-                    <Timer className="size-3.5" /> Ends {formatDateTime(event.end_time)}
+                    <Timer className="size-3.5 shrink-0" /> Ends {formatDateTime(event.end_time)}
                   </p>
                   <p className="flex items-center gap-1.5">
-                    <MapPin className="size-3.5" /> {event.venue}
+                    <MapPin className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{event.venue}</span>
                   </p>
                 </div>
-                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-muted">
+                <p className="mt-2 truncate text-xs font-bold uppercase tracking-wide text-muted">
                   {/* An anonymous event must not out its host. */}
                   Hosted by {event.is_anonymous_chat ? "Anonymous host" : event.owner}
                 </p>
