@@ -31,7 +31,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 BREVO_API_KEY = env("BREVO_API_KEY")
-DEFAULT_FROM_EMAIL = "centagontech@gmail.com"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 REDIS_URL = env("REDIS_URL")
 MESSAGE_ENCRYPTION_KEY = env("MESSAGE_ENCRYPTION_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
