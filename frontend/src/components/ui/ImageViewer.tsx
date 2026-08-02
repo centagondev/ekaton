@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { lockBodyScroll } from "@/lib/scrollLock";
 import { cn } from "@/lib/utils";
 
 const MIN_SCALE = 1;
@@ -96,12 +97,14 @@ export function ImageViewer({
     };
 
     document.addEventListener("keydown", onKeyDown, true);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Shared, reference-counted (see scrollLock.ts) — the viewer often sits
+    // above a Modal that holds its own lock, and a private snapshot restored
+    // out of order used to leave the body unscrollable.
+    const unlock = lockBodyScroll();
 
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      document.body.style.overflow = previousOverflow;
+      unlock();
     };
   }, [open, onClose]);
 

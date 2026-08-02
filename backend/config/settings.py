@@ -39,13 +39,16 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost"])
 
-# The two public origins the frontend is served from. ekaton.in is the
-# canonical domain (outbound links point there); the *.vercel.app origin stays
-# live alongside it, so browser-facing allowlists (CORS, CSRF) must accept
-# BOTH. Used as the production fallbacks below whenever the corresponding env
-# var is not set — an explicit env var always wins.
+# The public origins the frontend is served from. ekaton.in is the canonical
+# domain (outbound links point there), but Vercel 308-redirects the apex to
+# www.ekaton.in — so www is the origin browsers actually send requests from
+# and it MUST be allowlisted too. The *.vercel.app origin stays live alongside
+# them, so browser-facing allowlists (CORS, CSRF) must accept ALL THREE. Used
+# as the production fallbacks below whenever the corresponding env var is not
+# set — an explicit env var always wins.
 PRODUCTION_ORIGINS = [
     "https://ekaton.in",
+    "https://www.ekaton.in",
     "https://ekaton.vercel.app",
 ]
 

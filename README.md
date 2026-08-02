@@ -243,24 +243,31 @@ EMAIL_HOST_PASSWORD=your-email-password
 
 #### Production domains
 
-The frontend is served from **two** public origins:
+The frontend is served from **three** public origins:
 
 - `https://ekaton.in` — canonical; emailed links (password reset, account
-  setup) always point here.
-- `https://ekaton.vercel.app` — served alongside it.
+  setup) always point here. Vercel 308-redirects it to `www.ekaton.in`.
+- `https://www.ekaton.in` — the primary serving domain; this is the `Origin`
+  browsers actually send, so it must be in every allowlist.
+- `https://ekaton.vercel.app` — served alongside them.
 
 With `DEBUG=False` the backend already defaults `CORS_ALLOWED_ORIGINS`,
 `CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL` to these domains (see
 `PRODUCTION_ORIGINS` in `backend/config/settings.py`). Setting the env vars
-overrides those defaults — if you do, remember CORS/CSRF must list **both**
-origins:
+overrides those defaults — if you do, remember CORS/CSRF must list **all
+three** origins:
 
 ```env
 FRONTEND_URL=https://ekaton.in
-CORS_ALLOWED_ORIGINS=https://ekaton.in,https://ekaton.vercel.app
-CSRF_TRUSTED_ORIGINS=https://ekaton.in,https://ekaton.vercel.app
+CORS_ALLOWED_ORIGINS=https://ekaton.in,https://www.ekaton.in,https://ekaton.vercel.app
+CSRF_TRUSTED_ORIGINS=https://ekaton.in,https://www.ekaton.in,https://ekaton.vercel.app
 ALLOWED_HOSTS=<your-api-host>
 ```
+
+> **Important:** if `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` are set in
+> the Render dashboard, they silently override the code defaults — either
+> delete them there or keep them in sync with the full list above, then
+> redeploy.
 
 > **Tip:** Generate a Fernet key with:
 > ```bash

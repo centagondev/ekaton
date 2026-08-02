@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { COARSE_POINTER } from "@/lib/useChatViewport";
+import { lockBodyScroll } from "@/lib/scrollLock";
 import { cn } from "@/lib/utils";
 
 /**
@@ -195,16 +196,11 @@ export function Modal({
 
     previouslyFocused.current = document.activeElement as HTMLElement | null;
 
-    // Park the page. The scrollbar's width is given back as padding so
-    // removing it cannot shift the layout underneath the scrim — an
-    // uncompensated lock reflows the whole document at exactly the moment the
-    // sheet starts moving, which is a large part of what "opening is delayed"
-    // was.
-    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
-    const previousOverflow = document.body.style.overflow;
-    const previousPadding = document.body.style.paddingRight;
-    document.body.style.overflow = "hidden";
-    if (scrollbar > 0) document.body.style.paddingRight = `${scrollbar}px`;
+    // Park the page. Shared, reference-counted (see scrollLock.ts): a dialog
+    // can be unmounted while open — above a chat surface holding its own lock
+    // — and a private snapshot restored out of order used to leave the body
+    // permanently unscrollable. The scrollbar compensation lives there too.
+    const unlock = lockBodyScroll();
 
     /**
      * Focus, after the panel has stopped moving.
@@ -259,8 +255,7 @@ export function Modal({
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      document.body.style.paddingRight = previousPadding;
+      unlock();
       // `preventScroll` here too: returning focus to a control far down the
       // page would otherwise scroll-jump the page as the sheet slides away.
       previouslyFocused.current?.focus?.({ preventScroll: true });
