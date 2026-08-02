@@ -1,0 +1,110 @@
+/* ---------------------------------------------------------------------------
+   Private-chat typing indicator.
+
+   Every loop here is pure CSS over transform/opacity ONLY, so none of it
+   costs a React render or triggers layout. The two element-level loops
+   (ti-breathe, ti-float) carry will-change and animate on the compositor;
+   the SVG group transforms re-raster the character, but that is a 48–56px
+   box, which is negligible even on low-end phones. The app-wide
+   prefers-reduced-motion kill switch in styles/index.css flattens all of it
+   for users who ask for stillness — with no animation-fill-mode anywhere,
+   they land on the base style rather than freezing mid-blink.
+
+   SVG groups need transform-box: fill-box so a blink or head-tilt pivots
+   around the part itself, not the viewBox origin.
+   ------------------------------------------------------------------------ */
+
+/* The whole character breathes: a slow, barely-there lift and swell. */
+@keyframes ti-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-1.5px) scale(1.015);
+  }
+}
+
+/* The head leans a touch side to side, like someone looking down at a keyboard. */
+@keyframes ti-head {
+  0%,
+  100% {
+    transform: rotate(-1.7deg);
+  }
+  50% {
+    transform: rotate(1.7deg);
+  }
+}
+
+/* Mostly-open eyes with one quick blink per cycle. */
+@keyframes ti-blink {
+  0%,
+  90.5%,
+  93.5%,
+  100% {
+    transform: scaleY(1);
+  }
+  92% {
+    transform: scaleY(0.08);
+  }
+}
+
+/* The bubble floats in anti-phase with the character's breath (negative
+   animation-delay below), which is what makes the pair read as alive rather
+   than as one rigid group. */
+@keyframes ti-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Dot wave: each dot rises and brightens on a stagger. */
+@keyframes ti-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.ti-breathe {
+  animation: ti-breathe 2.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.ti-float {
+  animation: ti-float 2.8s ease-in-out -1.4s infinite;
+  will-change: transform;
+}
+
+.ti-head {
+  transform-box: fill-box;
+  /* Pivot low, near the neck, so the lean reads as a head tilt not a wobble. */
+  transform-origin: 50% 85%;
+  animation: ti-head 3.6s ease-in-out infinite;
+}
+
+.ti-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ti-blink 4.4s linear infinite;
+}
+
+.ti-dot {
+  animation: ti-dot 1.2s ease-in-out infinite;
+}
+.ti-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ti-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}

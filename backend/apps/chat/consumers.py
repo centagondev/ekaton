@@ -17,9 +17,9 @@ IDLE_TIMEOUT_SECONDS = 300
 
 # One socket per participant per room. Opening the same room in a second tab
 # would otherwise put three sockets in a two-person group, so the extra one is
-# refused with a code the client can tell apart from a real error.
-CONNECTION_KEY_PREFIX = "chat_conn"
-
+# refused with a code the client can tell apart from a real error. The key
+# itself is built by services.room_connection_key.
+#
 # Backstop only, in case a process dies without running disconnect(). Well
 # beyond any real conversation, which releases the slot the moment it ends.
 CONNECTION_TTL_SECONDS = 60 * 60 * 12
@@ -40,6 +40,7 @@ from .services import (
     get_pending_reveal_request,
     get_private_chat_room,
     respond_to_reveal_request,
+    room_connection_key,
 )
 
 
@@ -74,7 +75,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # so of two tabs racing to connect exactly one wins. The key is only
         # remembered after a successful claim: a refused socket must never be
         # able to release the slot the winner is holding.
-        conn_key = f"{CONNECTION_KEY_PREFIX}:{room.id}:{user.id}"
+        conn_key = room_connection_key(room.id, user.id)
         claimed = await sync_to_async(redis_client.set)(
             conn_key,
             self.channel_name,
@@ -624,6 +625,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "user": {
                         "full_name": other_user.full_name,
                         "batch": other_user.batch,
+                        "gender": other_user.gender,
                         "profile_photo": (
                             other_user.profile_photo
                             if other_user.profile_photo

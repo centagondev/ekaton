@@ -16,6 +16,17 @@ logger = logging.getLogger("chat")
 # the two asset sets can be retained and purged on their own schedules.
 REPORT_EVIDENCE_FOLDER = "reports/evidence"
 
+# One socket per participant per room; the key is claimed in
+# ChatConsumer.connect and released on disconnect. It lives here rather than in
+# consumers.py because it is also the only evidence anywhere in the system that
+# a matched user actually turned up — see `release_unjoined_room`.
+CONNECTION_KEY_PREFIX = "chat_conn"
+
+
+def room_connection_key(room_id, user_id):
+    """Return the per-participant socket-slot key for a room."""
+    return f"{CONNECTION_KEY_PREFIX}:{room_id}:{user_id}"
+
 
 class EvidenceUploadFailed(APIException):
     """Cloudinary rejected or could not be reached for an evidence upload.

@@ -25,7 +25,9 @@ import { START_CHAT_JITTER_MS, START_CHAT_SPACING_MS } from "@/lib/config";
  *     A 429 is impossible from this client by construction.
  *  4. Cancel / background / unmount invalidates the session: in-flight
  *     responses and scheduled re-checks from a dead session are discarded, and
- *     the server-side queue slot is released.
+ *     the server-side queue slot is released. A dead session's response is not
+ *     merely dropped — if it came back holding a room, that room is ended, or
+ *     the partner walks into it alone.
  *  5. No event listener ever ADDS a start/ request. The old visibilitychange
  *     "catch-up" poke did, fired on every alt-tab while testing with two
  *     windows, and was a main source of the 429 storm; it stays gone. The
@@ -107,7 +109,22 @@ export function useMatchmaking() {
         pendingStartRef.current = pending;
 
         const result = await pending;
-        if (session !== sessionRef.current) return;
+
+        if (session !== sessionRef.current) {
+          // The search was cancelled (or backgrounded, or navigated away from)
+          // while this call was in the air — and it came back holding a room
+          // the server had just created for it. Dropping the response on the
+          // floor leaves that room standing with one seat filled: the partner
+          // walks in and waits for someone who is never coming. Hand it back.
+          //
+          // Only "matched" — a room this very call brought into existence.
+          // "active" may be a conversation already open in another tab, which
+          // is not ours to end.
+          if (result.status === "matched" && result.room_id) {
+            void chatApi.end(result.room_id).catch(() => {});
+          }
+          return;
+        }
 
         if ((result.status === "matched" || result.status === "active") && result.room_id) {
           finishSession();

@@ -1,5 +1,9 @@
 from apps.chat.models import PrivateChatRoom
-from apps.chat.services import create_private_chat_room
+from apps.chat.services import (
+    create_private_chat_room,
+    end_private_chat_room,
+    room_connection_key,
+)
 from apps.users.models import User
 from core.redis import redis_client
 from django.db.models import Q
@@ -193,6 +197,38 @@ def remove_user_from_queue(user):
     pipe.srem(WAITING_USERS_SET_KEY, user_id)
     pipe.delete(waiting_alive_key(user_id))
     pipe.execute()
+
+
+def release_unjoined_room(user):
+    """End a room the user was matched into but never actually opened.
+
+    Leaving the queue is not enough on its own to make a cancel safe. A queued
+    user is claimable right up to the instant their removal lands, and the
+    claim creates the room immediately — but the queued side only ever learns
+    about it from its *next* ``start/`` poll, which a user who just cancelled
+    will never make. Their partner is then dropped into a room whose second
+    seat nobody is coming to fill.
+
+    A participant who is genuinely in a room holds the per-socket slot claimed
+    in ``ChatConsumer.connect``. The absence of that key is what separates
+    "matched a moment ago and walked away" from "chatting right now" — so a
+    live conversation in another tab is never touched here.
+
+    Args:
+        user: The User instance leaving the queue.
+
+    Returns:
+        The room that was ended, or None when there was nothing to release.
+    """
+    room = get_active_chat_room(user)
+
+    if room is None:
+        return None
+
+    if redis_client.exists(room_connection_key(room.id, user.id)):
+        return None
+
+    return end_private_chat_room(room)
 
 
 def is_user_waiting(user):

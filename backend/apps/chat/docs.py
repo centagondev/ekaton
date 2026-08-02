@@ -148,9 +148,13 @@ cancel_chat_search_doc = extend_schema(
     by the authenticated user — a caller can never dequeue anybody else.
 
     **Idempotent**: Calling it when the user is not queued is a no-op and still
-    returns `200`. If a partner claimed the caller a moment earlier, the room has
-    already been created and stands; the next `POST /chat/start/` returns it with
-    status `active`.
+    returns `200`.
+
+    **Late claims are cleaned up too**: if a partner claimed the caller a moment
+    earlier, the room already exists — and the caller, having cancelled, is never
+    going to open it. That room is ended here and its other participant receives a
+    `chat_ended` event at once, instead of waiting in a chat nobody joins. A
+    conversation the caller is actually connected to is never touched.
     """,
     request=CancelChatSearchSerializer,
     responses={
