@@ -241,6 +241,27 @@ EMAIL_HOST_USER=your-email@example.com
 EMAIL_HOST_PASSWORD=your-email-password
 ```
 
+#### Production domains
+
+The frontend is served from **two** public origins:
+
+- `https://ekaton.in` — canonical; emailed links (password reset, account
+  setup) always point here.
+- `https://ekaton.vercel.app` — served alongside it.
+
+With `DEBUG=False` the backend already defaults `CORS_ALLOWED_ORIGINS`,
+`CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL` to these domains (see
+`PRODUCTION_ORIGINS` in `backend/config/settings.py`). Setting the env vars
+overrides those defaults — if you do, remember CORS/CSRF must list **both**
+origins:
+
+```env
+FRONTEND_URL=https://ekaton.in
+CORS_ALLOWED_ORIGINS=https://ekaton.in,https://ekaton.vercel.app
+CSRF_TRUSTED_ORIGINS=https://ekaton.in,https://ekaton.vercel.app
+ALLOWED_HOSTS=<your-api-host>
+```
+
 > **Tip:** Generate a Fernet key with:
 > ```bash
 > python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

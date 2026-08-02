@@ -99,6 +99,16 @@
   animation: ti-blink 4.4s linear infinite;
 }
 
+/* The revealed portrait leans with the same rhythm as the drawn head. It is a
+   bitmap, so there is no inner group to pivot and no transform-box to set —
+   the whole image tilts, around a low origin so it reads as a lean rather than
+   a spin. No will-change: this sits inside .ti-breathe's compositor layer
+   already, and a second one for a 36px image would cost more than it saves. */
+.ti-head-img {
+  transform-origin: 50% 90%;
+  animation: ti-head 3.6s ease-in-out infinite;
+}
+
 .ti-dot {
   animation: ti-dot 1.2s ease-in-out infinite;
 }

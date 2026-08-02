@@ -39,6 +39,16 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost"])
 
+# The two public origins the frontend is served from. ekaton.in is the
+# canonical domain (outbound links point there); the *.vercel.app origin stays
+# live alongside it, so browser-facing allowlists (CORS, CSRF) must accept
+# BOTH. Used as the production fallbacks below whenever the corresponding env
+# var is not set — an explicit env var always wins.
+PRODUCTION_ORIGINS = [
+    "https://ekaton.in",
+    "https://ekaton.vercel.app",
+]
+
 
 cloudinary.config(
     cloud_name=env("CLOUDINARY_CLOUD_NAME"),
@@ -212,9 +222,13 @@ CACHES = {
 # isn't set, DEBUG — already the environment signal the security-headers
 # block above keys off — picks the right default automatically, so a missing
 # env var can't send links to the wrong host or crash the app outright.
+#
+# A single origin on purpose: an emailed link can only point one place, and
+# that place is the canonical domain. The vercel.app origin still serves the
+# app (see PRODUCTION_ORIGINS), it just isn't the address we hand out.
 FRONTEND_URL = env(
     "FRONTEND_URL",
-    default="http://localhost:5173" if DEBUG else "https://ekaton.vercel.app",
+    default="http://localhost:5173" if DEBUG else PRODUCTION_ORIGINS[0],
 )
 CHANNEL_LAYERS = {
     "default": {
@@ -329,8 +343,16 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 CORS_ALLOW_ALL_ORIGINS = False
+# Production must accept BOTH public origins — a request from whichever domain
+# the env var forgot would otherwise fail preflight and the site would simply
+# look down from that address.
 CORS_ALLOWED_ORIGINS = env.list(
-    "CORS_ALLOWED_ORIGINS", default=["http://localhost:5173", "http://127.0.0.1:5173"]
+    "CORS_ALLOWED_ORIGINS",
+    default=(
+        ["http://localhost:5173", "http://127.0.0.1:5173"]
+        if DEBUG
+        else PRODUCTION_ORIGINS
+    ),
 )
 CORS_ALLOW_CREDENTIALS = True
 
@@ -402,7 +424,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
 # Needed for the Django admin (and any form POST) once the site is on HTTPS.
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+# Same shape as CORS above: both public origins by default in production, an
+# explicit env var always wins, and local HTTP needs none at all.
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[] if DEBUG else PRODUCTION_ORIGINS,
+)
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
