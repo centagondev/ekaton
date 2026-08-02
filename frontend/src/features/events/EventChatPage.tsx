@@ -164,7 +164,6 @@ export function EventChatPage() {
   const [peopleOpen, setPeopleOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
   const ownIds = useRef<Set<string>>(new Set());
@@ -348,8 +347,18 @@ export function EventChatPage() {
 
   /* ------------------------------ scrolling -------------------------------- */
 
+  /**
+   * Scroll the transcript itself to its true bottom rather than
+   * `scrollIntoView` on a sentinel: aligning a sentinel's border box leaves
+   * the container's own bottom padding scrolled out of view, so the last
+   * bubble's shadow sat clipped against the overflow edge — and the extra
+   * page scroll `scrollIntoView` can trigger is one of the sources of the
+   * whole surface visibly jumping on send.
+   */
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior });
   }, []);
 
   /**
@@ -388,11 +397,40 @@ export function EventChatPage() {
     if (nearBottom) setUnseen(0);
   }, []);
 
+  /**
+   * React only when the *newest* message changes — loading older pages grows
+   * the list without touching the tail and must not move the viewport.
+   *
+   * Own sends pin the transcript instantly ("auto"): the optimistic bubble is
+   * already in the layout when this runs, so an instant pin lands in the same
+   * frame and nothing visibly travels. Smooth scrolling here raced the send —
+   * animating toward a bottom that was still moving — which is what read as
+   * the chat jumping and settling, worst on small screens.
+   */
+  const lastMessageIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (messages.length === 0) return;
-    if (nearBottomRef.current) scrollToBottom();
-    else setUnseen((count) => count + 1);
-  }, [messages.length, scrollToBottom]);
+    const last = messages[messages.length - 1];
+    if (!last || last.id === lastMessageIdRef.current) return;
+    const firstFill = lastMessageIdRef.current === null;
+    lastMessageIdRef.current = last.id;
+
+    if (last.id.startsWith("pending-")) {
+      // Only the act of sending claims the bottom.
+      nearBottomRef.current = true;
+      scrollToBottom("auto");
+    } else if (isOwn(last)) {
+      // The server echo replacing a draft re-fires this with a new tail id.
+      // Re-pin only if still at the bottom — someone who scrolled up between
+      // send and echo must not be yanked back down — and never count an own
+      // message as unseen.
+      if (nearBottomRef.current) scrollToBottom("auto");
+    } else if (nearBottomRef.current) {
+      // The room's first paint lands at the bottom rather than easing there.
+      scrollToBottom(firstFill ? "auto" : "smooth");
+    } else {
+      setUnseen((count) => count + 1);
+    }
+  }, [messages, isOwn, scrollToBottom]);
 
   // Track the visible viewport so the composer rides above the keyboard and
   // the newest message stays visible while it opens.
@@ -785,18 +823,18 @@ export function EventChatPage() {
                       <span className="h-px flex-1 bg-ink/20" />
                     </div>
                   ) : (
-                    <motion.div
+                    // A plain element on purpose — no entrance spring, no
+                    // layout animation. The scale/rise entrance made short
+                    // messages (an emoji most of all) balloon and float in,
+                    // and `layout` re-sprang every earlier bubble on each
+                    // send. A group room renders like a normal text chat:
+                    // the bubble is simply there, full-size, first frame.
+                    <div
                       key={item.message.id}
                       id={`event-message-${item.message.id}`}
-                      layout="position"
-                      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ type: "spring", stiffness: 480, damping: 34 }}
                       className={cn(
                         "group flex flex-col scroll-mt-24",
-                        item.own
-                          ? "origin-bottom-right items-end"
-                          : "origin-bottom-left items-start",
+                        item.own ? "items-end" : "items-start",
                         // Tight within a group, generous between speakers —
                         // the rhythm that makes a transcript scannable. Both
                         // steps sit on the 4/8px scale the rest of the page uses.
@@ -899,7 +937,7 @@ export function EventChatPage() {
                           {formatTime(item.message.created_at)}
                         </p>
                       )}
-                    </motion.div>
+                    </div>
                   ),
                 )}
               </div>
@@ -907,7 +945,6 @@ export function EventChatPage() {
               <AnimatePresence>
                 {typingNames.length > 0 && <TypingBubble key="typing" names={typingNames} />}
               </AnimatePresence>
-              <div ref={bottomRef} className="h-px" />
             </div>
           </div>
 
@@ -921,7 +958,11 @@ export function EventChatPage() {
                   scrollToBottom();
                   setUnseen(0);
                 }}
-                className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 border-2 border-ink bg-brand-yellow px-4 py-1.5 font-mono text-[11px] font-black uppercase tracking-[0.2em] shadow-brutal-sm transition-transform hover:translate-y-[1px]"
+                // bottom-6/8 rather than bottom-4: sitting a bubble's height
+                // above the composer border keeps the pill (and its shadow)
+                // clearly floating over the transcript instead of half-merged
+                // into the composer edge, on phones most of all.
+                className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 border-2 border-ink bg-brand-yellow px-4 py-1.5 font-mono text-[11px] font-black uppercase tracking-[0.2em] shadow-brutal-sm transition-transform hover:translate-y-[1px] sm:bottom-8"
               >
                 <ArrowDown className="size-3.5" />
                 {unseen} new {unseen === 1 ? "message" : "messages"}

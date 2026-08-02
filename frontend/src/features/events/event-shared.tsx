@@ -13,56 +13,116 @@ import { cn } from "@/lib/utils";
 import type { CampusEvent, EventBanner, EventParticipant } from "@/types/api";
 
 /**
- * The backend stores only a banner slug (banner_1…6) — there are no event
- * images — so the artwork is generated here from CSS patterns.
+ * The backend stores only a banner slug (banner_1…6), so each slug is mapped
+ * here to its uploaded artwork. The colour + CSS pattern stay as the backdrop
+ * the image paints over, so a slow or failed image still looks deliberate.
  */
-const BANNER_STYLES: Record<EventBanner, { className: string; pattern: string; size?: string }> = {
+const BANNER_STYLES: Record<
+  EventBanner,
+  { className: string; pattern: string; size?: string; image: string; ratio: string }
+> = {
   banner_1: {
     className: "bg-brand-yellow",
     pattern: "repeating-linear-gradient(45deg, transparent 0 14px, rgba(10,10,10,.85) 14px 16px)",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785684609/Gemini_Generated_Image_iorrbfiorrbfiorr_cyxpny.png",
+    ratio: "1584 / 672",
   },
   banner_2: {
     className: "bg-brand-lime",
     pattern:
       "radial-gradient(circle at 20% 40%, rgba(10,10,10,.85) 0 8px, transparent 8px), radial-gradient(circle at 60% 70%, rgba(10,10,10,.85) 0 12px, transparent 12px), radial-gradient(circle at 85% 25%, rgba(10,10,10,.85) 0 6px, transparent 6px)",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785685360/Gemini_Generated_Image_ntmnusntmnusntmn_cvq5up.png",
+    ratio: "1792 / 592",
   },
   banner_3: {
     className: "bg-brand-lavender",
     pattern: "repeating-linear-gradient(0deg, transparent 0 18px, rgba(10,10,10,.8) 18px 20px)",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785681585/Gemini_Generated_Image_50dfpk50dfpk50df_r1zsfe.png",
+    ratio: "1584 / 672",
   },
   banner_4: {
     className: "bg-[#ff6b6b]",
     pattern: "repeating-conic-gradient(rgba(10,10,10,.85) 0 25%, transparent 0 50%)",
     size: "28px 28px",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785685166/Gemini_Generated_Image_ecs86recs86recs8_tvufrt.png",
+    ratio: "1584 / 672",
   },
   banner_5: {
     className: "bg-[#4dabf7]",
     pattern: "repeating-linear-gradient(-45deg, transparent 0 10px, rgba(10,10,10,.85) 10px 12px)",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785681434/Gemini_Generated_Image_ynmqifynmqifynmq_chrv1s.png",
+    ratio: "1408 / 768",
   },
   banner_6: {
     className: "bg-[#ff9f43]",
     pattern:
       "radial-gradient(circle at 50% 50%, transparent 0 10px, rgba(10,10,10,.85) 10px 12px, transparent 12px 26px)",
     size: "40px 40px",
+    image:
+      "https://res.cloudinary.com/v2fz8ui6/image/upload/v1785681727/Gemini_Generated_Image_1pq44a1pq44a1pq4_vx9dl3.png",
+    ratio: "1584 / 672",
   },
 };
 
+/**
+ * The shared banner shape for the card grid, as a Tailwind aspect class.
+ *
+ * 33/14 is 1584×672 — the size four of the six banners already are, so those
+ * four fill a card's banner box exactly and only the two odd ones (1792×592
+ * and 1408×768) give up ~22% off one axis to cover. Worth revisiting if the
+ * artwork above is ever replaced with a different shape.
+ */
+export const EVENT_BANNER_RATIO = "aspect-[33/14]";
+
+/**
+ * The image always fills its box edge to edge — object-cover, never contain,
+ * so no gap can open up around it. What differs is where the box's ratio comes
+ * from.
+ *
+ * `natural` takes it from the banner itself, so cover has nothing to crop and
+ * the whole image shows. Use it where one banner owns the full width; the box
+ * is then as tall as that image needs, which is why the card grid can't use it
+ * — cards there must all be the same height, whatever banner they carry.
+ *
+ * Everywhere else the caller sets one shared ratio and cover trims the overflow
+ * from the banners that don't match it. Pick that ratio to match the artwork
+ * (see EVENT_BANNER_RATIO) and most banners come through untouched.
+ */
 export function EventBannerArt({
   banner,
   className,
+  natural = false,
 }: {
   banner: EventBanner;
   className?: string;
+  natural?: boolean;
 }) {
   const style = BANNER_STYLES[banner] ?? BANNER_STYLES.banner_1;
   return (
     <div
       aria-hidden="true"
       className={cn("relative overflow-hidden border-b-2 border-ink", style.className, className)}
+      style={natural ? { aspectRatio: style.ratio } : undefined}
     >
       <div
         className="absolute inset-0 opacity-20"
         style={{ backgroundImage: style.pattern, backgroundSize: style.size }}
+      />
+      {/*
+        block: an inline img adds descender space under itself, which shows up
+        as a thin strip of background along the bottom edge.
+      */}
+      <img
+        src={style.image}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="relative block size-full object-cover object-center"
       />
     </div>
   );
@@ -100,6 +160,14 @@ export function getEventIdentity(eventId: string): StoredIdentity | null {
 }
 
 /* ------------------------------ create/edit ------------------------------ */
+
+/**
+ * The longest an event may run. An event starts the moment it is created —
+ * there is no separate start field — so the window is anchored at creation:
+ * "now" while creating, the event's `created_at` while editing. Editing
+ * therefore cannot stretch an event past the 24 hours it was entitled to.
+ */
+const EVENT_MAX_DURATION_MS = 24 * 60 * 60 * 1000;
 
 interface EventFormValues {
   banner: EventBanner;
@@ -276,7 +344,7 @@ export function EventFormModal({
         <Field
           label="Ends at"
           required
-          hint="When it wraps up. The chat closes then, so give yourself room."
+          hint="When it wraps up, within 24 hours of creating the event. The chat closes then."
           error={form.formState.errors.end_time?.message ?? null}
         >
           {(id) => (
@@ -286,9 +354,19 @@ export function EventFormModal({
               className="[color-scheme:light]"
               {...form.register("end_time", {
                 required: "End time is required.",
-                validate: (value) =>
-                  new Date(value).getTime() > Date.now() ||
-                  "The event end time must be in the future.",
+                validate: {
+                  future: (value) =>
+                    new Date(value).getTime() > Date.now() ||
+                    "The event end time must be in the future.",
+                  within24Hours: (value) => {
+                    const startsAt =
+                      isEdit && event ? new Date(event.created_at).getTime() : Date.now();
+                    return (
+                      new Date(value).getTime() - startsAt <= EVENT_MAX_DURATION_MS ||
+                      "Events can run for at most 24 hours — pick an earlier end time."
+                    );
+                  },
+                },
               })}
             />
           )}
