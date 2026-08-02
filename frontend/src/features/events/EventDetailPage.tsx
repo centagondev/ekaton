@@ -6,6 +6,7 @@ import {
   CalendarX2,
   LogIn,
   MapPin,
+  MessageSquare,
   Pencil,
   Timer,
   Users,
@@ -78,10 +79,17 @@ export function EventDetailPage() {
    * This page exists only to help you decide whether to join. Once you are a
    * participant it has nothing left to say, so it steps aside rather than
    * making you click through a page you have already read.
+   *
+   * The owner is the exception, and has to be: Edit and Cancel render here and
+   * nowhere else in the app. Redirecting the host into their own chat room
+   * meant that from the moment they joined — which is every visit after the
+   * first, on every device and after every fresh login — there was no route
+   * left to their own controls. Hosting is a reason to stay on this page, not
+   * to be sent past it.
    */
   useEffect(() => {
-    if (joined && isActive) navigate(`/events/${id}/chat`, { replace: true });
-  }, [joined, isActive, id, navigate]);
+    if (joined && isActive && !isOwner) navigate(`/events/${id}/chat`, { replace: true });
+  }, [joined, isActive, isOwner, id, navigate]);
 
   const joinMutation = useMutation({
     mutationFn: () => eventsApi.join(id),
@@ -206,6 +214,15 @@ export function EventDetailPage() {
                   loading={joinMutation.isPending || historyLoading}
                 >
                   <LogIn className="size-4" /> Join event
+                </Button>
+              )}
+              {/* The way back into a room you are already in. Only the host
+                  ever sees it — everyone else is redirected above before this
+                  renders — but it is keyed on membership rather than on
+                  ownership, because "already joined" is what it acts on. */}
+              {isActive && joined && (
+                <Button size="lg" onClick={() => navigate(`/events/${id}/chat`)}>
+                  <MessageSquare className="size-4" /> Open chat
                 </Button>
               )}
               {isOwner && isActive && (

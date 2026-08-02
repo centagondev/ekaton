@@ -880,11 +880,32 @@ export function ChatRoomPage() {
                   )}
                 </AnimatePresence>
               </div>
-              <p
-                className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted"
-                aria-live="polite"
-              >
-                {statusText}
+              {/* Batch joins the line the header already had rather than
+                  taking one of its own, so the header keeps its two rows and
+                  its height. `reveal.user` exists only after reveal_success,
+                  so before a reveal this renders exactly as it always did:
+                  the status on its own.
+
+                  Bare, where the sidebar chip and the reveal card both say
+                  "Batch X". They have a whole line to spend; this one carries
+                  the connection state too, and the label is what pushed the
+                  pair past the width of a 320px phone — measured, with the
+                  Reveal button already gone from the header by this point. */}
+              <p className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+                {reveal.user?.batch && (
+                  <>
+                    {/* min-w-0 so an unusually long batch truncates instead of
+                        pushing the connection state out of the header. */}
+                    <span className="min-w-0 truncate">{reveal.user.batch}</span>
+                    <span aria-hidden>·</span>
+                  </>
+                )}
+                {/* The live region stays around the status alone — putting the
+                    batch inside it would re-announce the name every time the
+                    partner started or stopped typing. */}
+                <span className="shrink-0" aria-live="polite">
+                  {statusText}
+                </span>
               </p>
             </div>
           </div>
@@ -1063,6 +1084,17 @@ export function ChatRoomPage() {
             ref={scrollRef}
             onScroll={handleScroll}
             className="scroll-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            /* The header and the composer have always cleared the notch; the
+               transcript between them did not, so on a notched phone held
+               sideways its left edge ran under the cutout and the rounded
+               corner. The typing character is the leftmost thing in the
+               thread and the first to disappear behind them. Resolves to 0 on
+               every device without insets, which is every device in
+               portrait. */
+            style={{
+              paddingLeft: "env(safe-area-inset-left)",
+              paddingRight: "env(safe-area-inset-right)",
+            }}
           >
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end px-3 pb-6 pt-5 sm:px-6 lg:px-10 xl:max-w-5xl">
               <div className="mb-2 self-center border-2 border-ink bg-surface px-4 py-1 text-center font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
