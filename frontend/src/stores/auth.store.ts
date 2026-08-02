@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { authApi } from "@/lib/api/auth";
 import { SESSION_EXPIRED_EVENT } from "@/lib/api/client";
+import { queryClient } from "@/lib/queryClient";
 import {
   clearSession,
   getAccessToken,
@@ -62,6 +63,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       // An already-expired refresh token can't be blacklisted — sign out anyway.
     }
     clearSession();
+    // Signing out is an SPA navigation, so nothing else empties the React
+    // Query cache. Left behind, it answers the next sign-in from the previous
+    // user's session: `is_owner` on an event is the sharpest example — cached
+    // as false for whoever browsed last, and served for a further 30s of
+    // staleTime without a request, it hides the host's own Edit and Cancel
+    // controls from them right after they log back in.
+    queryClient.clear();
     set({ user: null, isAuthenticated: false });
   },
 
@@ -84,6 +92,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clear: () => {
     clearSession();
+    queryClient.clear();
     set({ user: null, isAuthenticated: false });
   },
 }));

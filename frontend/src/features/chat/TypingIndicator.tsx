@@ -103,7 +103,19 @@ export const TypingIndicator = memo(function TypingIndicator({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.92 }}
       transition={{ type: "spring", stiffness: 480, damping: 30 }}
-      className="mt-3 flex w-fit origin-bottom-left items-end gap-2.5"
+      /* `self-start` rather than `w-fit`: both shrink the row to its content
+         in a column flex container, but one of them does it with an
+         alignment the transcript already relies on everywhere else, and the
+         other with a `fit-content` width keyword whose support inside a flex
+         item is the least uniform thing in this file. `shrink-0` is the other
+         half of the same idea — the transcript is a flex column, and a flex
+         column is entitled to compress its items when the viewport is short,
+         which on a small phone with the keyboard up is exactly the moment
+         this row appears. The tile inside it keeps its 3rem height either
+         way, so a compressed row would push the character past the
+         transcript's own overflow clip and cut it off from below, leaving
+         the speech bubble on screen with nobody beside it. */
+      className="mt-3 flex shrink-0 origin-bottom-left items-end gap-2.5 self-start"
       /* Decorative on purpose. The header already carries the typing state in
          a live region ("Typing…"), so giving this row a role="status" made
          assistive tech announce the same event twice — once per keystroke
@@ -124,9 +136,36 @@ export const TypingIndicator = memo(function TypingIndicator({
             to nothing, which leaves the speech bubble sitting on its own with
             no character beside it. size-9/size-11 IS the tile's content box
             (48 and 56, less the 2px border and 1 unit of padding on each
-            side), so every browser lands on the same pixels. */}
+            side), so every browser lands on the same pixels.
+
+            `shrink-0` and `max-*-full` are what make that arithmetic safe to
+            depend on. It only balances at a 16px root font size: the tile and
+            the character are in rem but the border is in px, so the content
+            box is 40k − 4 while the character is 36k, and every phone running
+            a browser text-size below 100% (Android's font-size setting scales
+            the root) makes the character the larger of the two. As a flex
+            item with the default shrink factor it was then squeezed on one
+            axis only, and `object-contain` letterboxed what was left —
+            measured at a 10px root: a 22.5px character pressed into 21.6px
+            and visibly adrift inside its own tile. shrink-0 takes it out of
+            flex distribution entirely; max-*-full keeps it inside the padding
+            regardless. Unlike `size-full` these are maximums, so an engine
+            that treats the tile's content box as indefinite simply ignores
+            them and leaves the definite size-9 standing — the safe direction
+            to fail in, and the reason the note above does not apply to them.
+
+            The width/height attributes are a floor under the same box: an
+            inline <svg> carrying nothing but a viewBox has no intrinsic size
+            to fall back on, and the CSS classes override them at every
+            breakpoint, so they only ever matter if the class does not land. */}
         {character === "anonymous" ? (
-          <svg viewBox="0 0 64 64" className="size-9 lg:size-11" aria-hidden>
+          <svg
+            viewBox="0 0 64 64"
+            width="36"
+            height="36"
+            className="size-9 max-h-full max-w-full shrink-0 lg:size-11"
+            aria-hidden
+          >
             {ANONYMOUS_FACE}
           </svg>
         ) : (
@@ -143,7 +182,7 @@ export const TypingIndicator = memo(function TypingIndicator({
                different aspect ratios and cropping to fill would cut the top
                of someone's head off. Letterboxing inside the tile keeps both
                whole and undistorted at every size. */
-            className="ti-head-img size-9 object-contain lg:size-11"
+            className="ti-head-img size-9 max-h-full max-w-full shrink-0 object-contain lg:size-11"
           />
         )}
       </div>

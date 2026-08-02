@@ -65,6 +65,8 @@ export class StackEngine {
   private cameraTarget = 0;
 
   private frame = 0;
+  /** Whether a frame is currently scheduled. See ensureLoop / tick. */
+  private looping = false;
   private restartTimer: number | undefined;
   private lastTime = 0;
   /** Forces one paint of an otherwise-static scene (resize, reset, overlay). */
@@ -97,12 +99,29 @@ export class StackEngine {
     this.measure();
     this.reset();
 
-    this.resizeObserver = new ResizeObserver(() => this.measure());
+    this.resizeObserver = new ResizeObserver((entries) => this.measure(entries[0]));
     this.resizeObserver.observe(canvas);
 
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     canvas.addEventListener("pointerdown", this.onPointerDown, { passive: false });
 
+    this.ensureLoop();
+  }
+
+  /**
+   * Schedule a frame if one is not already coming.
+   *
+   * The loop parks itself whenever the scene is static (see tick), so every
+   * path that can make it move again has to come back through here: input,
+   * a resize, and the game-over restart timer. That is the complete list —
+   * nothing else in this engine changes what is on screen.
+   */
+  private ensureLoop(): void {
+    if (this.looping) return;
+    this.looping = true;
+    // Reset the clock rather than carrying the parked interval into the first
+    // delta, which would teleport the block by however long the player stared
+    // at the start screen. (tick clamps it too; this keeps the two honest.)
     this.lastTime = performance.now();
     this.frame = requestAnimationFrame(this.tick);
   }
@@ -110,6 +129,7 @@ export class StackEngine {
   /** Cancels the loop, drops listeners and timers, releases canvas refs. */
   destroy(): void {
     cancelAnimationFrame(this.frame);
+    this.looping = false;
     window.clearTimeout(this.restartTimer);
     this.resizeObserver.disconnect();
     window.removeEventListener("keydown", this.onKeyDown);
@@ -120,16 +140,48 @@ export class StackEngine {
 
   /* --------------------------------- setup -------------------------------- */
 
-  private measure = (): void => {
-    const rect = this.canvas.getBoundingClientRect();
+  /**
+   * Re-fit the backing store to the box, but only when that actually changes
+   * anything.
+   *
+   * Both guards below matter on a phone and neither did anything on a desktop,
+   * which is why this looked fine in development. The game box is sized in
+   * `dvh`, and `dvh` is exactly the unit that tracks the mobile URL bar — so
+   * one flick of the address bar walks the height through dozens of
+   * intermediate values, and this observer fires for every one of them.
+   *
+   *  - Reading the size from the observer's own entry instead of
+   *    getBoundingClientRect() removes a forced synchronous layout from inside
+   *    a layout callback, measured at one per event.
+   *  - Bailing when the device-pixel size is unchanged removes the rest.
+   *    Assigning canvas.width reallocates and zeroes the whole backing store —
+   *    at 2x DPR on a 360x300 box that is ~1.7MB, and the storm measured 90 of
+   *    them in 1.5s. That allocation churn is the freeze: sub-pixel jitter and
+   *    repeats now cost nothing, and a real resize still does the full job.
+   */
+  private measure = (entry?: ResizeObserverEntry): void => {
+    // contentRect is the layout box, so unlike getBoundingClientRect it is not
+    // perturbed by an ancestor's page-transition transform mid-animation.
+    const rect = entry?.contentRect ?? this.canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const pixelWidth = Math.round(rect.width * dpr);
+    const pixelHeight = Math.round(rect.height * dpr);
+    if (
+      pixelWidth === this.canvas.width &&
+      pixelHeight === this.canvas.height &&
+      dpr === this.dpr
+    ) {
+      return;
+    }
+
+    this.dpr = dpr;
     this.width = rect.width;
     this.height = rect.height;
-    this.canvas.width = Math.round(rect.width * this.dpr);
-    this.canvas.height = Math.round(rect.height * this.dpr);
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.canvas.width = pixelWidth;
+    this.canvas.height = pixelHeight;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
 
     // Keep the base block proportional when the viewport changes.
@@ -139,6 +191,9 @@ export class StackEngine {
     // brings a tower that no longer fits back into view.
     this.cameraTarget = Math.max(0, (this.blocks.length - this.visibleRows()) * BLOCK_H);
     this.needsRedraw = true;
+    // Resizing wipes the backing store, so a parked loop has to come back and
+    // repaint or the canvas stays blank until the player touches it.
+    this.ensureLoop();
   };
 
   /**
@@ -194,6 +249,18 @@ export class StackEngine {
 
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.code !== "Space" && event.code !== "Enter") return;
+    // The listener is on window so the game can be played without focusing the
+    // canvas, which also means it sees keys meant for whatever the player has
+    // focused. Space and Enter are how a keyboard user presses a button, so
+    // swallowing them here left "Cancel search" — the only other control on
+    // this screen — silently dead under the keyboard.
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, a, input, textarea, select, [contenteditable], [role='button']")
+    ) {
+      return;
+    }
     event.preventDefault();
     this.act();
   };
@@ -204,6 +271,8 @@ export class StackEngine {
   };
 
   private act(): void {
+    // Input is one of the three things that can restart a parked loop.
+    this.ensureLoop();
     if (this.phase === "idle") {
       this.phase = "running";
       return;
@@ -226,6 +295,8 @@ export class StackEngine {
       this.restartTimer = window.setTimeout(() => {
         this.reset();
         this.phase = "running";
+        // The card sits still for two seconds, so by now the loop has parked.
+        this.ensureLoop();
       }, RESTART_DELAY);
       return;
     }
@@ -363,12 +434,25 @@ export class StackEngine {
     ctx.fillStyle = this.ink;
     ctx.fillRect(0, this.height - 26 + this.cameraY, this.width, 2);
 
-    this.blocks.forEach((block, index) => {
+    // The tower is never trimmed — speed and colour are both derived from
+    // blocks.length, so dropping a row would change the game — which meant a
+    // long run walked the whole array every frame just to skip the rows the
+    // camera left below the floor. Rows are stacked in index order, so the
+    // visible window is one contiguous slice: start at the lowest row that can
+    // still be on screen and stop at the first one above it. The per-row
+    // guards stay, so the arithmetic below only has to be a bound, not exact.
+    const firstVisible = Math.max(
+      0,
+      Math.floor((this.cameraY - GROUND_H - BLOCK_H) / BLOCK_H) - 1,
+    );
+    for (let index = firstVisible; index < this.blocks.length; index += 1) {
       const y = this.blockScreenY(index);
-      if (y > this.height + BLOCK_H || y < -BLOCK_H * 2) return; // offscreen
+      if (y > this.height + BLOCK_H) continue; // below the floor
+      if (y < -BLOCK_H * 2) break; // above the ceiling, and so is everything after
+      const block = this.blocks[index];
       const lift = index === this.blocks.length - 1 ? this.flash * 3 : 0;
       this.drawBlock(block.x, y, block.w, block.tone, lift);
-    });
+    }
 
     if (this.phase === "running") {
       this.drawBlock(
@@ -422,13 +506,20 @@ export class StackEngine {
     this.flash = Math.max(0, this.flash - delta * 3);
     this.shake = Math.max(0, this.shake - delta * 2.5);
 
-    this.particles.forEach((particle) => {
+    // Integrated and compacted in one in-place pass. The forEach + filter pair
+    // this replaces allocated a fresh array on every single frame, for a list
+    // that is empty most of the time — pure garbage for the collector to come
+    // back for, which on a low-end phone it does mid-animation.
+    let alive = 0;
+    for (let index = 0; index < this.particles.length; index += 1) {
+      const particle = this.particles[index];
       particle.vy += 900 * delta;
       particle.x += particle.vx * delta;
       particle.y += particle.vy * delta;
       particle.life -= delta * 1.3;
-    });
-    this.particles = this.particles.filter((particle) => particle.life > 0);
+      if (particle.life > 0) this.particles[alive++] = particle;
+    }
+    this.particles.length = alive;
 
     // Repaint only when something can have moved. The idle "press to start"
     // screen and the settled game-over card are static — redrawing them every
@@ -446,6 +537,17 @@ export class StackEngine {
       this.needsRedraw = false;
     }
 
-    this.frame = requestAnimationFrame(this.tick);
+    if (animating) {
+      this.frame = requestAnimationFrame(this.tick);
+      return;
+    }
+
+    // Nothing on screen can move until the player, a resize or the restart
+    // timer says so, and each of those calls ensureLoop(). Skipping the draw
+    // was never enough on its own: the callback itself still woke the main
+    // thread 60 times a second behind a start screen that never changes, on a
+    // page where the search animations already want those frames.
+    this.looping = false;
+    this.frame = 0;
   };
 }

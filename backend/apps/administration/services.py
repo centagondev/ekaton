@@ -203,9 +203,9 @@ def update_user(user_id, data, current_user):
 
     if user.id == current_user.id and data.get("is_active") is False:
         raise ValidationError("You cannot suspend you own account")
+
     
-    if user.is_superuser or user.is_staff:
-        raise ValidationError("You cannot suspend admin accounts")
+    
     
     for field, value in data.items():
         setattr(user, field, value)
