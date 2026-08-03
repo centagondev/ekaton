@@ -74,6 +74,12 @@ export class StackEngine {
 
   private ink = "#0a0a0a";
   private bg = "#fbf9f5";
+  private muted = "#6b675f";
+  /** Ink for anything drawn ON a tone — the tones stay bright in both themes. */
+  private onTone = "#0a0a0a";
+  private onToneMuted = "#57534a";
+  /** The hard offset behind a block. Inverts with the theme, like the CSS one. */
+  private shadow = "#0a0a0a";
   private tones: string[] = ["#ffd600", "#ccff00", "#e8ebff"];
 
   private resizeObserver: ResizeObserver;
@@ -85,16 +91,7 @@ export class StackEngine {
     this.ctx = ctx;
     this.options = options;
 
-    const styles = getComputedStyle(document.documentElement);
-    const token = (name: string, fallback: string) =>
-      styles.getPropertyValue(name).trim() || fallback;
-    this.ink = token("--color-ink", this.ink);
-    this.bg = token("--color-canvas", this.bg);
-    this.tones = [
-      token("--color-brand-yellow", "#ffd600"),
-      token("--color-brand-lime", "#ccff00"),
-      token("--color-brand-lavender", "#e8ebff"),
-    ];
+    this.readTheme();
 
     this.measure();
     this.reset();
@@ -105,6 +102,37 @@ export class StackEngine {
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     canvas.addEventListener("pointerdown", this.onPointerDown, { passive: false });
 
+    this.ensureLoop();
+  }
+
+  /**
+   * Sample the palette off the document.
+   *
+   * A canvas cannot inherit CSS, so the engine reads the same tokens the rest
+   * of the UI is painted from. Custom properties are not registered with
+   * @property, so they flip instantly rather than animating — there is no
+   * half-transitioned colour to catch here.
+   */
+  private readTheme(): void {
+    const styles = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) =>
+      styles.getPropertyValue(name).trim() || fallback;
+    this.ink = token("--color-ink", "#0a0a0a");
+    this.bg = token("--color-canvas", "#fbf9f5");
+    this.muted = token("--color-muted", "#6b675f");
+    this.onTone = token("--color-on-accent", "#0a0a0a");
+    this.shadow = token("--ek-shadow", "#0a0a0a");
+    this.tones = [
+      token("--color-brand-yellow", "#ffd600"),
+      token("--color-brand-lime", "#ccff00"),
+      token("--color-brand-lavender", "#e8ebff"),
+    ];
+  }
+
+  /** Re-sample the palette after a theme flip and repaint once. */
+  refreshTheme(): void {
+    this.readTheme();
+    this.needsRedraw = true;
     this.ensureLoop();
   }
 
@@ -345,12 +373,13 @@ export class StackEngine {
   }
 
   private drawBlock(x: number, y: number, w: number, tone: number, lift = 0): void {
-    // Hard offset shadow — the same language as the surrounding UI.
-    this.ctx.fillStyle = this.ink;
+    // Hard offset shadow — the same language as the surrounding UI, and it
+    // reads against the canvas in either theme for the same reason.
+    this.ctx.fillStyle = this.shadow;
     this.ctx.fillRect(x + 4, y + 4, w, BLOCK_H);
     this.ctx.fillStyle = this.tones[tone % this.tones.length];
     this.ctx.fillRect(x, y - lift, w, BLOCK_H);
-    this.ctx.strokeStyle = this.ink;
+    this.ctx.strokeStyle = this.onTone;
     this.ctx.lineWidth = 2;
     this.ctx.strokeRect(x + 1, y - lift + 1, w - 2, BLOCK_H - 2);
   }
@@ -363,7 +392,7 @@ export class StackEngine {
     ctx.fillText(String(this.score), this.width - 18, 42);
 
     ctx.font = "700 10px ui-monospace, monospace";
-    ctx.fillStyle = "#6b675f";
+    ctx.fillStyle = this.muted;
     ctx.fillText(`BEST ${sessionBest}`, this.width - 18, 60);
 
     if (this.combo > 1 && this.phase === "running") {
@@ -387,7 +416,7 @@ export class StackEngine {
         this.height / 2 - 6,
       );
       ctx.font = "600 11px ui-monospace, monospace";
-      ctx.fillStyle = "#6b675f";
+      ctx.fillStyle = this.muted;
       ctx.fillText("STACK THE BLOCKS", this.width / 2, this.height / 2 + 16);
     }
 
@@ -397,21 +426,23 @@ export class StackEngine {
       const boxX = this.width / 2 - boxW / 2;
       const boxY = this.height / 2 - boxH / 2;
 
-      ctx.fillStyle = this.ink;
+      ctx.fillStyle = this.shadow;
       ctx.fillRect(boxX + 5, boxY + 5, boxW, boxH);
       ctx.fillStyle = this.tones[0];
       ctx.fillRect(boxX, boxY, boxW, boxH);
-      ctx.strokeStyle = this.ink;
+      // The card is a yellow fill in both themes, so everything inside it is
+      // drawn in the on-tone ink rather than the theme's.
+      ctx.strokeStyle = this.onTone;
       ctx.lineWidth = 2;
       ctx.strokeRect(boxX + 1, boxY + 1, boxW - 2, boxH - 2);
 
-      ctx.fillStyle = this.ink;
+      ctx.fillStyle = this.onTone;
       ctx.font = "800 20px ui-monospace, monospace";
       ctx.fillText("GAME OVER", this.width / 2, boxY + 32);
       ctx.font = "800 26px ui-monospace, monospace";
       ctx.fillText(String(this.score), this.width / 2, boxY + 60);
       ctx.font = "600 10px ui-monospace, monospace";
-      ctx.fillStyle = "#6b675f";
+      ctx.fillStyle = this.onToneMuted;
       ctx.fillText("RESTARTING…", this.width / 2, boxY + 74);
     }
 
@@ -467,7 +498,7 @@ export class StackEngine {
       ctx.globalAlpha = Math.max(0, particle.life);
       ctx.fillStyle = this.tones[particle.tone % this.tones.length];
       ctx.fillRect(particle.x, particle.y, particle.w, particle.w);
-      ctx.strokeStyle = this.ink;
+      ctx.strokeStyle = this.onTone;
       ctx.lineWidth = 1;
       ctx.strokeRect(particle.x, particle.y, particle.w, particle.w);
     });

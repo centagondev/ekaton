@@ -13,6 +13,36 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#fbf9f5" />
+    <!--
+      Theme, resolved before the first paint.
+
+      Read from localStorage ALONE — `prefers-color-scheme` is never consulted,
+      so a device in dark mode does not drag the app with it; light is what a
+      first-time visitor gets on every platform. Inline and blocking on
+      purpose: doing this in React would paint one frame of the wrong palette
+      for anyone who chose dark. Kept in sync with lib/theme.ts.
+    -->
+    <script>
+      (function () {
+        var theme = "light";
+        try {
+          if (localStorage.getItem("ekaton:theme") === "dark") theme = "dark";
+        } catch (e) {
+          /* blocked storage — light */
+        }
+        var root = document.documentElement;
+        root.setAttribute("data-theme", theme);
+        // Opts out of the platform auto-darkening form controls, scrollbars
+        // and — on Android Chrome — the page itself, before the stylesheet
+        // that declares the same thing has loaded. `only` is required: a bare
+        // `light` still lets Auto Dark Theme repaint everything.
+        root.style.colorScheme = theme === "dark" ? "only dark" : "only light";
+        if (theme === "dark") {
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#12120f");
+        }
+      })();
+    </script>
     <meta
       name="description"
       content="Ekaton — anonymous conversations, live events and a complaint box for your campus."

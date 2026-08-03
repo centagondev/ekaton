@@ -31,7 +31,15 @@ PLATFORM_PRESENCE_KEY = "presence:platform:users:v2"
 PLATFORM_CONNECTION_KEY = "presence:platform:connections:v2:{user_id}"
 # Seconds; refreshed by the server-side keepalive. Must stay an integer:
 # it is passed straight to Redis EXPIRE, which rejects fractional values.
-PLATFORM_CONNECTION_TTL = 90
+#
+# The TTL is only a crash backstop — every ordinary disconnect removes the
+# lease explicitly and updates the count at once. A longer lease therefore
+# changes nothing a user can see except how long a worker that died without
+# running disconnect() can leave ghosts in the count (now up to 5 minutes,
+# on a number that is already seeded below the threshold). In exchange each
+# open socket renews every 100s instead of every 30s — 70% fewer Redis
+# round trips from the single most frequent recurring write in the app.
+PLATFORM_CONNECTION_TTL = 300
 
 # Seconds between server-side presence lease renewals. Set to a third of the
 # TTL so two consecutive failed renewals still leave the lease active.

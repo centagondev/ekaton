@@ -135,7 +135,9 @@ const CLOSE: Record<Variant, string> = {
  * sheet from the page behind it — see the performance note above.
  */
 const BACKDROP: Record<Variant, string> = {
-  brutal: "bg-ink/60",
+  // `scrim`, not `ink`: a backdrop has one job — darken the page behind the
+  // dialog — and ink inverts with the theme. The token is #0a0a0a in both.
+  brutal: "bg-scrim/60",
   soft: "bg-ink-warm/60",
 };
 

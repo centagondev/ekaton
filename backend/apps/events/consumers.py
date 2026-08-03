@@ -99,12 +99,17 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
 
         connection_count = await self.mark_user_online()
 
-        await self.send_online_users()
+        # One presence snapshot serves both the list sent to this client and
+        # the joined broadcast; reading it twice back to back cost an extra
+        # Redis SMEMBERS and participant query on every connect.
+        online_participants = await self.get_online_participants()
+
+        await self.send_online_users(online_participants)
 
         # Only the first socket is an arrival. Announcing every socket would
         # make a second tab look like another participant joining.
         if connection_count == 1:
-            await self.broadcast_presence("presence.joined")
+            await self.broadcast_presence("presence.joined", online_participants)
 
         # Deliver the last 150 messages to the newly connected client only.
         # This uses send_json (direct send) — not group_send — so only this
@@ -431,7 +436,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             connection_id=self.channel_name,
         )
 
-    async def broadcast_presence(self, event_type: str):
+    async def broadcast_presence(self, event_type: str, online_participants=None):
         """
         Broadcast a participant presence event to everyone in the event.
 
@@ -445,8 +450,12 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         own tally and it would drift: a participant who leaves the event over
         the REST API is dropped from a later connection's online list, yet
         still produces a presence.left when their socket finally closes.
+
+        Callers that already hold a fresh presence snapshot pass it in;
+        disconnect has none (the set just changed) and lets it be fetched.
         """
-        online_participants = await self.get_online_participants()
+        if online_participants is None:
+            online_participants = await self.get_online_participants()
 
         await self.channel_layer.group_send(
             self.group_name,
@@ -605,11 +614,12 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
             for participant in participants
         ]
 
-    async def send_online_users(self):
+    async def send_online_users(self, participants=None):
         """
         Send the list of currently online participants.
         """
-        participants = await self.get_online_participants()
+        if participants is None:
+            participants = await self.get_online_participants()
 
         await self.send_json(
             {

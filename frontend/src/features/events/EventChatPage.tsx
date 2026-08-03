@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useInfiniteQuery,
@@ -106,31 +114,190 @@ function TypingBubble({ names }: { names: string[] }) {
         : `${names[0]} +${names.length - 1}`;
 
   return (
+    // The outer wrapper animates HEIGHT, not just opacity. The bubble is
+    // ~70px of layout at the very bottom of the transcript; mounting it at
+    // full size — or letting AnimatePresence yank it out at full size right
+    // as the typer's message arrives — snapped the transcript's height twice
+    // per arrival, which read as the message list shaking. Easing the height
+    // means the transcript grows and shrinks smoothly instead. The spacing
+    // (pt-5) lives INSIDE the measured wrapper for the same reason: a margin
+    // on the animated element would still collapse as a 20px snap.
     <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 4, scale: 0.9 }}
-      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-      className="mt-5 flex flex-col items-start"
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
+      className="overflow-hidden"
     >
-      <p className="mb-1.5 px-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-        {label} typing
-      </p>
-      <div className="w-fit border-2 border-ink bg-surface px-4 py-3 lg:px-5">
-        <div className="flex items-center gap-1">
-          {[0, 1, 2].map((dot) => (
-            <motion.span
-              key={dot}
-              className="size-1.5 bg-ink/70"
-              animate={{ y: [0, -4, 0], opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1.2, repeat: Infinity, delay: dot * 0.16, ease: "easeInOut" }}
-            />
-          ))}
+      <motion.div
+        initial={{ y: 8, scale: 0.9 }}
+        animate={{ y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className="flex flex-col items-start pt-5"
+      >
+        <p className="mb-1.5 px-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+          {label} typing
+        </p>
+        <div className="w-fit border-2 border-ink bg-surface px-4 py-3 lg:px-5">
+          <div className="flex items-center gap-1">
+            {[0, 1, 2].map((dot) => (
+              <motion.span
+                key={dot}
+                className="size-1.5 bg-ink/70"
+                animate={{ y: [0, -4, 0], opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1.2, repeat: Infinity, delay: dot * 0.16, ease: "easeInOut" }}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
+
+/* -------------------------------- message --------------------------------- */
+
+/**
+ * One transcript row, memoized.
+ *
+ * The page re-renders on every keystroke (draft state), every presence event,
+ * every typing signal and every unseen-counter tick — and each of those was
+ * re-rendering every bubble in the room. The `items` array is memoized
+ * upstream on [messages, isOwn] alone, so across all of those renders each
+ * item keeps its identity and this memo skips the whole list. Markup is
+ * verbatim from the previous inline version; only the wiring changed.
+ */
+const MessageItem = memo(function MessageItem({
+  item,
+  canReply,
+  flashed,
+  onStartReply,
+  onJump,
+}: {
+  item: RenderMessage;
+  canReply: boolean;
+  /** Whether this row is the jump-highlight target right now. */
+  flashed: boolean;
+  onStartReply: (message: EventMessage) => void;
+  onJump: (messageId: string) => void;
+}) {
+  return (
+    // A plain element on purpose — no entrance spring, no
+    // layout animation. The scale/rise entrance made short
+    // messages (an emoji most of all) balloon and float in,
+    // and `layout` re-sprang every earlier bubble on each
+    // send. A group room renders like a normal text chat:
+    // the bubble is simply there, full-size, first frame.
+    <div
+      id={`event-message-${item.message.id}`}
+      className={cn(
+        "group flex flex-col scroll-mt-24",
+        item.own ? "items-end" : "items-start",
+        // Tight within a group, generous between speakers —
+        // the rhythm that makes a transcript scannable. Both
+        // steps sit on the 4/8px scale the rest of the page uses.
+        item.isFirst ? "mt-6" : "mt-1",
+      )}
+    >
+      {item.isFirst && !item.own && (
+        <p className="mb-2 px-1 font-mono text-[11px] font-bold uppercase leading-none tracking-[0.14em]">
+          {item.message.sender_name}
+        </p>
+      )}
+
+      <SwipeToReply
+        enabled={canReply && !item.pending}
+        onReply={() => onStartReply(item.message)}
+        // Percentage keeps bubbles proportional on phones; the
+        // rem cap keeps line length readable on a 27" monitor.
+        className="max-w-[min(85%,30rem)] sm:max-w-[min(78%,34rem)] lg:max-w-[min(68%,42rem)]"
+      >
+        <div
+          className={cn(
+            "flex items-end gap-2",
+            item.own ? "flex-row-reverse" : "flex-row",
+          )}
+        >
+          <div
+            className={cn(
+              // No width rule here on purpose: as a flex item
+              // the bubble already sizes to its content and is
+              // bounded by the wrapper above. `break-words`
+              // only splits a word that cannot fit alone, so
+              // prose wraps at spaces and only long URLs break.
+              "min-w-0 break-words border-2 border-ink px-4 py-3",
+              "text-[15px] leading-[1.55] lg:px-5 lg:text-base",
+              // One transition covers the pending fade and the
+              // jump highlight, so both ease instead of snap.
+              "transition-[opacity,box-shadow] duration-200 ease-out",
+              item.own ? "bg-brand-yellow" : "bg-surface",
+              item.isLast && "shadow-brutal-sm",
+              item.pending && "opacity-60",
+              // A ring that fades in and out reads calmer than
+              // a pulse, and still catches the eye on arrival.
+              flashed && "ring-4 ring-brand-lime",
+            )}
+          >
+            {item.message.reply_to && (
+              <button
+                type="button"
+                onClick={() => onJump(item.message.reply_to!.id)}
+                aria-label={`Go to the message from ${item.message.reply_to.sender_name}`}
+                className={cn(
+                  "mb-2 flex w-full flex-col items-start gap-0 text-left",
+                  // A thin rule plus the faintest wash — just
+                  // enough to separate the quote from the
+                  // message without becoming a panel dropped
+                  // inside the bubble. The own-bubble tint is
+                  // a step stronger because yellow swallows it.
+                  "border-l-[3px] py-1 pl-2 pr-2",
+                  "transition-colors duration-200",
+                  item.own
+                    ? "border-ink/70 bg-ink/[0.06] hover:bg-ink/[0.11]"
+                    : "border-ink/50 bg-ink/[0.04] hover:bg-ink/[0.08]",
+                )}
+              >
+                {/* Name never squeezes — an alias clipped to
+                    "Neon B…" identifies nobody. The preview
+                    below absorbs the shortfall instead. */}
+                <span className="font-mono text-[10px] font-bold uppercase leading-[1.5] tracking-[0.12em]">
+                  {item.message.reply_to.sender_name}
+                </span>
+                {/* line-clamp, not truncate: it still reports a
+                    full-text intrinsic width, so a quote can
+                    widen the bubble instead of collapsing to
+                    an ellipsis behind a two-word message. */}
+                <span className="line-clamp-1 w-full text-[12.5px] leading-[1.5] opacity-60">
+                  {item.message.reply_to.content}
+                </span>
+              </button>
+            )}
+
+            {item.message.content}
+          </div>
+
+          {/* Pointer users get a button; touch users swipe. */}
+          {canReply && !item.pending && (
+            <button
+              type="button"
+              onClick={() => onStartReply(item.message)}
+              aria-label={`Reply to ${item.message.sender_name}`}
+              className="mb-1 hidden shrink-0 border-2 border-ink bg-surface p-2 opacity-0 transition-opacity hover:bg-brand-lime focus-visible:opacity-100 group-hover:opacity-100 sm:block"
+            >
+              <Reply className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </SwipeToReply>
+
+      {item.isLast && (
+        <p className="mt-2 px-0.5 font-mono text-[9px] uppercase tracking-wider text-muted">
+          {formatTime(item.message.created_at)}
+        </p>
+      )}
+    </div>
+  );
+});
 
 /* ---------------------------------- page ---------------------------------- */
 
@@ -368,6 +535,12 @@ export function EventChatPage() {
    * which case there is nothing to scroll to — say so rather than doing
    * nothing, which reads as a broken tap.
    */
+  // One timer, cleared before re-arming: two jumps in quick succession used
+  // to let the first timeout cut the second highlight short. Cleared on
+  // unmount too, so it cannot fire into a dead page.
+  const flashTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(flashTimerRef.current), []);
+
   const jumpToMessage = useCallback((messageId: string) => {
     const node = document.getElementById(`event-message-${messageId}`);
     if (!node) {
@@ -376,7 +549,8 @@ export function EventChatPage() {
     }
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     setFlashId(messageId);
-    window.setTimeout(() => setFlashId(null), JUMP_FLASH_MS);
+    window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setFlashId(null), JUMP_FLASH_MS);
   }, []);
 
   /** Start replying and put the cursor back in the composer. */
@@ -449,7 +623,13 @@ export function EventChatPage() {
   // the way through — profanity is masked before it is saved — so the copy
   // that comes back is often not what was typed, and comparing content would
   // leave the draft sitting on screen next to its own masked twin.
-  useEffect(() => {
+  //
+  // Layout effect, not useEffect: a passive effect runs after paint, so every
+  // own send showed one frame with the echo AND the draft both in the list —
+  // the message doubled, the transcript grew, then snapped back a frame
+  // later. That double height change was the "shiver" on send. Retiring the
+  // draft in the layout phase means echo-in and draft-out land in one paint.
+  useLayoutEffect(() => {
     const fresh = liveMessages.filter(
       (message) => isOwn(message) && !reconciledIds.current.has(message.id),
     );
@@ -598,11 +778,19 @@ export function EventChatPage() {
                   )}
                 >
                   {/* Initial tile keeps the row visually anchored, matching
-                      the Avatar treatment used elsewhere in the app. */}
+                      the Avatar treatment used elsewhere in the app.
+
+                      bg-white, not bg-surface, for the self tile: it sits
+                      inside the yellow row, where the accent guard re-anchors
+                      the ink DARK in dark mode — but --color-surface still
+                      resolves to the dark theme's near-black, which rendered
+                      a black letter on a black tile. The row is a fixed-light
+                      accent in both themes, so the tile on it is fixed-light
+                      too. In light mode white *is* what surface was. */}
                   <span
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center border-2 border-ink font-black",
-                      isSelf ? "bg-surface" : "bg-brand-lavender",
+                      isSelf ? "bg-white" : "bg-brand-lavender",
                     )}
                     aria-hidden="true"
                   >
@@ -826,121 +1014,14 @@ export function EventChatPage() {
                       <span className="h-px flex-1 bg-ink/20" />
                     </div>
                   ) : (
-                    // A plain element on purpose — no entrance spring, no
-                    // layout animation. The scale/rise entrance made short
-                    // messages (an emoji most of all) balloon and float in,
-                    // and `layout` re-sprang every earlier bubble on each
-                    // send. A group room renders like a normal text chat:
-                    // the bubble is simply there, full-size, first frame.
-                    <div
+                    <MessageItem
                       key={item.message.id}
-                      id={`event-message-${item.message.id}`}
-                      className={cn(
-                        "group flex flex-col scroll-mt-24",
-                        item.own ? "items-end" : "items-start",
-                        // Tight within a group, generous between speakers —
-                        // the rhythm that makes a transcript scannable. Both
-                        // steps sit on the 4/8px scale the rest of the page uses.
-                        item.isFirst ? "mt-6" : "mt-1",
-                      )}
-                    >
-                      {item.isFirst && !item.own && (
-                        <p className="mb-2 px-1 font-mono text-[11px] font-bold uppercase leading-none tracking-[0.14em]">
-                          {item.message.sender_name}
-                        </p>
-                      )}
-
-                      <SwipeToReply
-                        enabled={canReply && !item.pending}
-                        onReply={() => startReply(item.message)}
-                        // Percentage keeps bubbles proportional on phones; the
-                        // rem cap keeps line length readable on a 27" monitor.
-                        className="max-w-[min(85%,30rem)] sm:max-w-[min(78%,34rem)] lg:max-w-[min(68%,42rem)]"
-                      >
-                        <div
-                          className={cn(
-                            "flex items-end gap-2",
-                            item.own ? "flex-row-reverse" : "flex-row",
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              // No width rule here on purpose: as a flex item
-                              // the bubble already sizes to its content and is
-                              // bounded by the wrapper above. `break-words`
-                              // only splits a word that cannot fit alone, so
-                              // prose wraps at spaces and only long URLs break.
-                              "min-w-0 break-words border-2 border-ink px-4 py-3",
-                              "text-[15px] leading-[1.55] lg:px-5 lg:text-base",
-                              // One transition covers the pending fade and the
-                              // jump highlight, so both ease instead of snap.
-                              "transition-[opacity,box-shadow] duration-200 ease-out",
-                              item.own ? "bg-brand-yellow" : "bg-surface",
-                              item.isLast && "shadow-brutal-sm",
-                              item.pending && "opacity-60",
-                              // A ring that fades in and out reads calmer than
-                              // a pulse, and still catches the eye on arrival.
-                              flashId === item.message.id && "ring-4 ring-brand-lime",
-                            )}
-                          >
-                            {item.message.reply_to && (
-                              <button
-                                type="button"
-                                onClick={() => jumpToMessage(item.message.reply_to!.id)}
-                                aria-label={`Go to the message from ${item.message.reply_to.sender_name}`}
-                                className={cn(
-                                  "mb-2 flex w-full flex-col items-start gap-0 text-left",
-                                  // A thin rule plus the faintest wash — just
-                                  // enough to separate the quote from the
-                                  // message without becoming a panel dropped
-                                  // inside the bubble. The own-bubble tint is
-                                  // a step stronger because yellow swallows it.
-                                  "border-l-[3px] py-1 pl-2 pr-2",
-                                  "transition-colors duration-200",
-                                  item.own
-                                    ? "border-ink/70 bg-ink/[0.06] hover:bg-ink/[0.11]"
-                                    : "border-ink/50 bg-ink/[0.04] hover:bg-ink/[0.08]",
-                                )}
-                              >
-                                {/* Name never squeezes — an alias clipped to
-                                    "Neon B…" identifies nobody. The preview
-                                    below absorbs the shortfall instead. */}
-                                <span className="font-mono text-[10px] font-bold uppercase leading-[1.5] tracking-[0.12em]">
-                                  {item.message.reply_to.sender_name}
-                                </span>
-                                {/* line-clamp, not truncate: it still reports a
-                                    full-text intrinsic width, so a quote can
-                                    widen the bubble instead of collapsing to
-                                    an ellipsis behind a two-word message. */}
-                                <span className="line-clamp-1 w-full text-[12.5px] leading-[1.5] opacity-60">
-                                  {item.message.reply_to.content}
-                                </span>
-                              </button>
-                            )}
-
-                            {item.message.content}
-                          </div>
-
-                          {/* Pointer users get a button; touch users swipe. */}
-                          {canReply && !item.pending && (
-                            <button
-                              type="button"
-                              onClick={() => startReply(item.message)}
-                              aria-label={`Reply to ${item.message.sender_name}`}
-                              className="mb-1 hidden shrink-0 border-2 border-ink bg-surface p-2 opacity-0 transition-opacity hover:bg-brand-lime focus-visible:opacity-100 group-hover:opacity-100 sm:block"
-                            >
-                              <Reply className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </SwipeToReply>
-
-                      {item.isLast && (
-                        <p className="mt-2 px-0.5 font-mono text-[9px] uppercase tracking-wider text-muted">
-                          {formatTime(item.message.created_at)}
-                        </p>
-                      )}
-                    </div>
+                      item={item}
+                      canReply={canReply}
+                      flashed={flashId === item.message.id}
+                      onStartReply={startReply}
+                      onJump={jumpToMessage}
+                    />
                   ),
                 )}
               </div>
@@ -1125,7 +1206,7 @@ export function EventChatPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex justify-end bg-ink/50 xl:hidden"
+            className="fixed inset-0 z-40 flex justify-end bg-scrim/50 xl:hidden"
             onClick={() => setPeopleOpen(false)}
           >
             <motion.div

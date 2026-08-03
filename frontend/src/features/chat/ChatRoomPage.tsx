@@ -1494,7 +1494,7 @@ export function ChatRoomPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex items-center justify-center bg-ink/70 p-4 backdrop-blur-[2px]"
+            className="fixed inset-0 z-40 flex items-center justify-center bg-scrim/70 p-4 backdrop-blur-[2px]"
           >
             {/* An ended room is already navigating away; this only covers the
                 frame between the socket closing and the route changing, so the
@@ -1624,7 +1624,7 @@ function EvidencePicker({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute inset-0 grid place-items-center bg-ink/70 text-white"
+                  className="absolute inset-0 grid place-items-center bg-scrim/70 text-white"
                 >
                   <Spinner className="size-5" />
                 </motion.span>

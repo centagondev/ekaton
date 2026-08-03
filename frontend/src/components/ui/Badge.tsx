@@ -9,7 +9,8 @@ const TONES: Record<BadgeTone, string> = {
   lavender: "bg-brand-lavender text-ink border-ink",
   danger: "bg-danger text-white border-ink",
   neutral: "bg-surface text-ink border-ink",
-  dark: "bg-ink text-white border-ink",
+  // See Button: bg-ink inverts with the theme, and `on-ink` is white in light.
+  dark: "bg-ink text-on-ink border-ink",
 };
 
 export function Badge({

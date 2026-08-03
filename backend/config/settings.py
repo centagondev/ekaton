@@ -209,12 +209,31 @@ SIMPLE_JWT = {
 
 # Database 1, not 0: clearing the cache wipes its whole database, and database
 # 0 is where the chat WebSockets and the Celery task queue keep their data.
+
+
+def _redis_db_url(url, db):
+    """Return `url` pointed at a specific Redis database.
+
+    Derived with a real URL parse. The previous string surgery
+    (`url.rsplit("/", 1)[0] + "/1"`) only worked when the URL already ended
+    in a database path: given the path-less form most managed providers hand
+    out (`redis://host:6379`), it produced `redis://1` — a URL whose HOST is
+    "1" — and every throttle lookup then died on a connection error.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, f"/{db}", parts.query, parts.fragment)
+    )
+
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": env(
             "REDIS_CACHE_URL",
-            default=f"{REDIS_URL.rsplit('/', 1)[0]}/1",
+            default=_redis_db_url(REDIS_URL, 1),
         ),
     }
 }
@@ -233,18 +252,30 @@ FRONTEND_URL = env(
     "FRONTEND_URL",
     default="http://localhost:5173" if DEBUG else PRODUCTION_ORIGINS[0],
 )
+# The pub/sub layer instead of channels_redis.core.RedisChannelLayer, which
+# polls: every connected consumer re-issues a cleanup EVAL plus a BZPOPMIN
+# every 5 seconds (brpop_timeout) even when nothing is happening — roughly
+# 35k Redis commands per day PER IDLE SOCKET, the single largest command
+# consumer in the app. The pub/sub layer holds one SUBSCRIBE connection per
+# worker process, costs zero commands while idle, and delivers a group_send
+# as ONE PUBLISH instead of ~3 commands per group member.
+#
+# Semantics trade-off, acceptable for every group in this app: pub/sub is
+# at-most-once, so a message sent while a socket is between disconnect and
+# reconnect is dropped rather than queued for up to a minute. All our group
+# traffic (chat/typing/presence/event frames) is only meaningful to sockets
+# that are currently connected, and the event chat already replays history
+# on reconnect.
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
         "CONFIG": {
             "hosts": [
                 {
-                    # redis-py 8.0.0 changed socket_timeout default from None
-                    # to 5 seconds. channels_redis issues BZPOPMIN with a 5-second
-                    # server-side timeout. The client-side socket fires first, raising
-                    # redis.exceptions.TimeoutError and killing every idle WebSocket.
-                    # socket_timeout=None restores correct blocking semantics for the
-                    # channel layer's long-lived receive connections.
+                    # socket_timeout must stay None: redis-py 8.0.0 defaults it
+                    # to 5 seconds, which kills the layer's long-lived blocking
+                    # reads (previously BZPOPMIN, now the SUBSCRIBE stream) and
+                    # with them every idle WebSocket.
                     "address": env("REDIS_URL"),
                     "socket_timeout": None,
                     "socket_connect_timeout": 5,
@@ -391,6 +422,12 @@ CELERY_TASK_SERIALIZER = "json"
 
 CELERY_RESULT_SERIALIZER = "json"
 
+# No caller ever reads a task result (everything is fire-and-forget beat
+# work), yet storing one costs a Redis write with a 24h TTL on every single
+# task run. Skipping the store removes that write; the backend stays
+# configured so a future task can opt back in with ignore_result=False.
+CELERY_TASK_IGNORE_RESULT = True
+
 CELERY_TIMEZONE = TIME_ZONE
 
 from celery.schedules import crontab
@@ -408,9 +445,12 @@ CELERY_BEAT_SCHEDULE = {
     },
     # Settles the online count after debounced connect bursts and after
     # presence leases expire. Sends nothing when the count has not moved.
+    # 30s, not lower: this only corrects drift the 2s connect/disconnect
+    # debounce missed — those broadcasts still go out immediately — and each
+    # run costs ~4 Redis commands plus broker traffic, around the clock.
     "reconcile-platform-online-count": {
         "task": "apps.presence.tasks.reconcile_platform_online_count",
-        "schedule": 15.0,
+        "schedule": 30.0,
     },
 }
 

@@ -53,7 +53,11 @@ function Tab({ to, label, Icon }: (typeof TABS)[number]) {
             <Icon
               className={cn(
                 "relative z-10 size-[1.35rem] transition-transform duration-150",
-                isActive ? "text-ink" : "text-muted",
+                // `on-accent` rather than `ink`: the highlight is a sibling
+                // behind this, not an ancestor, so it cannot hand its own ink
+                // down the way a yellow card does. The token is #0a0a0a in
+                // both themes — the pill stays yellow in both.
+                isActive ? "text-on-accent" : "text-muted",
                 // Presses register on the icon, so the whole tab reads as
                 // the button rather than just the label.
                 "group-active:scale-90",
@@ -63,7 +67,7 @@ function Tab({ to, label, Icon }: (typeof TABS)[number]) {
             <span
               className={cn(
                 "relative z-10 font-mono text-[10px] font-black uppercase tracking-[0.14em]",
-                isActive ? "text-ink" : "text-muted",
+                isActive ? "text-on-accent" : "text-muted",
               )}
             >
               {label}

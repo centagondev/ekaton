@@ -351,7 +351,9 @@ export function EventFormModal({
             <Input
               id={id}
               type="datetime-local"
-              className="[color-scheme:light]"
+              // No color-scheme override here any more: :root declares it from
+              // the chosen theme (styles/index.css), so the native picker
+              // follows the app rather than the device.
               {...form.register("end_time", {
                 required: "End time is required.",
                 validate: {
