@@ -123,6 +123,12 @@ def send_account_setup_email(account_setup_token):
 
     link = f"{frontend_url}/set-password?token={account_setup_token.token}"
 
+    # The origin only — never `link`. That URL carries a live single-use
+    # account-setup token, and a log line is the wrong place to keep a working
+    # credential. The origin is the part that can be wrong, and it is the part
+    # worth being able to confirm from production without reading an inbox.
+    logger.info("Building account setup link against origin %s", frontend_url)
+
     html_message = render_to_string("emails/account_setup.html", {"link": link})
     EmailService.send_email(
         to_email=account_setup_token.user.email,
@@ -298,6 +304,10 @@ def send_password_reset_email(password_reset_token):
     frontend_url = settings.FRONTEND_URL
 
     reset_link = f"{frontend_url}/reset-password?token={password_reset_token.token}"
+
+    # Origin only, for the same reason as the account setup link above.
+    logger.info("Building password reset link against origin %s", frontend_url)
+
     html_message = render_to_string(
         "emails/password_reset.html",
         {
