@@ -39,16 +39,23 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["127.0.0.1", "localhost"])
 
-# The public origins the frontend is served from. ekaton.in is the canonical
-# domain (outbound links point there), but Vercel 308-redirects the apex to
-# www.ekaton.in — so www is the origin browsers actually send requests from
-# and it MUST be allowlisted too. The *.vercel.app origin stays live alongside
-# them, so browser-facing allowlists (CORS, CSRF) must accept ALL THREE. Used
-# as the production fallbacks below whenever the corresponding env var is not
-# set — an explicit env var always wins.
+# The one address the product hands out: emailed links, and anything else
+# that has to name the frontend from the server side.
+#
+# www, not the apex. Vercel 308-redirects ekaton.in -> www.ekaton.in, so www
+# is the origin browsers actually send requests from, and a link that points
+# straight at it lands on its destination without a redirect hop in between.
+CANONICAL_FRONTEND_ORIGIN = "https://www.ekaton.in"
+
+# The public origins the frontend is served from. The apex redirects to
+# CANONICAL_FRONTEND_ORIGIN but is still typed and linked to, and the
+# *.vercel.app origin stays live alongside both — so browser-facing
+# allowlists (CORS, CSRF) must accept ALL THREE. Used as the production
+# fallbacks below whenever the corresponding env var is not set — an explicit
+# env var always wins.
 PRODUCTION_ORIGINS = [
     "https://ekaton.in",
-    "https://www.ekaton.in",
+    CANONICAL_FRONTEND_ORIGIN,
     "https://ekaton.vercel.app",
 ]
 
@@ -188,6 +195,30 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        # core.email logs here. Without this entry the logger had no handler
+        # and inherited the root level (WARNING), so every "email sent"
+        # INFO line was discarded before it was formatted and the failures
+        # fell through to logging.lastResort — bare text on stderr, no
+        # timestamp, no logger name. There was no way to tell from the logs
+        # whether a send had been attempted, let alone whether it worked.
+        "email": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        # Django logs unhandled view exceptions to django.request. Left to
+        # itself that logger inherits Django's DEFAULT_LOGGING handlers, and
+        # the console one there carries a `require_debug_true` filter — so
+        # with DEBUG=False every 500, traceback included, was dropped on the
+        # floor. The other half of that default (mail_admins) needs ADMINS,
+        # which this project does not set, so nothing recorded it anywhere.
+        # Naming the logger here binds it to the unfiltered console handler
+        # above instead, and production finally reports its own errors.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
     },
 }
 
@@ -240,18 +271,25 @@ CACHES = {
 
 # The origin prepended to every password-reset / account-setup link (see
 # apps.accounts.services.send_account_setup_email / send_password_reset_email,
-# both unchanged). An explicit FRONTEND_URL env var always wins; when one
-# isn't set, DEBUG — already the environment signal the security-headers
-# block above keys off — picks the right default automatically, so a missing
-# env var can't send links to the wrong host or crash the app outright.
+# both unchanged).
+#
+# NOT derived from DEBUG. It used to be — `"http://localhost:5173" if DEBUG
+# else ...` — which meant the address in a real user's inbox was decided by a
+# flag that exists to control template rendering and error pages. Turning
+# DEBUG on for ten minutes on the production box to read a traceback silently
+# rewrote every outgoing password-setup link to http://localhost:5173, and the
+# emails kept sending, so nothing looked wrong from the server side. A public
+# URL has to come from a setting that means "public URL" and nothing else.
+#
+# Local development sets FRONTEND_URL=http://localhost:5173 in its own .env
+# (see .env.example and docker-compose.yml). Getting a production link in a
+# dev inbox is a harmless, obvious mistake; getting a localhost link in a
+# user's inbox is a dead product.
 #
 # A single origin on purpose: an emailed link can only point one place, and
 # that place is the canonical domain. The vercel.app origin still serves the
 # app (see PRODUCTION_ORIGINS), it just isn't the address we hand out.
-FRONTEND_URL = env(
-    "FRONTEND_URL",
-    default="http://localhost:5173" if DEBUG else PRODUCTION_ORIGINS[0],
-)
+FRONTEND_URL = env("FRONTEND_URL", default=CANONICAL_FRONTEND_ORIGIN)
 # The pub/sub layer instead of channels_redis.core.RedisChannelLayer, which
 # polls: every connected consumer re-issues a cleanup EVAL plus a BZPOPMIN
 # every 5 seconds (brpop_timeout) even when nothing is happening — roughly
@@ -375,7 +413,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
-
+STATIC_ROOT = BASE_DIR / "staticfiles"
 CORS_ALLOW_ALL_ORIGINS = False
 # Production must accept BOTH public origins — a request from whichever domain
 # the env var forgot would otherwise fail preflight and the site would simply
