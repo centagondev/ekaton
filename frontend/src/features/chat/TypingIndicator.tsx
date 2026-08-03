@@ -33,25 +33,66 @@ export type TypingVariant = "anonymous" | Gender;
    run.
 --------------------------------------------------------------------------- */
 
-/** Hooded incognito figure: white hood, shadowed face, two bright eyes. */
+/**
+ * The anonymous stranger: a cozy hooded figure with shoulders, drawn in the
+ * app's ink. The face stays in shadow — anonymity is the point — but the eyes
+ * have whites and pupils that glance about, and a small smile floats in the
+ * dark, so the character reads as a friendly *someone* rather than a void.
+ * Drawstrings ground the hoodie; a sparkle twinkles beside the hood as the
+ * one playful accent. Every animated part is a named group so the CSS loops
+ * can move it without React ever re-rendering the subtree.
+ */
 const ANONYMOUS_FACE = (
   <g className="ti-head">
+    {/* shoulders — a body, however small, is what makes it a character */}
     <path
-      d="M32 7C19.5 7 11.5 17 11.5 30v19c0 3.3 2.7 6 6 6h29c3.3 0 6-2.7 6-6V30C52.5 17 44.5 7 32 7Z"
+      d="M14 58c0-7.8 7.8-12 18-12 10.2 0 18 4.2 18 12v.5H14v-.5Z"
+      fill="#fff"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinejoin="round"
+    />
+    {/* hood */}
+    <path
+      d="M32 5.5c-11.8 0-19.5 9.3-19.5 21.2 0 6.6 2.4 12.2 6.2 15.8 1.8 1.7 4.2 2.6 6.7 2.6h13.2c2.5 0 4.9-.9 6.7-2.6 3.8-3.6 6.2-9.2 6.2-15.8C51.5 14.8 43.8 5.5 32 5.5Z"
       fill="#fff"
       stroke="currentColor"
       strokeWidth="2.5"
     />
+    {/* hood opening: the shadow that keeps them anonymous */}
     <path
-      d="M32 15.5c-8.3 0-13.5 6-13.5 14S23.7 43.5 32 43.5 45.5 37.5 45.5 29.5s-5.2-14-13.5-14Z"
+      d="M32 13c-7.9 0-13.2 5.8-13.2 13.7S24.1 40.5 32 40.5s13.2-5.9 13.2-13.8S39.9 13 32 13Z"
       fill="currentColor"
     />
+    {/* eyes: whites that blink, pupils that glance */}
     <g className="ti-eyes">
-      <ellipse cx="26.5" cy="29.5" rx="2.9" ry="3.5" fill="#fff" />
-      <ellipse cx="37.5" cy="29.5" rx="2.9" ry="3.5" fill="#fff" />
+      <ellipse cx="26.3" cy="26" rx="3.3" ry="4" fill="#fff" />
+      <ellipse cx="37.7" cy="26" rx="3.3" ry="4" fill="#fff" />
+      <g className="ti-pupils">
+        <circle cx="26.9" cy="26.9" r="1.6" fill="currentColor" />
+        <circle cx="38.3" cy="26.9" r="1.6" fill="currentColor" />
+      </g>
     </g>
-    {/* hood seam */}
-    <path d="M24 50h16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* a small smile, floating in the shadow */}
+    <path
+      d="M28.6 34.4c1.9 1.8 4.9 1.8 6.8 0"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+    {/* drawstrings on the chest — deliberately uneven, the way real ones
+        hang. Their whole job is to say "hoodie" in two marks. */}
+    <g stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M29.3 46.8v5.2" />
+      <path d="M34.7 46.8v6.6" />
+    </g>
+    {/* the twinkle by the hood */}
+    <path
+      className="ti-spark"
+      d="M53.5 5.5l1.3 3.2 3.2 1.3-3.2 1.3-1.3 3.2-1.3-3.2-3.2-1.3 3.2-1.3Z"
+      fill="currentColor"
+    />
   </g>
 );
 

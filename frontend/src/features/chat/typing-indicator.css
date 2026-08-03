@@ -49,6 +49,48 @@
   }
 }
 
+/* Pupils glance aside and slightly down — the way someone reads their own
+   keyboard while typing — holding at each position so it reads as attention
+   rather than as sliding. px here are SVG user units, so a 1.6px shift is
+   under a display pixel at tile size: felt, not watched. */
+@keyframes ti-look {
+  0%,
+  30%,
+  82%,
+  100% {
+    transform: translate(0, 0);
+  }
+  38%,
+  50% {
+    transform: translate(-1.6px, 0.4px);
+  }
+  58%,
+  74% {
+    transform: translate(1.4px, 0.4px);
+  }
+}
+
+/* The sparkle spends most of the cycle absent, then twinkles in and out —
+   an occasional accent, not a beacon. With no fill-mode the reduced-motion
+   kill switch lands it on the base style: simply visible, simply still. */
+@keyframes ti-spark {
+  0%,
+  60%,
+  94%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  82% {
+    opacity: 1;
+    transform: scale(0.9);
+  }
+}
+
 /* The bubble floats in anti-phase with the character's breath (negative
    animation-delay below), which is what makes the pair read as alive rather
    than as one rigid group. */
@@ -97,6 +139,19 @@
   transform-box: fill-box;
   transform-origin: center;
   animation: ti-blink 4.4s linear infinite;
+}
+
+/* Nested inside .ti-eyes, so a blink squashes the pupils with the whites. */
+.ti-pupils {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ti-look 5.6s ease-in-out infinite;
+}
+
+.ti-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ti-spark 4.8s ease-in-out infinite;
 }
 
 /* The revealed portrait leans with the same rhythm as the drawn head. It is a
