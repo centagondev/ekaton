@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { LogoutConfirmModal } from "./LogoutConfirmModal";
 import { ProfilePhotoUploader } from "./ProfilePhotoUploader";
+import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * One row per account action, in the Button press language.
@@ -222,6 +223,20 @@ export function ProfilePage() {
               onClick={() => setLogoutOpen(true)}
             />
           </div>
+        </motion.section>
+
+        {/* ---------------------------- preferences ---------------------------- */}
+        {/* Last on the page: it is the setting people change least often, and
+            putting it above logging out would push the account actions down
+            the fold on a phone. */}
+        <motion.section variants={staggerItem} aria-labelledby="preferences">
+          <h2
+            id="preferences"
+            className="mb-3 font-mono text-[11px] font-black uppercase tracking-[0.18em] text-muted"
+          >
+            Preferences
+          </h2>
+          <ThemeToggle />
         </motion.section>
       </motion.div>
 

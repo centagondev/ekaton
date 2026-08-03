@@ -15,18 +15,20 @@ export function LogoMark({ className }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
+      {/* on-accent rather than ink throughout: the mark is a yellow tile in
+          both themes, so its frame and glyph have to stay dark in both. */}
       <rect
         x="1"
         y="1"
         width="30"
         height="30"
         fill="var(--color-brand-yellow, #FFD600)"
-        stroke="var(--color-ink, #0A0A0A)"
+        stroke="var(--color-on-accent, #0A0A0A)"
         strokeWidth="2"
       />
       {/* Spine + three arms — the arms deliberately differ in length so the
           silhouette stays recognisable when the mark is very small. */}
-      <g fill="var(--color-ink, #0A0A0A)">
+      <g fill="var(--color-on-accent, #0A0A0A)">
         <rect x="9" y="8" width="3.5" height="16" />
         <rect x="9" y="8" width="14" height="3.5" />
         <rect x="9" y="14.25" width="9" height="3.5" />

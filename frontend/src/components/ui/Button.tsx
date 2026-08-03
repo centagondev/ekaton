@@ -11,7 +11,9 @@ const VARIANTS: Record<Variant, string> = {
   ghost: "bg-transparent text-ink border-transparent shadow-none hover:border-ink",
   lime: "bg-brand-lime text-ink border-ink shadow-brutal",
   danger: "bg-danger text-white border-ink shadow-brutal",
-  dark: "bg-ink text-white border-ink shadow-brutal",
+  // `text-on-ink`, not `text-white`: bg-ink inverts with the theme, so its
+  // label has to invert with it. In light mode the token *is* white.
+  dark: "bg-ink text-on-ink border-ink shadow-brutal",
 };
 
 const SIZES: Record<Size, string> = {

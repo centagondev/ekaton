@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTheme } from "@/lib/theme";
 import { StackEngine } from "./stackEngine";
 
 /**
@@ -10,6 +11,8 @@ import { StackEngine } from "./stackEngine";
  */
 export function StackGame({ className }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<StackEngine | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -18,9 +21,19 @@ export function StackGame({ className }: { className?: string }) {
     const engine = new StackEngine(canvas, {
       coarsePointer: window.matchMedia("(pointer: coarse)").matches,
     });
+    engineRef.current = engine;
 
-    return () => engine.destroy();
+    return () => {
+      engineRef.current = null;
+      engine.destroy();
+    };
   }, []);
+
+  // The canvas cannot inherit the flip, so it is told about it. A run in
+  // progress is untouched — only the palette it paints with changes.
+  useEffect(() => {
+    engineRef.current?.refreshTheme();
+  }, [theme]);
 
   return (
     <canvas

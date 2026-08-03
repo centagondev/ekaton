@@ -6,7 +6,13 @@
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
-  /* Ekaton — brutalist palette (from Figma) */
+  /* Ekaton — brutalist palette (from Figma).
+
+     The values here are the LIGHT theme, and light is what every visitor
+     gets until they say otherwise. Dark mode re-declares the same custom
+     properties on html[data-theme="dark"] further down, so every
+     bg-canvas / text-ink / border-ink already in the codebase follows the
+     theme without a single `dark:` variant. */
   --color-canvas: #fbf9f5;
   --color-surface: #ffffff;
   --color-raised: #f5f3ef;
@@ -19,10 +25,14 @@
   --color-danger: #e11d1d;
   --color-online: #10b981;
 
-  /* Hard offset shadows — never soft, never blurred. */
-  --shadow-brutal-sm: 3px 3px 0px 0px #0a0a0a;
-  --shadow-brutal: 5px 5px 0px 0px #0a0a0a;
-  --shadow-brutal-lg: 8px 8px 0px 0px #0a0a0a;
+  /* Fixed in BOTH themes — see the "theme-invariant ink" note below.
+     --color-scrim   backdrops that must darken the page behind a dialog.
+     --color-on-accent  text/borders sitting on a brand fill (yellow, lime,
+                        lavender), which stay light surfaces in dark mode.
+     --color-on-ink  text sitting on a `bg-ink` fill, which inverts. */
+  --color-scrim: #0a0a0a;
+  --color-on-accent: #0a0a0a;
+  --color-on-ink: #ffffff;
 
   --animate-marquee: marquee 32s linear infinite;
 
@@ -91,8 +101,107 @@
   --font-display: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Hard offset shadows — never soft, never blurred.
+
+   `inline` matters: it makes Tailwind emit the var reference into the utility
+   itself instead of baking the colour in, which is the only way
+   .shadow-brutal can follow the theme. In dark mode the offset block is light
+   rather than black, because it sits ON the canvas and has to be seen. */
+@theme inline {
+  --shadow-brutal-sm: 3px 3px 0px 0px var(--ek-shadow);
+  --shadow-brutal: 5px 5px 0px 0px var(--ek-shadow);
+  --shadow-brutal-lg: 8px 8px 0px 0px var(--ek-shadow);
+}
+
+/* ---------------------------------------------------------------------------
+   Theme roots.
+
+   `data-theme` is stamped on <html> by the inline script in index.html before
+   the first paint, and it is written from localStorage ALONE — the device's
+   `prefers-color-scheme` is deliberately never consulted, so a phone in dark
+   mode still opens Ekaton in light. Anything other than an explicit "dark"
+   resolves to light, which also covers the very first visit.
+
+   `color-scheme` is what stops the platform from darkening the parts of the
+   page the app does not paint itself: form controls, date pickers, scrollbars
+   and autofill. The `only` keyword is load-bearing and not decoration — a bare
+   `color-scheme: light` still lets Chrome for Android's Auto Dark Theme repaint
+   the whole page, and `only light` is the documented opt-out. Verified against
+   Chrome's --force-dark-mode, which darkened the page with `light` and left it
+   alone with `only light`. */
+:root {
+  color-scheme: only light;
+  --ek-shadow: #0a0a0a;
+  --ek-scroll-thumb: #d6d2ca;
+}
+
+html[data-theme="dark"] {
+  color-scheme: only dark;
+
+  --color-canvas: #12120f;
+  --color-surface: #1c1b17;
+  --color-raised: #26241e;
+  --color-ink: #f4f1e8;
+  --color-muted: #a29b8c;
+  --color-line: #f4f1e8;
+  /* The brand fills are the identity and do not move. They stay light
+     surfaces in dark mode — islands of the light theme — which is why
+     anything sitting on them re-anchors its ink below. */
+  --color-danger: #f04343;
+
+  --ek-shadow: #f4f1e8;
+  --ek-scroll-thumb: #3d3a31;
+  --color-on-ink: #12120f;
+}
+
+/* Theme-invariant ink.
+
+   A brand fill is bright in both themes, so its contents must stay dark in
+   both. Re-declaring --color-ink ON the accent element means every descendant
+   utility already written against it — text-ink, border-ink, the whole
+   vocabulary — resolves dark inside without a single markup change.
+
+   The `color` line is here in @layer base on purpose: utilities are declared
+   after base, so an explicit text-* class on the same element still wins. The
+   hover variants are listed because they are separate classes that the base
+   selector would otherwise miss. */
+@layer base {
+  html[data-theme="dark"] .bg-brand-yellow,
+  html[data-theme="dark"] .bg-brand-lime,
+  html[data-theme="dark"] .bg-brand-lavender,
+  html[data-theme="dark"] .hover\:bg-brand-yellow:hover,
+  html[data-theme="dark"] .hover\:bg-brand-lime:hover,
+  html[data-theme="dark"] .hover\:bg-brand-lavender:hover {
+    --color-ink: #0a0a0a;
+    --color-muted: #57534a;
+    --color-line: #0a0a0a;
+    color: var(--color-ink);
+  }
+}
+
+/* The colour flip, armed for the flip only.
+
+   A permanent `* { transition: colors }` is paid on every mount — the admin
+   portal learned this the hard way (see .a-theme-flip below), where hundreds
+   of nodes appearing at once each cost style work before they could paint.
+   setTheme() in lib/theme.ts stamps this class on <html>, then strips it a
+   frame after the transition ends, so the toggle animates and nothing else
+   does. Users who asked for reduced motion get the instant flip via the
+   prefers-reduced-motion block further down. */
+@layer base {
+  html.theme-flip,
+  html.theme-flip *,
+  html.theme-flip *::before,
+  html.theme-flip *::after {
+    transition-property: background-color, border-color, color, box-shadow,
+      fill, stroke, outline-color, text-decoration-color;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
 html {
-  scrollbar-color: #d6d2ca var(--color-canvas);
+  scrollbar-color: var(--ek-scroll-thumb) var(--color-canvas);
 }
 
 body {
@@ -114,7 +223,7 @@ body:has([data-admin][data-admin-theme="dark"]) {
 
 ::selection {
   background: var(--color-brand-yellow);
-  color: var(--color-ink);
+  color: var(--color-on-accent);
 }
 
 /* Brutalist focus ring — square, high contrast, always visible. */
@@ -128,7 +237,7 @@ body:has([data-admin][data-admin-theme="dark"]) {
   height: 6px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: #d6d2ca;
+  background: var(--ek-scroll-thumb);
 }
 
 @media (prefers-reduced-motion: reduce) {
