@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -274,6 +275,13 @@ const PHASE_STEP: Record<ConnectPhase, number> = {
   connected: 3,
 };
 
+/**
+ * Seconds the cover's Skip stays locked after a match is found, so a room
+ * cannot be thrown away by reflex before the other side has had a chance to
+ * arrive. Purely presentational — nothing in matchmaking knows about it.
+ */
+const SKIP_UNLOCK_S = 5;
+
 /** One anonymous participant. Slides in from its side, then breathes inward. */
 function PeerTile({ side, label, live }: { side: -1 | 1; label: string; live: boolean }) {
   return (
@@ -323,13 +331,36 @@ const ConnectingOverlay = memo(function ConnectingOverlay({
   const live = phase === "connected";
   const step = PHASE_STEP[phase];
 
+  /**
+   * Chained one-second timeouts rather than an interval: exactly one timer is
+   * ever alive, each is cleared by the effect's own cleanup (unmount, or the
+   * match completing, included), and the state updater stays pure — which an
+   * interval clearing itself from inside the tick cannot offer. At zero the
+   * effect simply stops re-arming; nothing to clean, nothing leaks.
+   */
+  const [skipLockedFor, setSkipLockedFor] = useState(SKIP_UNLOCK_S);
+  useEffect(() => {
+    if (live || skipLockedFor === 0) return;
+    const timer = window.setTimeout(
+      () => setSkipLockedFor((seconds) => Math.max(0, seconds - 1)),
+      1000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [live, skipLockedFor]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-40 flex items-center justify-center bg-canvas p-4"
+      /* `m-auto` on the card rather than `items-center` here, plus a scroll:
+         the card centres exactly as before when there is room, but on a
+         viewport too short for it — a phone held sideways, mostly — it
+         scrolls instead of being clipped. Centring alignment clips the
+         overflowing top edge and leaves it unreachable, which would hide
+         the Skip button that is the whole point of this screen. */
+      className="fixed inset-0 z-40 flex justify-center overflow-y-auto bg-canvas p-4"
       role="status"
       aria-live="polite"
       aria-label="Match found, connecting you both"
@@ -339,7 +370,7 @@ const ConnectingOverlay = memo(function ConnectingOverlay({
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 1.04 }}
         transition={{ type: "spring", stiffness: 300, damping: 24 }}
-        className="flex w-full max-w-sm flex-col items-center gap-5 border-2 border-ink bg-surface px-5 py-7 text-center shadow-brutal-lg sm:px-8 sm:py-8"
+        className="m-auto flex w-full max-w-sm flex-col items-center gap-5 border-2 border-ink bg-surface px-5 py-7 text-center shadow-brutal-lg sm:px-8 sm:py-8"
       >
         <motion.span
           initial={{ scale: 0.6, opacity: 0 }}
@@ -455,12 +486,29 @@ const ConnectingOverlay = memo(function ConnectingOverlay({
 
         {/* The manual way out of a wait that never resolves — the other side
             may have cancelled, gone offline, or closed the tab. Behaves
-            exactly like Skip inside the chat. Gone the instant the match is
-            proven, so a successful connection cannot be skipped by a stray
-            tap during the exit animation. */}
+            exactly like Skip inside the chat; a match that has already landed
+            is refused at the handler, which reads presence live rather than
+            through this card's props. */}
         {!live && (
-          <Button variant="secondary" onClick={onSkip} className="w-full">
-            <SkipForward className="size-4" /> Skip to next
+          <Button
+            variant="secondary"
+            onClick={onSkip}
+            disabled={skipLockedFor > 0}
+            className="w-full"
+          >
+            <SkipForward className="size-4" />
+            Skip to next
+            {/* aria-hidden, and not merely decorative: this card is a polite
+                live region, so a counter ticking inside it would be read out
+                once a second. The button keeps its stable name, and the lock
+                itself is already conveyed by `disabled`.
+                tabular-nums holds every digit to one width, so the label
+                cannot wobble as the count falls. */}
+            {skipLockedFor > 0 && (
+              <span aria-hidden className="tabular-nums">
+                ({skipLockedFor}s)
+              </span>
+            )}
           </Button>
         )}
       </motion.div>
@@ -632,7 +680,13 @@ export function ChatRoomPage() {
     if (nearBottom) setUnseen(0);
   }, []);
 
-  useEffect(() => {
+  // A layout effect on purpose: useEffect runs after paint, so the browser
+  // showed one frame of the taller transcript at the old scroll offset before
+  // the pin landed — the subtle end-of-send jump. It is worst when a send
+  // regroups the previous bubble (its timestamp row and shadow vanish as
+  // isLast flips), changing content height in the same commit. Correcting the
+  // scroll before paint means no wrong frame ever reaches the screen.
+  useLayoutEffect(() => {
     if (messages.length === 0) return;
     // Own sends pin instantly: the bubble is already laid out when this
     // effect runs, so an "auto" scroll lands in the same frame and nothing
@@ -771,10 +825,17 @@ export function ChatRoomPage() {
    */
   const skipFromConnecting = useCallback(() => {
     if (skipRequestedRef.current || endRequestedRef.current) return;
+    // A match that has already landed is never skippable from here. The cover
+    // takes ~200ms to animate away, and AnimatePresence replays an exiting
+    // child from the element it last rendered — i.e. with the props from
+    // before the partner arrived — so the overlay's own `live` check cannot
+    // hide the button during that window. Re-reading presence at the moment
+    // of the tap is the only reading that cannot be stale.
+    if (partnerPresent) return;
     skipRequestedRef.current = true;
     if (online) skipChat();
     else setStranded(true);
-  }, [online, skipChat]);
+  }, [online, partnerPresent, skipChat]);
 
   // The typing debounce outlives the component if you navigate away mid-word.
   useEffect(() => () => window.clearTimeout(typingStopRef.current), []);

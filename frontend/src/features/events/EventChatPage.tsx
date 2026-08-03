@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useInfiniteQuery,
@@ -407,8 +407,11 @@ export function EventChatPage() {
    * animating toward a bottom that was still moving — which is what read as
    * the chat jumping and settling, worst on small screens.
    */
+  // Layout effect, not useEffect: the pin must land before paint, or the
+  // browser shows one frame of the grown transcript at the old offset — the
+  // subtle jump at the end of a send.
   const lastMessageIdRef = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const last = messages[messages.length - 1];
     if (!last || last.id === lastMessageIdRef.current) return;
     const firstFill = lastMessageIdRef.current === null;
