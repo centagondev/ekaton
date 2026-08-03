@@ -40,6 +40,12 @@ export function AuthModal() {
   const [email, setEmail] = useState("");
   const [serverMessage, setServerMessage] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  /**
+   * "Forgot password?" is a bare text button outside both forms, so neither
+   * form's isSubmitting covers it — without its own flag every extra tap
+   * fired another reset email.
+   */
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const emailForm = useForm<EmailForm>({ defaultValues: { email: "" } });
   const passwordForm = useForm<PasswordForm>({ defaultValues: { password: "" } });
@@ -201,18 +207,29 @@ export function AuthModal() {
                   <div className="flex items-center justify-between">
                     <button
                       type="button"
+                      /* Locked while the reset email is in flight: switching
+                         steps mid-request would race its success handler,
+                         which moves to "sent" for the email shown here. */
+                      disabled={forgotLoading}
                       onClick={() => {
                         setStep("email");
                         passwordForm.reset({ password: "" });
                         setFormError(null);
                       }}
-                      className="text-xs font-bold uppercase tracking-wide text-muted hover:text-ink"
+                      className="text-xs font-bold uppercase tracking-wide text-muted transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-50"
                     >
                       Change email
                     </button>
                     <button
                       type="button"
+                      disabled={forgotLoading || busy}
+                      aria-busy={forgotLoading || undefined}
                       onClick={async () => {
+                        // The disabled attribute is the UI guard; this is the
+                        // hard one, for the tap that lands before the
+                        // re-render disables the button.
+                        if (forgotLoading) return;
+                        setForgotLoading(true);
                         try {
                           await authApi.forgotPassword(email);
                           setServerMessage(
@@ -221,11 +238,24 @@ export function AuthModal() {
                           setStep("sent");
                         } catch (error) {
                           setFormError(parseApiError(error).message);
+                        } finally {
+                          // Always released — the "sent" step keeps this
+                          // component mounted, so a stuck flag would leave
+                          // the button dead after "Use a different email".
+                          setForgotLoading(false);
                         }
                       }}
-                      className="text-xs font-bold uppercase tracking-wide text-muted hover:text-ink"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-50"
                     >
-                      Forgot password?
+                      {/* The app's square spinner (see Spinner), sized to the
+                          text link it sits in. */}
+                      {forgotLoading && (
+                        <span
+                          aria-hidden
+                          className="inline-block size-3 animate-spin border-2 border-current border-t-transparent"
+                        />
+                      )}
+                      {forgotLoading ? "Sending link…" : "Forgot password?"}
                     </button>
                   </div>
                 </motion.div>

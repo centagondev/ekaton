@@ -175,7 +175,24 @@ html[data-theme="dark"] {
     --color-ink: #0a0a0a;
     --color-muted: #57534a;
     --color-line: #0a0a0a;
+    /* The surface family too, not just the ink. A brand fill is an island of
+       the light theme, and anything nested inside it that paints bg-surface /
+       bg-raised / bg-canvas must stay light with it — otherwise a secondary
+       button inside a lavender strip renders the dark theme's near-black
+       surface under the re-anchored near-black ink, which is invisible text. */
+    --color-surface: #ffffff;
+    --color-raised: #f5f3ef;
+    --color-canvas: #fbf9f5;
     color: var(--color-ink);
+  }
+
+  /* Descendants only, never the fill itself: a shadow cast INSIDE the island
+     falls on a light background and must be dark, but the island's own shadow
+     falls on the dark canvas and must stay light (see --ek-shadow above). */
+  html[data-theme="dark"] .bg-brand-yellow *,
+  html[data-theme="dark"] .bg-brand-lime *,
+  html[data-theme="dark"] .bg-brand-lavender * {
+    --ek-shadow: #0a0a0a;
   }
 }
 

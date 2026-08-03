@@ -139,11 +139,21 @@ export const TypingIndicator = memo(function TypingIndicator({
   const character = resolveVariant(variant);
 
   return (
+    // The outer wrapper animates HEIGHT, not just opacity — the technique the
+    // event chat's TypingBubble established. This row is ~70px of layout at
+    // the very bottom of the transcript; mounting it at full size — or letting
+    // AnimatePresence yank it out at full size right as the partner's message
+    // arrives — snapped the transcript's height twice per arrival, which read
+    // as the message list shaking. Easing the height means the transcript
+    // grows and shrinks smoothly instead. The spacing (pt-3) lives INSIDE the
+    // measured wrapper for the same reason: a margin on the animated element
+    // would still collapse as a 12px snap. The 1-unit bottom/right padding is
+    // shadow room — overflow-hidden would otherwise clip the brutal offsets.
     <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.92 }}
-      transition={{ type: "spring", stiffness: 480, damping: 30 }}
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
       /* `self-start` rather than `w-fit`: both shrink the row to its content
          in a column flex container, but one of them does it with an
          alignment the transcript already relies on everywhere else, and the
@@ -156,13 +166,19 @@ export const TypingIndicator = memo(function TypingIndicator({
          way, so a compressed row would push the character past the
          transcript's own overflow clip and cut it off from below, leaving
          the speech bubble on screen with nobody beside it. */
-      className="mt-3 flex shrink-0 origin-bottom-left items-end gap-2.5 self-start"
+      className="shrink-0 self-start overflow-hidden"
       /* Decorative on purpose. The header already carries the typing state in
          a live region ("Typing…"), so giving this row a role="status" made
          assistive tech announce the same event twice — once per keystroke
          burst. The picture is the redundant half, so it stays silent. */
       aria-hidden
     >
+      <motion.div
+        initial={{ y: 8, scale: 0.92 }}
+        animate={{ y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 480, damping: 30 }}
+        className="flex origin-bottom-left items-end gap-2.5 pb-1 pr-1 pt-3"
+      >
       <div
         className={cn(
           "ti-breathe flex size-12 shrink-0 items-center justify-center border-2 border-ink p-1 text-ink shadow-brutal-sm lg:size-14",
@@ -228,18 +244,19 @@ export const TypingIndicator = memo(function TypingIndicator({
         )}
       </div>
 
-      <div className="ti-float relative mb-3 border-2 border-ink bg-surface px-3.5 py-2.5 shadow-brutal-sm">
-        {/* square tail pointing back at the speaker */}
-        <span
-          aria-hidden
-          className="absolute -left-[7px] bottom-[7px] size-3 rotate-45 border-b-2 border-l-2 border-ink bg-surface"
-        />
-        <div className="flex items-center gap-1.5">
-          {[0, 1, 2].map((dot) => (
-            <span key={dot} className="ti-dot size-1.5 bg-ink" />
-          ))}
+        <div className="ti-float relative mb-3 border-2 border-ink bg-surface px-3.5 py-2.5 shadow-brutal-sm">
+          {/* square tail pointing back at the speaker */}
+          <span
+            aria-hidden
+            className="absolute -left-[7px] bottom-[7px] size-3 rotate-45 border-b-2 border-l-2 border-ink bg-surface"
+          />
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map((dot) => (
+              <span key={dot} className="ti-dot size-1.5 bg-ink" />
+            ))}
+          </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 });
