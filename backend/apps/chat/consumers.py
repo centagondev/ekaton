@@ -11,13 +11,21 @@ from rest_framework.exceptions import ValidationError
 
 logger = logging.getLogger("chat")
 
-# One socket per participant per room. Opening the same room in a second tab
-# would otherwise put three sockets in a two-person group, so the extra one is
-# refused with a code the client can tell apart from a real error. The key
-# itself is built by services.room_connection_key.
+# One socket per participant per room. The seat key (built by
+# services.room_connection_key) holds the channel name of the socket that owns
+# it. A second connect for the same participant TAKES OVER the seat and the
+# previous holder is told to close: the holder may be a live older tab, but
+# just as often it is a dead socket the server has not noticed yet — a network
+# drop, a killed worker, a refreshed page — and refusing the new socket in
+# that case locked a single-tab user out of their own room with a false
+# "already open in another tab" until the stale key aged out.
+#
+# Teardown is ownership-guarded: only the socket whose channel name is still
+# stored in the seat may end the room on disconnect. A replaced socket lost
+# the seat, so its (possibly much later) disconnect leaves the room alone.
 #
 # Backstop only, in case a process dies without running disconnect(). Well
-# beyond any real conversation, which releases the slot the moment it ends.
+# beyond any real conversation, which releases the seat the moment it ends.
 CONNECTION_TTL_SECONDS = 60 * 60 * 12
 
 # At most one real chat message per participant per cooldown window. Applied
@@ -40,6 +48,29 @@ from .services import (
     room_connection_key,
 )
 
+# Take over a seat another socket holds: store the new holder, return the old
+# one so it can be told it was replaced. GET+SET must be one atomic step — two
+# sockets racing here must each learn a DIFFERENT previous holder, or one
+# replacement notice is lost and a zombie keeps a seat forever.
+_TAKE_OVER_SEAT_LUA = """
+local old = redis.call('get', KEYS[1])
+redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[2])
+return old
+"""
+_take_over_seat = redis_client.register_script(_TAKE_OVER_SEAT_LUA)
+
+# Release a seat only if this socket still owns it. Returns 1 when the caller
+# owned the seat — room teardown is then theirs to do — and 0 when a newer
+# socket has taken over, in which case the room must be left alone.
+_RELEASE_SEAT_IF_OWNER_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    redis.call('del', KEYS[1])
+    return 1
+end
+return 0
+"""
+_release_seat_if_owner = redis_client.register_script(_RELEASE_SEAT_IF_OWNER_LUA)
+
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """Handle WebSocket connections for private chat."""
@@ -55,24 +86,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         room_id = self.scope["url_route"]["kwargs"]["room_id"]
 
-        room = await sync_to_async(get_private_chat_room)(
-            room_id,
-            user,
-        )
-
-        if room is None:
-            await self._refuse(4004)
-            return
-
-        if room.status != room.Status.ACTIVE:
-            await self._refuse(4001)
-            return
-
-        # Claim this participant's single slot in the room. SET NX is atomic,
-        # so of two tabs racing to connect exactly one wins. The key is only
-        # remembered after a successful claim: a refused socket must never be
-        # able to release the slot the winner is holding.
-        conn_key = room_connection_key(room.id, user.id)
+        # Claim this participant's seat BEFORE looking at the room, so there
+        # is no window between validating the room and owning the seat in
+        # which the room can end under us. The key is scoped to this user, so
+        # an unauthorized connect can never disturb a real participant's seat
+        # — it claims (and below releases) only its own.
+        conn_key = room_connection_key(room_id, user.id)
         claimed = await sync_to_async(redis_client.set)(
             conn_key,
             self.channel_name,
@@ -81,15 +100,48 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         if not claimed:
-            logger.info(
-                "Refused duplicate socket for user %s in room %s",
-                user.id,
-                room.id,
+            # The seat is held — by an older tab, or by a dead socket the
+            # server has not noticed yet (network drop, refresh, killed
+            # worker). The newest socket always wins the seat; the previous
+            # holder, if it is still alive at all, is told it was replaced.
+            # Refusing here instead used to lock single-tab users out of
+            # their own room with a false "already open in another tab".
+            old_channel = await sync_to_async(_take_over_seat)(
+                keys=[conn_key],
+                args=[self.channel_name, CONNECTION_TTL_SECONDS],
             )
-            await self._refuse(4008)
-            return
+            logger.info(
+                "Seat takeover: user=%s room=%s key=%s new_channel=%s "
+                "old_channel=%s",
+                user.id,
+                room_id,
+                conn_key,
+                self.channel_name,
+                old_channel,
+            )
+            if old_channel and old_channel != self.channel_name:
+                await self.channel_layer.send(
+                    old_channel,
+                    {"type": "connection_replaced"},
+                )
 
         self._conn_key = conn_key
+
+        room = await sync_to_async(get_private_chat_room)(
+            room_id,
+            user,
+        )
+
+        if room is None:
+            await self._release_seat()
+            await self._refuse(4004)
+            return
+
+        if room.status != room.Status.ACTIVE:
+            await self._release_seat()
+            await self._refuse(4001)
+            return
+
         self.room = room
         self.room_id = str(room.id)
         self.room_group_name = f"chat_{self.room_id}"
@@ -100,13 +152,71 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
-        logger.info("User %s connected to room %s", user.id, self.room_id)
+        logger.info(
+            "User %s connected to room %s (channel=%s key=%s)",
+            user.id,
+            self.room_id,
+            self.channel_name,
+            conn_key,
+        )
+
+        # If the partner's seat is held, prove their presence to this socket
+        # right away with the same side-effect-free beacon the clients
+        # exchange. The client-side handshake alone cannot cover a rejoin: the
+        # partner's client answers the arrival beacon only once per socket, so
+        # a socket that reconnected (takeover above) would otherwise wait for
+        # proof that never comes and give the room up as stranded.
+        partner_user_id = (
+            room.user_two_id if room.user_one_id == user.id else room.user_one_id
+        )
+        partner_seated = await sync_to_async(redis_client.exists)(
+            room_connection_key(room.id, partner_user_id)
+        )
+        if partner_seated:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "typing",
+                        "is_typing": False,
+                        "is_own": False,
+                    }
+                )
+            )
 
         # Idle timeout: authoritative on the server. The deadline is reset
         # ONLY by real chat messages (see chat_message) — never by typing,
         # reveal, or system events.
         self._reset_idle_timer()
         self._idle_task = asyncio.create_task(self._idle_watchdog())
+
+    async def _release_seat(self):
+        """Give the seat back if this socket still owns it.
+
+        Compare-and-delete: a seat a newer socket has already taken over is
+        left untouched, so a refused or closing socket can never release a
+        successor's claim.
+        """
+        released = await sync_to_async(_release_seat_if_owner)(
+            keys=[self._conn_key],
+            args=[self.channel_name],
+        )
+        return bool(released)
+
+    async def connection_replaced(self, event):
+        """A newer socket for this participant took the seat.
+
+        Reached over the channel layer from the successor's connect(). This
+        socket is the stale one — an older tab, or a connection the browser
+        already gave up on. Close with the "open elsewhere" code; the
+        ownership guard in disconnect() keeps this close from touching the
+        room the successor is now using.
+        """
+        logger.info(
+            "Connection replaced: room=%s channel=%s",
+            getattr(self, "room_id", "?"),
+            self.channel_name,
+        )
+        await self.close(code=4008)
 
     async def _refuse(self, code):
         """Turn away a socket with a close code the client can actually read.
@@ -126,37 +236,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.close(code=code)
 
     async def disconnect(self, close_code):
-        """Remove the socket from the chat group."""
+        """Tear down this socket — and the room, but only if the seat is ours.
+
+        A participant leaving ends the chat, as before. What no longer ends
+        the chat is the disconnect of a socket that already LOST its seat to a
+        newer one (takeover in connect()): that disconnect can arrive seconds
+        or minutes late — a refresh's old socket, a timed-out zombie — and
+        used to kill the room the same user was actively chatting in.
+        """
 
         if not hasattr(self, "room_group_name"):
             return
 
         await self._cancel_idle_watchdog()
 
+        owned_seat = await self._release_seat()
+
         logger.info(
-            "User %s disconnected from room %s (code=%s)",
+            "User %s disconnected from room %s (code=%s channel=%s "
+            "owned_seat=%s)",
             self.scope["user"].id,
             self.room_id,
             close_code,
+            self.channel_name,
+            owned_seat,
         )
         try:
-            await sync_to_async(end_private_chat_room)(self.room)
+            if owned_seat:
+                await sync_to_async(end_private_chat_room)(self.room)
 
-            await self.channel_layer.group_send(
-                self.room_group_name, {"type": "chat_ended"}
-            )
+                await self.channel_layer.group_send(
+                    self.room_group_name, {"type": "chat_ended"}
+                )
         except Exception:
             logger.exception(
                 "Failed to clean up room %s during disconnect",
                 self.room_id,
             )
         finally:
-            # Release the participant's slot so they can open the room again.
-            # Only this socket ever reaches here holding _conn_key — a refused
-            # duplicate returns above, before room_group_name is set.
-            if hasattr(self, "_conn_key"):
-                await sync_to_async(redis_client.delete)(self._conn_key)
-
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name,

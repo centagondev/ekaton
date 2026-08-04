@@ -36,7 +36,13 @@ import { START_CHAT_JITTER_MS, START_CHAT_SPACING_MS } from "@/lib/config";
 const CROSS_TAB_KEY = "chat:last_start_call";
 
 function lastCallGlobal(): number {
-  return Number(localStorage.getItem(CROSS_TAB_KEY)) || 0;
+  const stored = Number(localStorage.getItem(CROSS_TAB_KEY)) || 0;
+  // Never trust a stored instant that is ahead of this device's clock. It
+  // happens: a clock correction between sessions, or a manually-set clock —
+  // and the value persists in localStorage forever. Unclamped, the spacing
+  // floor defers every start/ call by that whole gap, which looks like a
+  // search that never finds anyone, for that one device only.
+  return Math.min(stored, Date.now());
 }
 
 /** Re-check delay, spread so two waiters cannot stay in lockstep. */

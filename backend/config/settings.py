@@ -483,6 +483,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.presence.tasks.reconcile_platform_online_count",
         "schedule": 30.0,
     },
+    # Ends ACTIVE rooms whose idle deadline passed with nobody left to notice
+    # — both sockets dead, neither participant searching again. Without this,
+    # such rooms sat in the database forever and made their participants
+    # unmatchable. One cheap indexed query per run when there is nothing to
+    # do, which is the common case.
+    "reap-expired-chat-rooms": {
+        "task": "apps.chat.tasks.reap_expired_chat_rooms",
+        "schedule": crontab(minute="*"),
+    },
 }
 
 
