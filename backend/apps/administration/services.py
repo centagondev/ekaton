@@ -56,10 +56,7 @@ def users_count():
 
 
 def online_users_count():
-    """Return the real number of users currently connected to the platform.
-
-    Uses the raw presence count, not the seeded number shown to students,
-    so the dashboard reflects reality.
+    """Return the number of users currently connected to the platform.
 
     Returns 0 if Redis is unreachable, so one unavailable stat cannot break
     the whole dashboard.

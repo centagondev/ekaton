@@ -750,6 +750,42 @@ export function ChatRoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
 
+  const [revealClicking, setRevealClicking] = useState(false);
+  const [respondLoading, setRespondLoading] = useState<"accept" | "reject" | null>(null);
+  /**
+   * Optimistic own messages, shown the instant Send is tapped and retired
+   * when the server echoes them back — the technique that makes the event
+   * chat feel instant. Purely presentational: the socket protocol is
+   * untouched, this is just what renders during the round trip.
+   */
+  const [pendingMessages, setPendingMessages] = useState<ChatMessage[]>([]);
+  const pendingSeq = useRef(0);
+  // Own echoes already matched to a draft, so a re-render cannot retire the
+  // same draft twice.
+  const reconciledIds = useRef<Set<string>>(new Set());
+
+  /**
+   * A send the server refuses reports itself here and nowhere else — there is
+   * no echo for a message it never stored. The rate limiter (one message per
+   * second, per person) is the one that fires in ordinary use.
+   *
+   * Retiring the draft is what keeps drafts and echoes in step. They are
+   * paired off in arrival order below, so a draft left behind by a refused
+   * send shifts every later pairing by one: from then on each echo retires
+   * the *previous* message's draft and the newest one stays on screen beside
+   * its own confirmed copy — the duplicated message, for the rest of the room.
+   *
+   * The server answers frames in the order it received them, so a refusal
+   * belongs to the oldest unconfirmed draft: the same end the echo handler
+   * retires from.
+   */
+  const handleServerError = useCallback((message: string) => {
+    toast.error(message);
+    setRevealClicking(false);
+    setRespondLoading(null);
+    setPendingMessages((prev) => (prev.length === 0 ? prev : prev.slice(1)));
+  }, []);
+
   const {
     status,
     endInfo,
@@ -765,7 +801,7 @@ export function ChatRoomPage() {
     requestReveal,
     respondReveal,
     skipChat,
-  } = useChatSocket(roomId);
+  } = useChatSocket(roomId, handleServerError);
 
   const [reportOpen, setReportOpen] = useState(false);
   /**
@@ -781,24 +817,11 @@ export function ChatRoomPage() {
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [ending, setEnding] = useState(false);
-  const [revealClicking, setRevealClicking] = useState(false);
-  const [respondLoading, setRespondLoading] = useState<"accept" | "reject" | null>(null);
   const [unseen, setUnseen] = useState(0);
   /** The message being replied to, or null for a plain send. */
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   /** Briefly highlights a message after jumping to it from a quote. */
   const [flashId, setFlashId] = useState<string | null>(null);
-  /**
-   * Optimistic own messages, shown the instant Send is tapped and retired
-   * when the server echoes them back — the technique that makes the event
-   * chat feel instant. Purely presentational: the socket protocol is
-   * untouched, this is just what renders during the round trip.
-   */
-  const [pendingMessages, setPendingMessages] = useState<ChatMessage[]>([]);
-  const pendingSeq = useRef(0);
-  // Own echoes already matched to a draft, so a re-render cannot retire the
-  // same draft twice.
-  const reconciledIds = useRef<Set<string>>(new Set());
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<ComposerHandle>(null);
@@ -962,11 +985,17 @@ export function ChatRoomPage() {
   //
   // Matched by arrival order, not by text — the server may alter a message on
   // its way through, so the copy that comes back cannot be recognised by its
-  // content. A layout effect, not useEffect: a passive effect runs after
-  // paint, so every send would show one frame with the echo AND the draft
-  // both in the list — the message doubled, then snapped back a frame later.
-  // Retiring the draft in the layout phase lands echo-in and draft-out in
-  // one paint.
+  // content. That pairing is only sound while every draft has exactly one
+  // outcome coming for it, which is why the two ways a send can end without
+  // an echo are both closed: a refused send retires its draft in
+  // `handleServerError`, and a frame that never left the socket never gets a
+  // draft at all (see `handleSend`). Without those, one unanswered draft
+  // offsets the queue permanently and the newest message renders twice.
+  //
+  // A layout effect, not useEffect: a passive effect runs after paint, so
+  // every send would show one frame with the echo AND the draft both in the
+  // list — the message doubled, then snapped back a frame later. Retiring the
+  // draft in the layout phase lands echo-in and draft-out in one paint.
   useLayoutEffect(() => {
     const fresh = messages.filter(
       (message) => message.isOwn && !reconciledIds.current.has(message.id),
@@ -1158,9 +1187,14 @@ export function ChatRoomPage() {
   const handleSend = useCallback(
     (text: string) => {
       const target = replyToRef.current;
-      // The optimistic bubble, on screen before the frame even leaves the
-      // socket. The quote is built here so it is on the bubble from the
-      // first paint; waiting for the echo would pop it in a moment later.
+      // A frame that never left the socket can be neither echoed nor refused,
+      // so it can never retire its own draft — drawing one would strand it on
+      // screen and put every later echo one draft out of step.
+      if (!sendMessage(text, target?.id ?? null)) return;
+
+      // The optimistic bubble, on screen in the same frame as the send. The
+      // quote is built here so it is on the bubble from the first paint;
+      // waiting for the echo would pop it in a moment later.
       setPendingMessages((prev) => [
         ...prev,
         {
@@ -1173,7 +1207,6 @@ export function ChatRoomPage() {
             : null,
         },
       ]);
-      sendMessage(text, target?.id ?? null);
       setReplyTo(null);
     },
     [sendMessage],

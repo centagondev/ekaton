@@ -22,6 +22,12 @@ REPORT_EVIDENCE_FOLDER = "reports/evidence"
 # a matched user actually turned up — see `release_unjoined_room`.
 CONNECTION_KEY_PREFIX = "chat_conn"
 
+# A private room exists only for active conversations: if neither participant
+# sends a real chat message for this long, the room is ended automatically.
+# Enforced live by ChatConsumer's idle watchdog, and lazily by
+# matchmaking.release_expired_room for rooms the watchdog died holding.
+IDLE_TIMEOUT_SECONDS = 300
+
 
 def room_connection_key(room_id, user_id):
     """Return the per-participant socket-slot key for a room."""

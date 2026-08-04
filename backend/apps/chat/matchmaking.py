@@ -1,12 +1,18 @@
+from datetime import timedelta
+
 from apps.chat.models import PrivateChatRoom
 from apps.chat.services import (
+    IDLE_TIMEOUT_SECONDS,
     create_private_chat_room,
     end_private_chat_room,
     room_connection_key,
 )
 from apps.users.models import User
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from core.redis import redis_client
 from django.db.models import Q
+from django.utils import timezone
 from redis.exceptions import LockError
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
@@ -231,6 +237,60 @@ def release_unjoined_room(user):
     return end_private_chat_room(room)
 
 
+def release_expired_room(room):
+    """End an ACTIVE room whose idle deadline passed with nobody left to enforce it.
+
+    The idle watchdog in ``ChatConsumer`` ends a room once no real message has
+    been sent for ``IDLE_TIMEOUT_SECONDS`` — but the watchdog lives inside the
+    consumer process. When that process dies without running ``disconnect()``
+    (deploy restart, worker crash), the room is orphaned: it stays ACTIVE
+    forever, and both participants' connection keys keep refusing every
+    reconnect for their whole TTL. ``start_chat`` then hands that dead room
+    back on every attempt, trapping its participants in a loop no browser
+    restart can break, because all of the stuck state is server-side.
+
+    This applies the watchdog's exact expiry rule lazily, at the point of
+    harm. A room with live consumers can never be caught by it: their watchdog
+    ends the room at this same deadline, so an ACTIVE room past the deadline
+    is by definition one nobody is enforcing.
+
+    Args:
+        room: An ACTIVE PrivateChatRoom to check.
+
+    Returns:
+        True when the room had expired and was cleaned up, False when it is
+        still within its idle window and must be left alone.
+    """
+    last_activity = (
+        room.messages.order_by("-created_at")
+        .values_list("created_at", flat=True)
+        .first()
+        or room.created_at
+    )
+
+    if timezone.now() - last_activity < timedelta(seconds=IDLE_TIMEOUT_SECONDS):
+        return False
+
+    end_private_chat_room(room)
+
+    # The sockets that claimed these slots are gone; the leftover keys are
+    # exactly what refuses each participant's next connection attempt.
+    redis_client.delete(
+        room_connection_key(room.id, room.user_one_id),
+        room_connection_key(room.id, room.user_two_id),
+    )
+
+    # If any socket somehow survived past the deadline (e.g. only the
+    # watchdog task crashed), it learns the room is over; with the usual
+    # empty group this delivers to nobody.
+    async_to_sync(get_channel_layer().group_send)(
+        f"chat_{room.id}",
+        {"type": "chat_ended"},
+    )
+
+    return True
+
+
 def is_user_waiting(user):
     """Check whether a user is currently in the waiting queue.
 
@@ -304,8 +364,13 @@ def start_chat(user):
 
     try:
         with lock:
-            # Check if the user already has an active chat room.
+            # Check if the user already has an active chat room. A room whose
+            # idle deadline lapsed while no consumer was alive to end it is
+            # expired stale state, not a conversation — reap it here instead
+            # of handing the user a room no socket will ever be allowed into.
             active_room = get_active_chat_room(user)
+            if active_room is not None and release_expired_room(active_room):
+                active_room = None
             if active_room:
                 return {
                     "status": "active",
