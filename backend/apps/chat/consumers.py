@@ -11,10 +11,6 @@ from rest_framework.exceptions import ValidationError
 
 logger = logging.getLogger("chat")
 
-# A private room exists only for active conversations: if neither participant
-# sends a real chat message for this long, the room is ended automatically.
-IDLE_TIMEOUT_SECONDS = 300
-
 # One socket per participant per room. Opening the same room in a second tab
 # would otherwise put three sockets in a two-person group, so the extra one is
 # refused with a code the client can tell apart from a real error. The key
@@ -34,6 +30,7 @@ MESSAGE_COOLDOWN_SECONDS = 1
 REPLY_PREVIEW_LENGTH = 120
 
 from .services import (
+    IDLE_TIMEOUT_SECONDS,
     create_private_message,
     create_reveal_request,
     end_private_chat_room,
@@ -53,7 +50,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         user = self.scope["user"]
 
         if user.is_anonymous:
-            await self.close(code=4001)
+            await self._refuse(4001)
             return
 
         room_id = self.scope["url_route"]["kwargs"]["room_id"]
@@ -64,11 +61,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         if room is None:
-            await self.close(code=4004)
+            await self._refuse(4004)
             return
 
         if room.status != room.Status.ACTIVE:
-            await self.close(code=4001)
+            await self._refuse(4001)
             return
 
         # Claim this participant's single slot in the room. SET NX is atomic,
@@ -89,7 +86,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 user.id,
                 room.id,
             )
-            await self.close(code=4008)
+            await self._refuse(4008)
             return
 
         self._conn_key = conn_key
@@ -110,6 +107,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # reveal, or system events.
         self._reset_idle_timer()
         self._idle_task = asyncio.create_task(self._idle_watchdog())
+
+    async def _refuse(self, code):
+        """Turn away a socket with a close code the client can actually read.
+
+        Closing before accepting rejects the WebSocket handshake itself, and
+        the browser then reports only a generic 1006 — the frontend cannot
+        tell "room gone" (4004/4001) from a dropped connection, treats it as
+        a chat that just ended, and auto-restarts the search into the same
+        dead room. Accepting first turns the refusal into a clean close whose
+        code survives to the client, which then shows its manual error card
+        instead of looping.
+
+        disconnect() is a no-op for refused sockets: room_group_name is never
+        set on this path, so no room state can be touched by the teardown.
+        """
+        await self.accept()
+        await self.close(code=code)
 
     async def disconnect(self, close_code):
         """Remove the socket from the chat group."""

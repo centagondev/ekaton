@@ -7,7 +7,6 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .constants import PLATFORM_KEEPALIVE_INTERVAL, PLATFORM_PRESENCE_GROUP
-from .seed_services import SeedService
 from .services import PlatformPresenceService
 
 logger = logging.getLogger(__name__)
@@ -236,13 +235,13 @@ class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
 
     async def send_online_count(self) -> None:
         """
-        Send the current display count to this client only.
+        Send the current online count to this client only.
 
         Used on connect so a new client sees the right number immediately,
         without making every other client pay for a group broadcast.
         """
         count = await database_sync_to_async(
-            SeedService.get_display_count,
+            PlatformPresenceService.get_online_count,
         )()
 
         await self.send_json(
@@ -254,7 +253,7 @@ class PlatformPresenceConsumer(AsyncJsonWebsocketConsumer):
 
     async def broadcast_online_count(self) -> None:
         """
-        Tell every connected client the latest display count.
+        Tell every connected client the latest online count.
 
         Debounced in Redis across all workers: during a connect burst only the
         first caller in each window actually sends, and the periodic

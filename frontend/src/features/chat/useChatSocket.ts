@@ -38,10 +38,25 @@ export interface EndInfo {
  *
  * Important backend behaviour: ANY disconnect permanently ends the room, so
  * there is deliberately no reconnect logic here — reconnecting would be a lie.
+ *
+ * `onServerError` receives every `error` frame the server sends. It is a
+ * callback rather than a piece of state because a rejected send reports
+ * itself this way and nowhere else: the caller has to hear about each one
+ * individually to retire the draft it belongs to, and two identical
+ * rejections in a row (two sends inside the rate-limit window say the same
+ * words) would collapse into a single state change.
  */
-export function useChatSocket(roomId: string | undefined) {
+export function useChatSocket(
+  roomId: string | undefined,
+  onServerError?: (message: string) => void,
+) {
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimer = useRef<number | undefined>(undefined);
+
+  // Held in a ref so a caller passing an inline handler cannot retrigger the
+  // effect below — which would close the socket, and closing ends the room.
+  const errorHandler = useRef(onServerError);
+  errorHandler.current = onServerError;
 
   const [status, setStatus] = useState<ChatStatus>("connecting");
   const [endInfo, setEndInfo] = useState<EndInfo | null>(null);
@@ -59,6 +74,8 @@ export function useChatSocket(roomId: string | undefined) {
     user: null,
     seen: false,
   });
+  /** Why the connection itself failed. Server `error` frames go to
+   * `onServerError` instead — they are per-send, not per-connection. */
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -175,7 +192,10 @@ export function useChatSocket(roomId: string | undefined) {
           break;
 
         case "error":
-          setLastError(data.message);
+          // Handed straight to the caller instead of parked in `lastError`:
+          // this is the only notice a refused send ever gets, and the draft
+          // it belongs to has to be retired on the spot.
+          errorHandler.current?.(data.message);
           break;
       }
     };
@@ -207,15 +227,21 @@ export function useChatSocket(roomId: string | undefined) {
     };
   }, [roomId]);
 
-  const send = useCallback((payload: ChatClientEvent) => {
+  /** False when the socket was not open, so the frame never left. */
+  const send = useCallback((payload: ChatClientEvent): boolean => {
     const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(payload));
-    }
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(payload));
+    return true;
   }, []);
 
+  /**
+   * Reports whether the frame was actually sent: only a frame the server
+   * receives can be echoed or refused, so only that one may be drawn
+   * optimistically.
+   */
   const sendMessage = useCallback(
-    (message: string, replyTo: string | null = null) =>
+    (message: string, replyTo: string | null = null): boolean =>
       send({ type: "chat_message", message, reply_to: replyTo }),
     [send],
   );

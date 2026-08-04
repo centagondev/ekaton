@@ -21,7 +21,6 @@ from .constants import (
     PLATFORM_PRESENCE_GROUP,
     PLATFORM_PRESENCE_KEY,
 )
-from .seed_services import SeedService
 
 logger = logging.getLogger(__name__)
 
@@ -467,7 +466,7 @@ class PlatformPresenceService:
         if not reserved:
             return None
 
-        return SeedService.get_display_count()
+        return cls.get_online_count()
 
     @classmethod
     def record_broadcast(cls, count: int) -> None:
@@ -516,27 +515,9 @@ class PlatformPresenceService:
         return True
 
     @classmethod
-    def broadcast_online_count(cls, *, debounce: bool = True) -> bool:
-        """
-        Broadcast the latest platform display count to all connected clients.
-
-        Pass debounce=False for updates that must always propagate, such as a
-        seed refresh, where suppressing the message would leave clients on a
-        stale number until something else happens to trigger a send.
-        """
-        if debounce:
-            count = cls.claim_broadcast()
-            if count is None:
-                return False
-        else:
-            count = SeedService.get_display_count()
-
-        return cls._send_online_count(count)
-
-    @classmethod
     def broadcast_if_changed(cls) -> bool:
         """
-        Re-broadcast only when the display count has moved since the last send.
+        Re-broadcast only when the online count has moved since the last send.
 
         Two things make the count drift away from what clients are showing:
         the debounce above drops the tail of a connect burst, and presence
@@ -544,7 +525,7 @@ class PlatformPresenceService:
         Running this periodically settles both, and costs nothing when the
         number has not changed.
         """
-        count = SeedService.get_display_count()
+        count = cls.get_online_count()
 
         if count == cls.last_broadcast_count():
             return False
