@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from apps.chat.models import PrivateChatRoom
@@ -14,6 +15,8 @@ from core.redis import redis_client
 from django.db.models import Q
 from django.utils import timezone
 from redis.exceptions import LockError
+
+logger = logging.getLogger("chat")
 
 # Redis key for the FIFO queue (LIST) maintaining insertion order.
 WAITING_QUEUE_KEY = "waiting_users"
@@ -32,10 +35,30 @@ WAITING_ALIVE_PREFIX = "waiting_alive"
 # entry cannot linger.
 WAITING_ALIVE_TTL_SECONDS = 60
 
+# Marks a user whose partner has claimed them but whose room INSERT has not
+# committed yet. Without it there is a window in which the claimed user's own
+# concurrent poll sees an empty queue and re-enqueues them — where a third
+# searcher can claim them into a SECOND room, leaving the first partner alone
+# in a room whose other seat nobody ever fills. The claimer deletes the marker
+# the moment the room commits (or the claim is discarded); the TTL only covers
+# a claimer that crashed mid-create.
+MATCH_PENDING_PREFIX = "match_pending"
+MATCH_PENDING_TTL_SECONDS = 15
+
+# Sentinel returned by the claim script for a caller who is being matched
+# RIGHT NOW: stay out of the queue and let the next poll find the room. The
+# '@' guarantees it can never collide with a user id.
+CLAIM_PENDING = "@pending"
+
 
 def waiting_alive_key(user_id):
     """Return the liveness key for a queued user id."""
     return f"{WAITING_ALIVE_PREFIX}:{user_id}"
+
+
+def match_pending_key(user_id):
+    """Return the claimed-but-room-not-committed marker key for a user id."""
+    return f"{MATCH_PENDING_PREFIX}:{user_id}"
 
 
 def add_user_to_queue(user):
@@ -64,12 +87,25 @@ def add_user_to_queue(user):
 # without matching (a livelock that left users stuck "searching" forever).
 #
 # KEYS[1] waiting list, KEYS[2] waiting set, ARGV[1] caller id,
-# ARGV[2] liveness key prefix.
-# Returns the claimed partner's id, or false when nobody is available.
+# ARGV[2] liveness key prefix, ARGV[3] liveness TTL,
+# ARGV[4] pending-match key prefix, ARGV[5] pending-match TTL.
+# Returns the claimed partner's id, '@pending' when the caller has just been
+# claimed by somebody else, or false when nobody is available.
 _CLAIM_PARTNER_LUA = """
 local me = ARGV[1]
 local prefix = ARGV[2]
 local ttl = tonumber(ARGV[3])
+local pending_prefix = ARGV[4]
+local pending_ttl = tonumber(ARGV[5])
+
+-- Somebody claimed us an instant ago and is creating our room right now.
+-- Claiming a partner of our own (or re-joining the queue) here is exactly
+-- what used to produce two ACTIVE rooms for one user, stranding the first
+-- partner in a room whose second seat never fills. Stay put; the room will
+-- be visible to the next poll.
+if redis.call('exists', pending_prefix .. ':' .. me) == 1 then
+    return '@pending'
+end
 
 -- Leave the queue first: the caller must never claim themselves, and a
 -- duplicate entry for them must not survive this call.
@@ -97,6 +133,11 @@ while true do
         -- Only hand back entries whose owner is still actively searching.
         if redis.call('exists', prefix .. ':' .. candidate) == 1 then
             redis.call('del', prefix .. ':' .. candidate)
+            -- Reserve the candidate until the caller's room INSERT commits,
+            -- so the candidate's own next poll cannot requeue them and no
+            -- third searcher can claim them into a second room.
+            redis.call('set', pending_prefix .. ':' .. candidate, me,
+                       'EX', pending_ttl)
             return candidate
         end
     end
@@ -116,12 +157,20 @@ def claim_waiting_partner(user):
         user: The User instance looking for a partner.
 
     Returns:
-        The claimed partner's id as a string, or None when nobody was
-        available (in which case the caller is now queued).
+        The claimed partner's id as a string, CLAIM_PENDING when the caller
+        has just been claimed by someone else (a room is being created for
+        them right now — do not enqueue, do not claim), or None when nobody
+        was available (in which case the caller is now queued).
     """
     claimed = _claim_partner_script(
         keys=[WAITING_QUEUE_KEY, WAITING_USERS_SET_KEY],
-        args=[str(user.id), WAITING_ALIVE_PREFIX, WAITING_ALIVE_TTL_SECONDS],
+        args=[
+            str(user.id),
+            WAITING_ALIVE_PREFIX,
+            WAITING_ALIVE_TTL_SECONDS,
+            MATCH_PENDING_PREFIX,
+            MATCH_PENDING_TTL_SECONDS,
+        ],
     )
 
     if not claimed:
@@ -234,6 +283,11 @@ def release_unjoined_room(user):
     if redis_client.exists(room_connection_key(room.id, user.id)):
         return None
 
+    logger.info(
+        "Releasing unjoined room=%s for cancelling user=%s",
+        room.id,
+        user.id,
+    )
     return end_private_chat_room(room)
 
 
@@ -271,6 +325,13 @@ def release_expired_room(room):
     if timezone.now() - last_activity < timedelta(seconds=IDLE_TIMEOUT_SECONDS):
         return False
 
+    logger.info(
+        "Reaping expired room=%s (users %s, %s; last_activity=%s)",
+        room.id,
+        room.user_one_id,
+        room.user_two_id,
+        last_activity,
+    )
     end_private_chat_room(room)
 
     # The sockets that claimed these slots are gone; the leftover keys are
@@ -368,9 +429,14 @@ def start_chat(user):
             # idle deadline lapsed while no consumer was alive to end it is
             # expired stale state, not a conversation — reap it here instead
             # of handing the user a room no socket will ever be allowed into.
+            # A loop, not a single check: a user can be carrying SEVERAL
+            # expired rooms (every crash or failed join leaves one), and
+            # reaping only the newest per poll left them semi-stuck — visible
+            # as users who could never be matched until an admin deleted
+            # their account, which cascaded the poison rooms away.
             active_room = get_active_chat_room(user)
-            if active_room is not None and release_expired_room(active_room):
-                active_room = None
+            while active_room is not None and release_expired_room(active_room):
+                active_room = get_active_chat_room(user)
             if active_room:
                 return {
                     "status": "active",
@@ -387,19 +453,61 @@ def start_chat(user):
             while True:
                 partner_id = claim_waiting_partner(user)
 
+                if partner_id == CLAIM_PENDING:
+                    # Someone claimed US mid-poll; our room is being created
+                    # right now and the next poll will find it. Joining the
+                    # queue or claiming a partner here would put this user in
+                    # two rooms at once.
+                    logger.info(
+                        "Matchmaking: user=%s is pending a room, holding",
+                        user.id,
+                    )
+                    return {
+                        "status": "waiting",
+                        "message": "Waiting for another user...",
+                    }
+
                 if partner_id is None:
                     break
 
                 partner = User.objects.filter(id=partner_id).first()
 
                 # The claimed id no longer resolves to a user — drop it and
-                # keep looking.
+                # keep looking. The reservation made for them by the claim
+                # script is released so a real user behind a stale id is
+                # never locked out of the queue for the marker's TTL.
                 if partner is None:
+                    redis_client.delete(match_pending_key(partner_id))
+                    logger.info(
+                        "Matchmaking: user=%s claimed unknown id %s, skipped",
+                        user.id,
+                        partner_id,
+                    )
                     continue
 
                 # Never pair someone who is already talking to somebody else;
-                # their queue entry is stale.
-                if is_user_in_active_chat(partner):
+                # their queue entry is stale. But "already talking" must mean
+                # a LIVE conversation: a candidate whose only active rooms are
+                # past the idle deadline is carrying crash leftovers, not a
+                # chat. Reap those here and keep the candidate — discarding
+                # them (the old behaviour) told the claimer "person is no
+                # longer available" about someone who was sitting right there
+                # searching, and it kept happening to the same person until
+                # their stale rooms were gone.
+                partner_room = get_active_chat_room(partner)
+                while partner_room is not None and release_expired_room(
+                    partner_room
+                ):
+                    partner_room = get_active_chat_room(partner)
+
+                if partner_room is not None:
+                    redis_client.delete(match_pending_key(partner_id))
+                    logger.info(
+                        "Matchmaking: user=%s claimed %s who is already "
+                        "chatting, skipped",
+                        user.id,
+                        partner_id,
+                    )
                     continue
 
                 waiting_user = partner
@@ -415,9 +523,21 @@ def start_chat(user):
                 }
 
             # A valid match was found — create the chat room.
-            room = create_private_chat_room(
-                user_one=waiting_user,
-                user_two=user,
+            try:
+                room = create_private_chat_room(
+                    user_one=waiting_user,
+                    user_two=user,
+                )
+            finally:
+                # The room is now visible to the partner's poll (or was never
+                # created) — either way the reservation has done its job.
+                redis_client.delete(match_pending_key(str(waiting_user.id)))
+
+            logger.info(
+                "Matchmaking: room=%s created for users %s and %s",
+                room.id,
+                waiting_user.id,
+                user.id,
             )
 
             return {

@@ -36,8 +36,10 @@ export interface EndInfo {
 /**
  * Private-chat socket. Protocol per docs/BACKEND-CONTRACT.md §3.
  *
- * Important backend behaviour: ANY disconnect permanently ends the room, so
- * there is deliberately no reconnect logic here — reconnecting would be a lie.
+ * Important backend behaviour: a disconnect by the socket that owns its seat
+ * permanently ends the room, so there is deliberately no reconnect logic here
+ * — by the time this client notices the drop, the server has usually already
+ * ended the room, and the transcript only ever lived in this tab anyway.
  *
  * `onServerError` receives every `error` frame the server sends. It is a
  * callback rather than a piece of state because a rejected send reports
@@ -84,6 +86,16 @@ export function useChatSocket(
     const socket = new WebSocket(`${WS_URL}/ws/chat/${roomId}/?token=${token}`);
     socketRef.current = socket;
     let closedByServer = false;
+    /**
+     * Whether the handshake ever completed. A close before open is a
+     * connection problem, not a chat ending — and the two must not be
+     * confused: "ended" auto-returns to matchmaking, which immediately hands
+     * back a room this client will fail to open in exactly the same way. For
+     * a user whose network cannot carry a WebSocket at all, that loop ran
+     * forever — and every cycle matched them with a real partner who then
+     * sat waiting for a stranger that could never arrive.
+     */
+    let opened = false;
 
     // A new room starts with no knowledge of the other side.
     setPartnerPresent(false);
@@ -110,6 +122,7 @@ export function useChatSocket(
     };
 
     socket.onopen = () => {
+      opened = true;
       setStatus("connected");
       beacon(); // announce arrival
     };
@@ -211,9 +224,16 @@ export function useChatSocket(
         setStatus("error");
         setLastError("Could not join this chat. It may have ended, or your session expired.");
       } else if (event.code === 4008) {
-        // The server allows one socket per person per room; this tab lost the race.
+        // The server keeps one socket per person per room, newest first: this
+        // socket's seat was taken over by a newer connection for the same
+        // account — another tab, or a reconnect after this one went stale.
         setStatus("error");
         setLastError("This chat is already open in another tab.");
+      } else if (!opened) {
+        // Never got in (see `opened`): show the manual card instead of
+        // bouncing back into matchmaking to fail identically forever.
+        setStatus("error");
+        setLastError("Couldn't reach the chat server. Check your connection and try again.");
       } else {
         setStatus("ended");
         setEndInfo((prev) => prev ?? { kind: "ended", message: "Connection closed." });
