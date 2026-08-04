@@ -9,7 +9,6 @@ from core.throttles import (
     LogoutRateThrottle,
     ResendPasswordResetRateThrottle,
     ResetPasswordRateThrottle,
-    SetPasswordRateThrottle,
     TokenRefreshRateThrottle,
 )
 from django.core.exceptions import ValidationError
@@ -96,7 +95,13 @@ class SetPasswordAPIView(APIView):
 
     permission_classes = []
     authentication_classes = []
-    throttle_classes = [SetPasswordRateThrottle]
+    # Deliberately unthrottled. The empty list is load-bearing: leaving the
+    # attribute out would fall back to DEFAULT_THROTTLE_CLASSES, whose anon
+    # bucket is keyed by network identity — behind the production proxy (or a
+    # campus NAT) many users share one identity, which is exactly the false
+    # "Request was throttled" this removes. The endpoint stays safe without
+    # it: tokens are 256-bit, single-use and expire in 30 minutes.
+    throttle_classes = []
 
     @set_password_doc
     def post(self, request):
