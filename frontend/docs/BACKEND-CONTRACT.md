@@ -64,10 +64,13 @@ Categories `general|facilities|events|academic|other`; status `open|under_review
 ### Private chat — `ws/chat/<room_id>/?token=`
 Close codes: `4001` unauth/inactive · `4004` not found or not a participant · `4000` ended.
 
-**Send:** `chat_message{message}` (1–500) · `typing{is_typing}` · `reveal_request` ·
-`reveal_response{status}` · `skip_chat`
+**Send:** `chat_message{message}` (1–500) · `typing{is_typing}` ·
+`reaction{message_id,emoji}` (emoji ∈ 👍❤️😂👏🔥 or `null` = removed; ephemeral relay,
+nothing persisted; malformed frames dropped silently, never answered with `error`) ·
+`reveal_request` · `reveal_response{status}` · `skip_chat`
 
 **Receive:** `chat_message{id,sender(email),message,created_at}` · `typing{sender,is_typing}` ·
+`reaction{message_id,emoji,is_own}` ·
 `reveal_request_sent` · `reveal_request_received` · `reveal_success{user{...}}` ·
 `reveal_rejected` · `chat_skipped` · `chat_ended` · `error{message}`
 
