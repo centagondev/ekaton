@@ -63,6 +63,14 @@ export function useChatSocket(
   const [status, setStatus] = useState<ChatStatus>("connecting");
   const [endInfo, setEndInfo] = useState<EndInfo | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /**
+   * The partner's quick reactions, message id → emoji. Ephemeral like the
+   * transcript: relayed live over the socket, held nowhere else, gone with
+   * the room. Our own reactions are page state — they never round-trip.
+   */
+  const [partnerReactions, setPartnerReactions] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
   const [partnerTyping, setPartnerTyping] = useState(false);
   /**
    * True once we have proof the other side is in the room. The backend has no
@@ -164,6 +172,20 @@ export function useChatSocket(
             if (data.is_typing) {
               typingTimer.current = window.setTimeout(() => setPartnerTyping(false), 5000);
             }
+          }
+          break;
+
+        case "reaction":
+          // Own echoes are ignored: the local map was updated at tap time,
+          // and re-applying the same value would only re-render the bubble.
+          if (!data.is_own) {
+            notePartnerPresent();
+            setPartnerReactions((prev) => {
+              const next = new Map(prev);
+              if (data.emoji === null) next.delete(data.message_id);
+              else next.set(data.message_id, data.emoji);
+              return next;
+            });
           }
           break;
 
@@ -269,6 +291,16 @@ export function useChatSocket(
     (isTyping: boolean) => send({ type: "typing", is_typing: isTyping }),
     [send],
   );
+  /**
+   * Declarative on purpose: the full current reaction (or null for removed),
+   * not a toggle — so a duplicated or reordered frame converges on the
+   * sender's real state instead of flipping it.
+   */
+  const sendReaction = useCallback(
+    (messageId: string, emoji: string | null): boolean =>
+      send({ type: "reaction", message_id: messageId, emoji }),
+    [send],
+  );
   const requestReveal = useCallback(() => send({ type: "reveal_request" }), [send]);
   const respondReveal = useCallback(
     (accepted: boolean) =>
@@ -290,6 +322,7 @@ export function useChatSocket(
     status,
     endInfo,
     messages,
+    partnerReactions,
     partnerTyping,
     partnerPresent,
     reveal,
@@ -298,6 +331,7 @@ export function useChatSocket(
     dismissReveal,
     sendMessage,
     sendTyping,
+    sendReaction,
     requestReveal,
     respondReveal,
     skipChat,

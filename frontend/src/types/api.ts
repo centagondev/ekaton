@@ -128,6 +128,9 @@ export type ChatServerEvent =
       reply_to: PrivateMessageQuote | null;
     }
   | { type: "typing"; is_typing: boolean; is_own: boolean }
+  /** Ephemeral quick reaction — `emoji: null` means the sender removed
+   * theirs. Declarative (full current state), so replays converge. */
+  | { type: "reaction"; message_id: string; emoji: string | null; is_own: boolean }
   | { type: "reveal_request_sent"; message: string }
   | { type: "reveal_request_received"; message: string }
   | { type: "reveal_success"; message: string; user: RevealedUser }
@@ -140,6 +143,7 @@ export type ChatServerEvent =
 export type ChatClientEvent =
   | { type: "chat_message"; message: string; reply_to: string | null }
   | { type: "typing"; is_typing: boolean }
+  | { type: "reaction"; message_id: string; emoji: string | null }
   | { type: "reveal_request" }
   | { type: "reveal_response"; status: "accepted" | "rejected" }
   | { type: "skip_chat" };

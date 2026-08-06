@@ -37,6 +37,11 @@ MESSAGE_COOLDOWN_SECONDS = 1
 # reply preview is capped the same way everywhere in the app.
 REPLY_PREVIEW_LENGTH = 120
 
+# The quick-reaction palette, mirrored in frontend MessageReactions.tsx.
+# Anything else is dropped, so the relay can never be used to push arbitrary
+# strings into the partner's client.
+ALLOWED_REACTION_EMOJIS = frozenset({"👍", "❤️", "😂", "👏", "🔥"})
+
 from .services import (
     IDLE_TIMEOUT_SECONDS,
     create_private_message,
@@ -320,6 +325,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         handlers = {
             "chat_message": self.handle_chat_message,
             "typing": self.handle_typing,
+            "reaction": self.handle_reaction,
             "reveal_request": self.handle_reveal_request,
             "reveal_response": self.handle_reveal_response,
             "skip_chat": self.handle_skip_chat,
@@ -573,6 +579,66 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 "sender_id": str(self.scope["user"].id),
                 "is_typing": is_typing,
             },
+        )
+
+    async def handle_reaction(self, data):
+        """Relay a quick emoji reaction to the room.
+
+        Ephemeral by design, exactly like typing: nothing is persisted, no
+        model is touched — the reaction lives as long as the transcript it
+        annotates, which itself only exists inside the two clients. The
+        payload is declarative (the sender's full current reaction, or None
+        for removed), so replays and reordering converge instead of toggling.
+
+        Malformed frames are DROPPED, never answered with an ``error`` frame:
+        the frontend treats every ``error`` frame as a refused *send* and
+        retires an optimistic message draft, so a reaction must never
+        produce one. For the same reason the cheap field checks run before
+        the room lookup — an attacker probing with junk costs no DB work.
+
+        ``message_id`` is deliberately not verified against the messages
+        table (that would cost a query per reaction); a reaction to an id
+        the partner's client does not know is simply never rendered.
+        """
+
+        message_id = data.get("message_id")
+        emoji = data.get("emoji")
+
+        if not isinstance(message_id, str) or not message_id or len(message_id) > 64:
+            return
+        if emoji is not None and emoji not in ALLOWED_REACTION_EMOJIS:
+            return
+
+        room = await self._ensure_active_room()
+        if room is None:
+            return
+
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                "type": "reaction",
+                "sender_id": str(self.scope["user"].id),
+                "message_id": message_id,
+                "emoji": emoji,
+            },
+        )
+
+    async def reaction(self, event):
+        """Send a reaction event to the connected client.
+
+        Deliberately does NOT reset the idle timer (only real chat messages
+        do — see chat_message) and does not touch typing state.
+        """
+
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "reaction",
+                    "message_id": event["message_id"],
+                    "emoji": event["emoji"],
+                    "is_own": event["sender_id"] == str(self.scope["user"].id),
+                }
+            )
         )
 
     async def chat_message(self, event):

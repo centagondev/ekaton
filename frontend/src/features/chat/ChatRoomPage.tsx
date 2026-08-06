@@ -10,6 +10,9 @@ import {
   useState,
   type ChangeEvent,
   type ForwardedRef,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -25,6 +28,7 @@ import {
   Reply,
   SendHorizonal,
   SkipForward,
+  SmilePlus,
   VenetianMask,
   X,
 } from "lucide-react";
@@ -32,6 +36,8 @@ import { chatApi, REPORT_REASONS } from "@/lib/api/chat";
 import { parseApiError } from "@/lib/errors";
 import { useChatSocket, type ChatMessage } from "./useChatSocket";
 import { TypingIndicator, type TypingVariant } from "./TypingIndicator";
+import { ChatTimer } from "./ChatTimer";
+import { ReactionPicker, ReactionTags } from "./MessageReactions";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select, Textarea } from "@/components/ui/Field";
@@ -54,6 +60,25 @@ const GROUP_WINDOW_MS = 2 * 60 * 1000;
 
 /** How long a jumped-to message stays highlighted. */
 const JUMP_FLASH_MS = 1400;
+
+/**
+ * How long a touch must hold still on a bubble to open the reaction picker.
+ * Under Android's ~500ms native context-menu hold on purpose, so the picker
+ * always wins the race and the OS menu can be suppressed.
+ */
+const LONG_PRESS_MS = 420;
+
+/** Fingers drift; scrolls travel. Movement past this cancels a long press. */
+const LONG_PRESS_DRIFT_PX = 10;
+
+/**
+ * Space the reaction picker needs above a bubble — its tallest form (56px on
+ * touch) plus the 8px it floats clear by. Measured against the transcript's
+ * own box rather than the viewport: the distance from the top of the window
+ * changes with the header, the reveal strip and (on iOS) the keyboard offset,
+ * and getting it wrong clips the picker against the scroll container.
+ */
+const PICKER_CLEARANCE_PX = 72;
 
 /**
  * How long to hold the connecting cover open before accepting that the other
@@ -123,9 +148,17 @@ const Bubble = memo(function Bubble({
   isFirst,
   isLast,
   canReply,
+  canReact,
+  reaction,
+  partnerReaction,
+  pickerOpen,
   pending,
   onReply,
   onJumpToReply,
+  onOpenPicker,
+  onClosePicker,
+  onToggleReaction,
+  scrollerRef,
   partnerName,
   flashed,
 }: {
@@ -133,13 +166,109 @@ const Bubble = memo(function Bubble({
   isFirst: boolean;
   isLast: boolean;
   canReply: boolean;
+  /** Gated exactly like replying: a live room, and never a pending bubble —
+   * a pending id is retired when the echo lands, which would orphan the
+   * reaction keyed on it. */
+  canReact: boolean;
+  /** This user's reaction on this message, or null. Session-local. */
+  reaction: string | null;
+  /** The partner's reaction, relayed live over the socket. */
+  partnerReaction: string | null;
+  /** Whether the floating reaction picker is open on this message. */
+  pickerOpen: boolean;
   /** True while this is an optimistic bubble still waiting on its echo. */
   pending: boolean;
   onReply: (message: ChatMessage) => void;
   onJumpToReply: (id: string) => void;
+  onOpenPicker: (id: string) => void;
+  onClosePicker: () => void;
+  onToggleReaction: (id: string, emoji: string) => void;
+  /** The transcript's scroll box — the picker's real clipping boundary. */
+  scrollerRef: RefObject<HTMLDivElement | null>;
   partnerName: string;
   flashed: boolean;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const reactButtonRef = useRef<HTMLButtonElement>(null);
+  /** Where the picker opens relative to the bubble, measured at open time. */
+  const [pickerPlacement, setPickerPlacement] = useState<"above" | "below">("above");
+
+  /* Long press (touch only) — armed on pointerdown, cancelled by lift or by
+     drift, so an ordinary scroll or a swipe-to-reply never opens the picker. */
+  const longPressTimer = useRef<number | undefined>(undefined);
+  const longPressStart = useRef<{ x: number; y: number } | null>(null);
+  const longPressFired = useRef(false);
+
+  // The hold timer must not outlive the bubble (skip mid-press, echo swap).
+  useEffect(() => () => window.clearTimeout(longPressTimer.current), []);
+
+  const openPicker = useCallback(() => {
+    // Room above *inside the transcript*, which is what actually clips.
+    const bubble = rootRef.current?.getBoundingClientRect();
+    const bounds = scrollerRef.current?.getBoundingClientRect();
+    const roomAbove = bubble && bounds ? bubble.top - bounds.top : Infinity;
+    setPickerPlacement(roomAbove < PICKER_CLEARANCE_PX ? "below" : "above");
+    onOpenPicker(message.id);
+  }, [message.id, onOpenPicker, scrollerRef]);
+
+  const togglePicker = useCallback(
+    () => (pickerOpen ? onClosePicker() : openPicker()),
+    [pickerOpen, onClosePicker, openPicker],
+  );
+
+  /**
+   * Picking, and dismissing from inside the picker, both hand focus back to
+   * the button that opened it — otherwise a keyboard user is dropped on
+   * `document.body` when the picker unmounts and loses their place in the
+   * transcript. A no-op on touch, where that button is `display:none`.
+   */
+  const handlePick = useCallback(
+    (emoji: string) => {
+      reactButtonRef.current?.focus();
+      onToggleReaction(message.id, emoji);
+    },
+    [message.id, onToggleReaction],
+  );
+
+  const dismissPicker = useCallback(() => {
+    reactButtonRef.current?.focus();
+    onClosePicker();
+  }, [onClosePicker]);
+
+  const cancelLongPress = () => {
+    window.clearTimeout(longPressTimer.current);
+    longPressStart.current = null;
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent) => {
+    // Any fresh press resets the flag, so a touch long press suppresses the
+    // context menu it raced (see handleContextMenu) without ever swallowing
+    // a later, genuine right-click.
+    longPressFired.current = false;
+    if (!canReact || event.pointerType === "mouse") return;
+    longPressStart.current = { x: event.clientX, y: event.clientY };
+    window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(() => {
+      longPressStart.current = null;
+      longPressFired.current = true;
+      navigator.vibrate?.(12);
+      openPicker();
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent) => {
+    const start = longPressStart.current;
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_DRIFT_PX) {
+      cancelLongPress();
+    }
+  };
+
+  const handleContextMenu = (event: ReactMouseEvent) => {
+    // Android raises its context menu on the same hold that opens the picker.
+    if (longPressFired.current || longPressStart.current) event.preventDefault();
+  };
+
   return (
     // A plain element on purpose — no entrance spring, no layout animation —
     // matching the event chat's MessageItem. The scale/rise entrance made
@@ -148,9 +277,11 @@ const Bubble = memo(function Bubble({
     // reads as the transcript moving. The bubble is simply there, full-size,
     // first frame; the pending fade below is the only motion on send.
     <div
+      ref={rootRef}
       id={`chat-message-${message.id}`}
       className={cn(
-        "group flex scroll-mt-24 flex-col",
+        // relative anchors the floating reaction picker to this message.
+        "group relative flex scroll-mt-24 flex-col",
         message.isOwn ? "items-end" : "items-start",
         isFirst ? "mt-4 lg:mt-5" : "mt-1",
       )}
@@ -164,6 +295,12 @@ const Bubble = memo(function Bubble({
           className={cn("flex items-end gap-2", message.isOwn ? "flex-row-reverse" : "flex-row")}
         >
           <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={cancelLongPress}
+            onPointerCancel={cancelLongPress}
+            onPointerLeave={cancelLongPress}
+            onContextMenu={handleContextMenu}
             className={cn(
               "min-w-0 break-words border-2 border-ink px-4 py-2.5 text-[15px] leading-relaxed",
               "lg:px-5 lg:py-3 lg:text-base",
@@ -172,12 +309,20 @@ const Bubble = memo(function Bubble({
               isLast && "shadow-brutal-sm",
               pending && "opacity-60",
               flashed && "ring-4 ring-brand-lime",
+              // On touch the long press belongs to the picker; without this
+              // iOS answers the same hold with its text-selection callout.
+              COARSE_POINTER && "select-none [-webkit-touch-callout:none]",
             )}
           >
             {message.replyTo && (
               <button
                 type="button"
-                onClick={() => onJumpToReply(message.replyTo!.id)}
+                onClick={() => {
+                  // The click a touch release fires after a long press is the
+                  // tail of the picker gesture, not a request to jump.
+                  if (longPressFired.current) return;
+                  onJumpToReply(message.replyTo!.id);
+                }}
                 aria-label={`Go to the message from ${
                   message.replyTo.is_own ? "you" : partnerName
                 }`}
@@ -212,8 +357,53 @@ const Bubble = memo(function Bubble({
               <Reply className="size-3.5" />
             </button>
           )}
+
+          {/* Pointer users get a button; touch users long-press the bubble. */}
+          {canReact && (
+            <button
+              ref={reactButtonRef}
+              type="button"
+              onClick={togglePicker}
+              // Keep this press from reaching the document, where the page's
+              // outside-press listener would close the picker before the
+              // click could toggle it — every tap would reopen instead.
+              onPointerDown={(event) => event.stopPropagation()}
+              aria-label="React to this message"
+              aria-expanded={pickerOpen}
+              className="mb-1 hidden shrink-0 border-2 border-ink bg-surface p-2 opacity-0 transition-opacity hover:bg-brand-lime focus-visible:opacity-100 group-hover:opacity-100 sm:block"
+            >
+              <SmilePlus className="size-3.5" />
+            </button>
+          )}
         </div>
       </SwipeToReply>
+
+      <AnimatePresence>
+        {pickerOpen && canReact && (
+          <ReactionPicker
+            key="picker"
+            current={reaction}
+            side={message.isOwn ? "own" : "partner"}
+            placement={pickerPlacement}
+            onPick={handlePick}
+            onDismiss={dismissPicker}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {(reaction !== null || partnerReaction !== null) && (
+          <ReactionTags
+            key="reactions"
+            own={reaction}
+            partner={partnerReaction}
+            partnerName={partnerName}
+            onChangeOwn={() => {
+              if (canReact) togglePicker();
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {isLast && (
         <p className="mt-1.5 px-1 font-mono text-[9px] uppercase tracking-wider text-muted">
@@ -780,6 +970,14 @@ export function ChatRoomPage() {
    * retires from.
    */
   const handleServerError = useCallback((message: string) => {
+    // A server that predates one of this client's event types answers it
+    // with this fixed refusal. It can never belong to a chat_message frame
+    // (that type exists on every server version), so it must not retire a
+    // draft — doing so would offset the send/echo pairing for the rest of
+    // the room. Reaching here at all means deploy skew (frontend ahead of
+    // the backend), where reactions silently degrade to local-only; not a
+    // user-facing error, so no toast either.
+    if (message === "Unsupported event type.") return;
     toast.error(message);
     setRevealClicking(false);
     setRespondLoading(null);
@@ -790,6 +988,7 @@ export function ChatRoomPage() {
     status,
     endInfo,
     messages,
+    partnerReactions,
     partnerTyping,
     partnerPresent,
     reveal,
@@ -798,6 +997,7 @@ export function ChatRoomPage() {
     dismissReveal,
     sendMessage,
     sendTyping,
+    sendReaction,
     requestReveal,
     respondReveal,
     skipChat,
@@ -822,6 +1022,14 @@ export function ChatRoomPage() {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   /** Briefly highlights a message after jumping to it from a quote. */
   const [flashId, setFlashId] = useState<string | null>(null);
+  /**
+   * This user's quick reactions, message id → emoji. Session-local on
+   * purpose: never sent, never stored, gone with the room — exactly like the
+   * transcript itself. See MessageReactions.tsx for why no socket frame.
+   */
+  const [reactions, setReactions] = useState<ReadonlyMap<string, string>>(() => new Map());
+  /** The message whose reaction picker is open, or null for none. */
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<ComposerHandle>(null);
@@ -929,6 +1137,85 @@ export function ChatRoomPage() {
 
   /** Replying is only possible where sending is. */
   const canReply = online;
+
+  /* ------------------------------- reactions ------------------------------- */
+
+  const openPicker = useCallback((id: string) => setPickerFor(id), []);
+  const closePicker = useCallback(() => setPickerFor(null), []);
+
+  /**
+   * The reaction tag eases its height in under the bubble, so the transcript
+   * grows by ~28px after the tap. Pin through the ease — the typing
+   * indicator's trick — or reacting to the newest message slides it under the
+   * fold. One loop at a time, and never one that outlives the room.
+   */
+  const reactionPinFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(reactionPinFrame.current), []);
+
+  /**
+   * Read through a ref, like `replyToRef` above, so the callback keeps one
+   * identity for the life of the room — depending on `reactions` would hand
+   * every bubble a fresh `onToggleReaction` per reaction and void their memo.
+   * The next state is computed from the ref rather than inside the updater:
+   * React may run updaters later (and twice in StrictMode), so a value
+   * smuggled out of one is not safe to hand to the socket.
+   */
+  const reactionsRef = useRef(reactions);
+  reactionsRef.current = reactions;
+
+  const toggleReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      const next = reactionsRef.current.get(messageId) === emoji ? null : emoji;
+      setReactions((prev) => {
+        const map = new Map(prev);
+        if (next === null) map.delete(messageId);
+        else map.set(messageId, next);
+        return map;
+      });
+      // Applied locally first, then relayed — the tap must feel instant and
+      // a frame the socket refuses to carry only costs the partner's copy.
+      sendReaction(messageId, next);
+      setPickerFor(null);
+      if (nearBottomRef.current) {
+        cancelAnimationFrame(reactionPinFrame.current);
+        const started = performance.now();
+        const track = (now: number) => {
+          scrollToBottom("auto");
+          if (now - started < 240) reactionPinFrame.current = requestAnimationFrame(track);
+        };
+        reactionPinFrame.current = requestAnimationFrame(track);
+      }
+    },
+    [scrollToBottom, sendReaction],
+  );
+
+  /**
+   * Dismissal. Listeners exist only while a picker is open, so an idle chat
+   * costs nothing.
+   *
+   * Deliberately NOT closed on `scroll`: the picker is positioned against its
+   * own bubble inside the transcript, so it travels with the message and can
+   * never be orphaned — while `scroll` fires for the auto-pin that runs when
+   * a message arrives or the partner starts typing, which would have snatched
+   * the picker away mid-gesture. Every user-driven scroll is covered anyway:
+   * touch and drag scrolls begin with a `pointerdown`, and wheel/trackpad is
+   * handled here.
+   */
+  useEffect(() => {
+    if (pickerFor === null) return;
+    const close = () => setPickerFor(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("wheel", close, { passive: true });
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("wheel", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [pickerFor]);
 
   const handleScroll = useCallback(() => {
     const element = scrollRef.current;
@@ -1352,6 +1639,11 @@ export function ChatRoomPage() {
                 <span className="shrink-0" aria-live="polite">
                   {statusText}
                 </span>
+                {/* Outside the live region — a value that changes every second
+                    must never be announced on each tick. Keyed by room so a
+                    new chat always starts a fresh clock; running only once
+                    both sides are proven present, frozen when the room ends. */}
+                <ChatTimer key={roomId} running={online && partnerPresent} />
               </p>
             </div>
           </div>
@@ -1582,11 +1874,20 @@ export function ChatRoomPage() {
                     isFirst={isFirst}
                     isLast={isLast}
                     /* A pending id is provisional — replying to it would
-                       quote a message the server has not named yet. */
+                       quote a message the server has not named yet, and a
+                       reaction keyed on it would be orphaned by the echo. */
                     canReply={canReply && !pending}
+                    canReact={canReply && !pending}
+                    reaction={reactions.get(message.id) ?? null}
+                    partnerReaction={partnerReactions.get(message.id) ?? null}
+                    pickerOpen={pickerFor === message.id}
                     pending={pending}
                     onReply={startReply}
                     onJumpToReply={jumpToMessage}
+                    onOpenPicker={openPicker}
+                    onClosePicker={closePicker}
+                    onToggleReaction={toggleReaction}
+                    scrollerRef={scrollRef}
                     partnerName={partnerName}
                     flashed={flashId === message.id}
                   />
